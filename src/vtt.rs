@@ -1,21 +1,24 @@
 use crate::model::Subtitle;
 use crate::types::AnyResult;
-use crate::utils::parse_timestamp;
+use crate::utils::parse_timestamps;
+use std::io::Cursor;
 use tokio::fs::File;
-use tokio::io::AsyncBufReadExt;
-use tokio::io::BufReader;
-pub async fn parse_file(file_path: &str) -> AnyResult<Vec<Subtitle>> {
-  let file = File::open(file_path).await?;
-  let reader = BufReader::new(file);
-  let mut lines = reader.lines();
+use tokio::io::{AsyncBufReadExt, BufReader};
 
+#[cfg(feature = "http")]
+use reqwest;
+
+async fn parse<R>(reader: R) -> AnyResult<Vec<Subtitle>>
+where
+  R: AsyncBufReadExt + Unpin, // 添加 Unpin trait bounds
+{
+  let mut lines = reader.lines();
   let mut subtitles = Vec::new();
   let mut current_subtitle: Option<Subtitle> = None;
 
   while let Some(line) = lines.next_line().await? {
-    // println!("{}", line);
+    // 检查是否为空行以结束当前字幕
     if line.trim().is_empty() {
-      // If we encounter an empty line, finalize the current subtitle
       if let Some(sub) = current_subtitle.take() {
         subtitles.push(sub);
       }
@@ -23,22 +26,46 @@ pub async fn parse_file(file_path: &str) -> AnyResult<Vec<Subtitle>> {
     }
 
     if let Ok(index) = line.parse::<usize>() {
-      current_subtitle = Some(Subtitle::new(index, 0, 0, ""));
+      let mut subtitle = Subtitle::new(0, 0, "");
+      subtitle.index = Some(index);
+      current_subtitle = Some(subtitle);
     } else if let Some(sub) = &mut current_subtitle {
-      // Read timestamps
+      // 读取时间戳
       if sub.start == 0 {
-        let parts: Vec<&str> = line.split(" --> ").collect();
-        if parts.len() == 2 {
-          sub.start = parse_timestamp(parts[0])?;
-          sub.end = parse_timestamp(parts[1])?;
-        }
+        let timestamp = parse_timestamps(&line)?;
+        sub.start = timestamp.start;
+        sub.end = timestamp.end;
+        sub.settings = timestamp.settings;
       } else {
         sub.text = line.to_string();
       }
     }
   }
+
+  // 如果最后一个字幕存在，则添加到字幕向量中
   if let Some(sub) = current_subtitle {
     subtitles.push(sub);
   }
+
   Ok(subtitles)
+}
+pub async fn parse_file(file_path: &str) -> AnyResult<Vec<Subtitle>> {
+  let file = File::open(file_path).await?;
+  let reader = BufReader::new(file);
+  parse(reader).await
+}
+
+#[cfg(feature = "http")]
+pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+  let response = reqwest::get(url).await?;
+  let content = response.text().await?;
+  let cursor = Cursor::new(content);
+  let reader = BufReader::new(cursor);
+  parse(reader).await
+}
+
+pub async fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
+  let cursor = Cursor::new(content);
+  let reader = BufReader::new(cursor);
+  parse(reader).await
 }
