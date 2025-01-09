@@ -10,7 +10,7 @@ categories = [
 description = "Subtitler is a library for parsing and generating subtitles" 
 documentation = "https://docs.rs/subtitler" 
 edition = "2021" 
-keywords = ["subtitler", "vtt", "srt", "subtitle", "sub-title"] 
+keywords = ["subtitler", "vtt", "srt", "subtitle", "sub-title", "mankong", "siwi"] 
 license = "Apache-2.0" 
 name = "subtitler" 
 publish = true # no accidents while in dev
@@ -32,8 +32,8 @@ regex = "^1.11"
 reqwest = {version = "0.12", optional = true}
 serde = {version = "^1.0", features = ["derive"]}
 serde_json = "^1.0"
-thiserror = "^2.0"
-tokio = {version = "^1.42", features = ["full"]}
+thiserror = "^2"
+tokio = {version = "^1", features = ["full"]}
 tracing = "^0.1"
 tracing-subscriber = "^0.3"
 [dev-dependencies]
