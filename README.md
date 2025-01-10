@@ -43,6 +43,28 @@
   </h3>
 </div>
 
+## Install
+
+```sh
+cargo install subtitler
+```
+
+## parse subtitle from url
+
+```sh
+subtitler url your_subtitler_url
+```
+
+## parse subtitle from file
+
+```sh
+subtitler file your_subtitler_file
+```
+
+## Examples
+
+more [examples](https://github.com/subtitle-rs/subtitler/tree/main/examples)。
+
 ## parse srt file
 
 ```rust
