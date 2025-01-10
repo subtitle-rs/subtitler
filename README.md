@@ -1,47 +1,13 @@
-<h1 align="center">Subtitler</h1>
-<div align="center">
- <strong>
-  subtitler is a library for parsing and generating subtitles
- </strong>
-</div>
+# Subtitler
 
-<br />
+> subtitler is a library for parsing and generating subtitles
 
-<div align="center">
-  <!-- Crates version -->
-  <a href="https://crates.io/crates/subtitler">
-    <img src="https://img.shields.io/crates/v/subtitler.svg?style=flat-square"
-    alt="Crates.io version" />
-  </a>
-  <!-- License -->
-  <a href="https://crates.io/crates/subtitler">
-    <img src="https://img.shields.io/crates/l/subtitler"
-      alt="License" />
-  </a>
-  <!-- Downloads -->
-  <a href="https://crates.io/crates/subtitler">
-    <img src="https://img.shields.io/crates/d/subtitler.svg?style=flat-square"
-      alt="Download" />
-  </a>
-  <!-- docs.rs docs -->
-  <a href="https://docs.rs/subtitler">
-    <img src="https://img.shields.io/badge/docs-latest-blue.svg?style=flat-square"
-      alt="docs.rs docs" />
-  </a>
-  <!-- Ci -->
-  <a href="https://github.com/rs-videos/subtitler/actions">
-    <img src="https://github.com/subtitle-rs/subtitler/workflows/Rust/badge.svg"
-      alt="github actions" />
-  </a>
-</div>
-
-<div align="center">
-  <h3>
-    <a href="https://docs.rs/subtitler">
-      API Docs
-    </a>
-  </h3>
-</div>
+[![Crates.io](https://img.shields.io/crates/v/subtitler?style=flat-square)](https://crates.io/crates/subtitler)
+[![Crates.io](https://img.shields.io/crates/d/subtitler?style=flat-square)](https://crates.io/crates/subtitler)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE-APACHE)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE-MIT)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/subtitle-rs/subtitler/rust.yml?branch=main&style=flat-square)](https://github.com/subtitle-rs/subtitler/actions/workflows/rust.yml?query=branch%3Amain)
+[![Contributors](https://img.shields.io/github/contributors/subtitle-rs/subtitler?style=flat-square)](https://github.com/subtitle-rs/subtitler/graphs/contributors)
 
 ## Install
 
