@@ -18,13 +18,13 @@ cargo install subtitler
 ## parse subtitle from url
 
 ```sh
-subtitler url your_subtitler_url
+subtitler url your_subtitle_url
 ```
 
 ## parse subtitle from file
 
 ```sh
-subtitler file your_subtitler_file
+subtitler file your_subtitle_file
 ```
 
 ## Examples
