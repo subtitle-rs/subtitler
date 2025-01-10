@@ -64,6 +64,11 @@ path = "examples/parse-srt-http.rs"
 required-features = ["http"]
 
 [[example]]
+name = "create-srt-file"
+path = "examples/create-srt-file.rs"
+
+
+[[example]]
 name = "parse-srt-content"
 path = "examples/parse-srt-content.rs"
 
@@ -79,3 +84,4 @@ required-features = ["http"]
 [[example]]
 name = "parse-vtt-content"
 path = "examples/parse-vtt-content.rs"
+

@@ -42,7 +42,6 @@ pub fn parse_timestamps(value: &str) -> AnyResult<Timestamp> {
   }
 }
 
-#[allow(dead_code)]
 pub fn pad_left(value: i32, length: usize) -> String {
   let value_str = value.to_string();
   let pad_size = length.saturating_sub(value_str.len());
@@ -50,8 +49,7 @@ pub fn pad_left(value: i32, length: usize) -> String {
   format!("{}{}", padding, value_str)
 }
 
-#[allow(dead_code)]
-pub fn format_timestamp(timestamp: i64, options: &str) -> String {
+pub fn format_timestamp(timestamp: u64, options: &str) -> String {
   let total_seconds = timestamp / 1000;
   let ms = timestamp % 1000;
 
