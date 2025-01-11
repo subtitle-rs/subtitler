@@ -85,8 +85,8 @@ pub async fn generate(subtitles: &[Subtitle], file_path: &str) -> AnyResult<Stri
     }
     let mut timestamp = format!(
       "{} --> {}",
-      format_timestamp(subtitle.start, "vtt"),
-      format_timestamp(subtitle.end, "vtt")
+      format_timestamp(subtitle.start, "WebVTT"),
+      format_timestamp(subtitle.end, "WebVTT")
     );
     if let Some(settings) = &subtitle.settings {
       timestamp = format!("{} {}", timestamp, settings);
