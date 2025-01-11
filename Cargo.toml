@@ -18,7 +18,6 @@ readme = "README.md"
 repository = "https://github.com/subtitle-rs/subtitler" 
 version = "0.0.3" 
 
-exclude = ["examples/*"]
 include = [
   "Cargo.toml",
   "LICENSE",
