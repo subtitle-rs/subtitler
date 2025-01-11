@@ -10,14 +10,13 @@ use tokio::{fs, io::AsyncWriteExt};
 
 async fn parse<R>(reader: R) -> AnyResult<Vec<Subtitle>>
 where
-  R: AsyncBufReadExt + Unpin, // 添加 Unpin trait bounds
+  R: AsyncBufReadExt + Unpin, // add Unpin trait bounds
 {
   let mut lines = reader.lines();
   let mut subtitles = Vec::new();
   let mut current_subtitle: Option<Subtitle> = None;
 
   while let Some(line) = lines.next_line().await? {
-    // 检查是否为空行以结束当前字幕
     if line.trim().is_empty() {
       if let Some(sub) = current_subtitle.take() {
         subtitles.push(sub);
@@ -43,7 +42,6 @@ where
     }
   }
 
-  // 如果最后一个字幕存在，则添加到字幕向量中
   if let Some(sub) = current_subtitle {
     subtitles.push(sub);
   }
