@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
   file_path.push("examples/example.vtt");
 
   let subtitle = parse_file(file_path.to_str().unwrap()).await?;
-  info!("subtitle {:?}", subtitle);
-  info!("subtitle json {}", serde_json::to_string(&subtitle)?);
+  info!("subtitle {:#?}", subtitle);
+  info!("subtitle json {}", serde_json::to_string_pretty(&subtitle)?);
   Ok(())
 }

@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
   let url = "http://acadsoc-info.oss-accelerate.aliyuncs.com/common/b6a05931-637a-4d9b-a3f3-bdd034354464.srt";
 
   let subtitle = parse_url(url).await?;
-  info!("subtitle {:?}", subtitle);
-  info!("subtitle json {}", serde_json::to_string(&subtitle)?);
+  info!("subtitle {:#?}", subtitle);
+  info!("subtitle json {}", serde_json::to_string_pretty(&subtitle)?);
   Ok(())
 }

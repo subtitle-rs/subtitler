@@ -79,7 +79,7 @@ pub async fn generate(subtitles: &[Subtitle], file_path: &str) -> AnyResult<Stri
     .open(&file_path)
     .await?;
   let mut content = String::new();
-  for subtitle in subtitles.into_iter() {
+  for (i, subtitle) in subtitles.into_iter().enumerate() {
     let mut part = String::new();
     if let Some(index) = subtitle.index {
       part.push_str(index.to_string().as_str());
@@ -93,9 +93,10 @@ pub async fn generate(subtitles: &[Subtitle], file_path: &str) -> AnyResult<Stri
     part.push_str(&timestamp);
     part.push_str("\n");
     part.push_str(&subtitle.text);
-    part.push_str("\n");
-    part.push_str("\n");
-
+    if i != subtitles.len() - 1 {
+      part.push_str("\n");
+      part.push_str("\n");
+    }
     content.push_str(&part);
   }
   dest.write_all(content.as_bytes()).await?;

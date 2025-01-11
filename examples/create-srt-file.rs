@@ -67,8 +67,8 @@ Great! Looking forward to it.
 "#;
 
   let subtitle = parse_content(content).await?;
-  info!("subtitle {:?}", subtitle);
-  info!("subtitle json {}", serde_json::to_string(&subtitle)?);
+  info!("subtitle {:#?}", subtitle);
+  info!("subtitle json {}", serde_json::to_string_pretty(&subtitle)?);
 
   generate(&subtitle, "test.srt").await?;
   Ok(())
