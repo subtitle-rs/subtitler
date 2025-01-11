@@ -1,8 +1,8 @@
 // mod error;
-mod model;
+mod config;
 mod types;
 mod utils;
-mod config;
 
+pub mod model;
 pub mod srt;
 pub mod vtt;
