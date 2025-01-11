@@ -1,9 +1,10 @@
 use crate::model::Subtitle;
 use crate::types::AnyResult;
-use crate::utils::parse_timestamps;
+use crate::utils::{format_timestamp, parse_timestamps};
 use std::io::Cursor;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::{fs, io::AsyncWriteExt};
 
 #[cfg(feature = "http")]
 use reqwest;
@@ -68,4 +69,39 @@ pub async fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   let cursor = Cursor::new(content);
   let reader = BufReader::new(cursor);
   parse(reader).await
+}
+
+pub async fn generate(subtitles: &[Subtitle], file_path: &str) -> AnyResult<String> {
+  let mut dest = fs::OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(&file_path)
+    .await?;
+  let mut content = String::new();
+  content.push_str("WEBVTT\n\n");
+  for subtitle in subtitles.into_iter() {
+    let mut part = String::new();
+    if let Some(index) = subtitle.index {
+      part.push_str(index.to_string().as_str());
+      part.push_str("\n");
+    }
+    let mut timestamp = format!(
+      "{} --> {}",
+      format_timestamp(subtitle.start, "srt"),
+      format_timestamp(subtitle.end, "srt")
+    );
+    if let Some(settings) = &subtitle.settings {
+      timestamp = format!("{} {}", timestamp, settings);
+    }
+    part.push_str(&timestamp);
+    part.push_str("\n");
+    part.push_str(&subtitle.text);
+    part.push_str("\n");
+    part.push_str("\n");
+
+    content.push_str(&part);
+  }
+  dest.write_all(content.as_bytes()).await?;
+
+  Ok(file_path.to_string())
 }

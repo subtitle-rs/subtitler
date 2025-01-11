@@ -16,7 +16,7 @@ name = "subtitler"
 publish = true # no accidents while in dev
 readme = "README.md" 
 repository = "https://github.com/subtitle-rs/subtitler" 
-version = "0.0.2" 
+version = "0.0.3" 
 
 exclude = ["examples/*"]
 include = [
@@ -67,7 +67,6 @@ required-features = ["http"]
 name = "create-srt-file"
 path = "examples/create-srt-file.rs"
 
-
 [[example]]
 name = "parse-srt-content"
 path = "examples/parse-srt-content.rs"
@@ -85,3 +84,6 @@ required-features = ["http"]
 name = "parse-vtt-content"
 path = "examples/parse-vtt-content.rs"
 
+[[example]]
+name = "create-vtt-file"
+path = "examples/create-vtt-file.rs"
