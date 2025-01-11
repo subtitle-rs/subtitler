@@ -4,12 +4,8 @@ use crate::types::AnyResult;
 use anyhow::anyhow;
 use regex::Regex;
 pub fn parse_timestamp(timestamp: &str) -> AnyResult<u64> {
-  // 定义正则表达式
   let re = Regex::new(RE_TIMESTAMP)?;
-
-  // 使用正则表达式进行匹配
   if let Some(captures) = re.captures(timestamp) {
-    // 提取捕获组并计算时间
     let hours = captures
       .get(1)
       .map_or(0, |m| m.as_str().parse::<u64>().unwrap())
