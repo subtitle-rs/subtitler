@@ -5,7 +5,6 @@
 [![Crates.io](https://img.shields.io/crates/v/subtitler?style=flat-square)](https://crates.io/crates/subtitler)
 [![Crates.io](https://img.shields.io/crates/d/subtitler?style=flat-square)](https://crates.io/crates/subtitler)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE-APACHE)
-[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE-MIT)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/subtitle-rs/subtitler/rust.yml?branch=main&style=flat-square)](https://github.com/subtitle-rs/subtitler/actions/workflows/rust.yml?query=branch%3Amain)
 [![Contributors](https://img.shields.io/github/contributors/subtitle-rs/subtitler?style=flat-square)](https://github.com/subtitle-rs/subtitler/graphs/contributors)
 
