@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "subtitler cli")]
 #[command(about = "A simple CLI application written in Rust.")]
-pub struct CLI {
+pub struct Cli {
   /// The command to run
   #[command(subcommand)]
   pub command: Option<Commands>,
@@ -13,10 +13,6 @@ pub struct CLI {
 /// Available commands
 #[derive(Subcommand)]
 pub enum Commands {
-  File {
-    path: String,
-  },
-  Url {
-    url: String,
-  },
+  File { path: String },
+  Url { url: String },
 }

@@ -1,11 +1,8 @@
-#[macro_use]
-extern crate tracing;
-
 mod cli;
 mod types;
 use crate::types::AnyResult;
 use clap::Parser;
-use cli::{Commands, CLI};
+use cli::{Cli, Commands};
 use subtitler::srt;
 use subtitler::vtt;
 use tracing::Level;
@@ -18,32 +15,30 @@ async fn main() -> AnyResult<()> {
     .finish();
   tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-  let cli = CLI::parse();
+  let cli = Cli::parse();
 
   match cli.command {
     Some(Commands::File { path }) => {
       if path.ends_with(".vtt") {
         let subtitles = vtt::parse_file(&path).await?;
-        info!("{}", serde_json::to_string_pretty(&subtitles)?);
-      }
-      if path.ends_with(".srt") {
+        println!("{}", serde_json::to_string_pretty(&subtitles)?);
+      } else if path.ends_with(".srt") {
         let subtitles = srt::parse_file(&path).await?;
-        info!("{}", serde_json::to_string_pretty(&subtitles)?);
+        println!("{}", serde_json::to_string_pretty(&subtitles)?);
       }
     }
     Some(Commands::Url { url }) => {
       if url.contains(".vtt") {
         let subtitles = vtt::parse_url(&url).await?;
-        info!("{}", serde_json::to_string_pretty(&subtitles)?);
-      }
-      if url.contains(".srt") {
+        println!("{}", serde_json::to_string_pretty(&subtitles)?);
+      } else if url.contains(".srt") {
         let subtitles = srt::parse_url(&url).await?;
-        info!("{}", serde_json::to_string_pretty(&subtitles)?);
+        println!("{}", serde_json::to_string_pretty(&subtitles)?);
       }
     }
 
     None => {
-      info!("No command provided. Use --help for more information.");
+      println!("No command provided. Use --help for more information.");
     }
   }
   Ok(())

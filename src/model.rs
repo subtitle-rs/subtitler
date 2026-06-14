@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-#[derive(Debug, Deserialize, Serialize)]
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Subtitle {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub index: Option<usize>,
@@ -22,7 +23,7 @@ impl Subtitle {
   }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Timestamp {
   pub start: u64,
   pub end: u64,
