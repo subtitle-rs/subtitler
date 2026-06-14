@@ -1,17 +1,102 @@
-use crate::model::Subtitle;
+use crate::model::{Subtitle, TextPart};
 use crate::types::AnyResult;
 use crate::utils::{format_timestamp, parse_timestamp};
 use anyhow::anyhow;
+use regex::Regex;
 #[cfg(feature = "http")]
 use reqwest;
 use std::io::Cursor;
+use std::sync::LazyLock;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+static RE_SRT_TAG: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"</?(?:b|i|u|font)(?:\s[^>]*)?>").unwrap());
 
 enum Phase {
   Index,
   Timestamp,
   Text,
+}
+
+fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
+  let mut parts = Vec::new();
+  let mut plain = String::new();
+  let mut bold = false;
+  let mut italic = false;
+  let mut underline = false;
+  let mut color: Option<String> = None;
+  let mut last_end = 0;
+
+  for caps in RE_SRT_TAG.find_iter(text) {
+    let tag = caps.as_str();
+    let start = caps.start();
+    let end = caps.end();
+
+    if start > last_end {
+      let segment = &text[last_end..start];
+      if !segment.is_empty() {
+        plain.push_str(segment);
+        if bold || italic || underline || color.is_some() {
+          parts.push(TextPart {
+            text: segment.to_string(),
+            bold,
+            italic,
+            underline,
+            color: color.clone(),
+            voice: None,
+          });
+        }
+      }
+    }
+
+    if tag.starts_with("</") {
+      match tag {
+        "</b>" => bold = false,
+        "</i>" => italic = false,
+        "</u>" => underline = false,
+        "</font>" => color = None,
+        _ => {}
+      }
+    } else {
+      if tag.starts_with("<b") {
+        bold = true;
+      } else if tag.starts_with("<i") {
+        italic = true;
+      } else if tag.starts_with("<u") {
+        underline = true;
+      } else if tag.starts_with("<font")
+        && let Some(c) = tag.split("color=").nth(1)
+      {
+        let color_val = c.trim_matches(|c: char| c == '"' || c == '\'' || c == '>' || c == '/');
+        color = Some(color_val.to_string());
+      }
+    }
+
+    last_end = end;
+  }
+
+  if last_end < text.len() {
+    let segment = &text[last_end..];
+    plain.push_str(segment);
+    if bold || italic || underline || color.is_some() {
+      parts.push(TextPart {
+        text: segment.to_string(),
+        bold,
+        italic,
+        underline,
+        color: color.clone(),
+        voice: None,
+      });
+    }
+  }
+
+  // If no tags were found, just return the plain text
+  if parts.is_empty() {
+    plain = text.to_string();
+  }
+
+  (plain, parts)
 }
 
 async fn parse<R>(reader: R) -> AnyResult<Vec<Subtitle>>
@@ -42,10 +127,10 @@ where
             end: 0,
             text: String::new(),
             settings: None,
+            text_parts: Vec::new(),
           });
           phase = Phase::Timestamp;
         } else if trimmed.contains("-->") {
-          // no index line — jump directly to timestamp
           if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
             let subtitle =
               Subtitle::new(parse_timestamp(start_str)?, parse_timestamp(end_str)?, "");
@@ -78,8 +163,18 @@ where
     }
   }
 
-  if let Some(sub) = current_subtitle {
+  if let Some(mut sub) = current_subtitle {
+    let (plain, parts) = extract_text_parts(&sub.text);
+    sub.text = plain;
+    sub.text_parts = parts;
     subtitles.push(sub);
+  }
+
+  // Post-process: extract tags from all subtitles
+  for sub in &mut subtitles {
+    let (plain, parts) = extract_text_parts(&sub.text);
+    sub.text = plain;
+    sub.text_parts = parts;
   }
 
   Ok(subtitles)
@@ -88,6 +183,13 @@ where
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
   let file = File::open(path).await?;
   let reader = BufReader::new(file);
+  parse(reader).await
+}
+
+pub async fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
+  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let cursor = Cursor::new(text);
+  let reader = BufReader::new(cursor);
   parse(reader).await
 }
 
@@ -104,6 +206,27 @@ pub async fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   let cursor = Cursor::new(content);
   let reader = BufReader::new(cursor);
   parse(reader).await
+}
+
+pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
+  if let Ok(text) = String::from_utf8(data.to_vec()) {
+    let trimmed = text.trim();
+    if !trimmed.is_empty() {
+      if trimmed.starts_with("WEBVTT") {
+        return Some(crate::model::SubtitleFormat::Vtt);
+      }
+      if Regex::new(r"^\d+\s*\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->")
+        .unwrap()
+        .is_match(trimmed)
+      {
+        return Some(crate::model::SubtitleFormat::Srt);
+      }
+      if trimmed.contains("-->") {
+        return Some(crate::model::SubtitleFormat::Srt);
+      }
+    }
+  }
+  None
 }
 
 pub async fn generate(
@@ -157,6 +280,7 @@ mod tests {
       end,
       text: text.to_string(),
       settings: None,
+      text_parts: Vec::new(),
     }
   }
 
@@ -231,5 +355,76 @@ mod tests {
     let content = "1\nnot a timestamp\n";
     let result = parse_content(content).await;
     assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_parse_bold_tag() {
+    let content = "1\n00:00:01,000 --> 00:00:03,500\n<b>Bold text</b>\n\n";
+    let result = parse_content(content).await.unwrap();
+    assert_eq!(result[0].text, "Bold text");
+    assert_eq!(result[0].text_parts.len(), 1);
+    assert!(result[0].text_parts[0].bold);
+    assert_eq!(result[0].text_parts[0].text, "Bold text");
+  }
+
+  #[tokio::test]
+  async fn test_parse_italic_tag() {
+    let content = "1\n00:00:01,000 --> 00:00:03,500\n<i>Italic</i> plain\n\n";
+    let result = parse_content(content).await.unwrap();
+    assert_eq!(result[0].text, "Italic plain");
+    assert_eq!(result[0].text_parts.len(), 1);
+    assert!(result[0].text_parts[0].italic);
+    assert_eq!(result[0].text_parts[0].text, "Italic");
+  }
+
+  #[tokio::test]
+  async fn test_parse_underline_tag() {
+    let content = "1\n00:00:01,000 --> 00:00:03,500\n<u>underline</u>\n\n";
+    let result = parse_content(content).await.unwrap();
+    assert!(result[0].text_parts[0].underline);
+  }
+
+  #[tokio::test]
+  async fn test_parse_font_color_tag() {
+    let content = "1\n00:00:01,000 --> 00:00:03,500\n<font color=\"#ff0000\">red</font>\n\n";
+    let result = parse_content(content).await.unwrap();
+    assert_eq!(result[0].text_parts[0].color, Some("#ff0000".to_string()));
+  }
+
+  #[tokio::test]
+  async fn test_parse_bytes() {
+    let data = b"1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
+    let result = parse_bytes(data.as_ref()).await.unwrap();
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].text, "Hello");
+  }
+
+  #[test]
+  fn test_detect_format_srt() {
+    let data = b"1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
+    assert_eq!(detect_format(data), Some(crate::model::SubtitleFormat::Srt));
+  }
+
+  #[test]
+  fn test_detect_format_vtt() {
+    let data = b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
+    assert_eq!(detect_format(data), Some(crate::model::SubtitleFormat::Vtt));
+  }
+
+  #[test]
+  fn test_subtitle_shift() {
+    let mut sub = Subtitle::new(1000, 5000, "test");
+    sub.shift(500);
+    assert_eq!(sub.start, 1500);
+    assert_eq!(sub.end, 5500);
+    sub.shift(-2000);
+    assert_eq!(sub.start, 0); // clamped
+    assert_eq!(sub.end, 3500);
+  }
+
+  #[test]
+  fn test_subtitle_duration() {
+    let sub = Subtitle::new(1000, 5000, "test");
+    assert_eq!(sub.duration_ms(), 4000);
   }
 }

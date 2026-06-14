@@ -193,6 +193,7 @@ fn test_subtitle_serde_round_trip() {
     end: 3500,
     text: "Hello".to_string(),
     settings: None,
+    text_parts: Vec::new(),
   };
   let json = serde_json::to_string(&sub).unwrap();
   let parsed: Subtitle = serde_json::from_str(&json).unwrap();
@@ -204,6 +205,7 @@ fn test_subtitle_serde_round_trip() {
     end: 0,
     text: String::new(),
     settings: Some("align:start".to_string()),
+    text_parts: Vec::new(),
   };
   let json2 = serde_json::to_string_pretty(&sub_with_settings).unwrap();
   let parsed2: Subtitle = serde_json::from_str(&json2).unwrap();

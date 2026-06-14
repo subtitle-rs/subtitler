@@ -1,7 +1,8 @@
-use crate::model::Subtitle;
+use crate::model::{Subtitle, TextPart};
 use crate::types::AnyResult;
 use crate::utils::{format_timestamp, parse_timestamps};
 use anyhow::anyhow;
+use regex::Regex;
 #[cfg(feature = "http")]
 use reqwest;
 use std::io::Cursor;
@@ -13,6 +14,83 @@ enum Phase {
   Cue,
   Timestamp,
   Text,
+}
+
+fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
+  let mut parts = Vec::new();
+  let mut plain = String::new();
+  let mut bold = false;
+  let mut italic = false;
+  let mut underline = false;
+  let mut voice: Option<String> = None;
+  let mut last_end = 0;
+
+  let combined = format!(
+    "{}{}",
+    r"<v(?:\s+\w+)?>|</v>|", r"</?(?:b|i|u|c)(?:\.[^>]*)?>"
+  );
+  let re = Regex::new(&combined).unwrap();
+
+  for caps in re.find_iter(text) {
+    let tag = caps.as_str();
+    let start = caps.start();
+    let end = caps.end();
+
+    if start > last_end {
+      let segment = &text[last_end..start];
+      if !segment.is_empty() {
+        plain.push_str(segment);
+        if bold || italic || underline || voice.is_some() {
+          parts.push(TextPart {
+            text: segment.to_string(),
+            bold,
+            italic,
+            underline,
+            color: None,
+            voice: voice.clone(),
+          });
+        }
+      }
+    }
+
+    match tag {
+      "</v>" => voice = None,
+      "</b>" | "</b.c1>" | "</b.c2>" => bold = false,
+      "</i>" | "</i.c1>" | "</i.c2>" => italic = false,
+      "</u>" | "</u.c1>" | "</u.c2>" => underline = false,
+      "</c>" | "</c.c>" | "</c.c1>" | "</c.c2>" => {}
+      _ if tag.starts_with("<v") => {
+        voice = Some("v".to_string());
+      }
+      _ if tag.starts_with("<b") => bold = true,
+      _ if tag.starts_with("<i") => italic = true,
+      _ if tag.starts_with("<u") => underline = true,
+      _ => {}
+    }
+
+    last_end = end;
+  }
+
+  if last_end < text.len() {
+    let segment = &text[last_end..];
+    plain.push_str(segment);
+    if bold || italic || underline || voice.is_some() {
+      parts.push(TextPart {
+        text: segment.to_string(),
+        bold,
+        italic,
+        underline,
+        color: None,
+        voice: voice.clone(),
+      });
+    }
+  }
+
+  if parts.is_empty() {
+    plain = text.to_string();
+  }
+
+  (plain, parts)
 }
 
 async fn parse<R>(reader: R) -> AnyResult<Vec<Subtitle>>
@@ -35,16 +113,9 @@ where
     }
 
     match phase {
-      Phase::Header => {
-        if trimmed.starts_with("WEBVTT") {
-          // header found, but remain in Phase::Header to skip metadata
-          // until the blank line that ends the header block
-        }
-        // non-WEBVTT lines before the first blank line are metadata — ignored
-      }
+      Phase::Header => if trimmed.starts_with("WEBVTT") {},
       Phase::Cue => {
         if trimmed.starts_with("WEBVTT") {
-          // misplaced WEBVTT header — ignore it
         } else if trimmed.contains("-->") {
           let timestamp = parse_timestamps(&trimmed)?;
           let mut subtitle = Subtitle::new(timestamp.start, timestamp.end, "");
@@ -83,8 +154,17 @@ where
     }
   }
 
-  if let Some(sub) = current_subtitle {
+  if let Some(mut sub) = current_subtitle {
+    let (plain, parts) = extract_text_parts(&sub.text);
+    sub.text = plain;
+    sub.text_parts = parts;
     subtitles.push(sub);
+  }
+
+  for sub in &mut subtitles {
+    let (plain, parts) = extract_text_parts(&sub.text);
+    sub.text = plain;
+    sub.text_parts = parts;
   }
 
   Ok(subtitles)
@@ -93,6 +173,13 @@ where
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
   let file = File::open(path).await?;
   let reader = BufReader::new(file);
+  parse(reader).await
+}
+
+pub async fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
+  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let cursor = Cursor::new(text);
+  let reader = BufReader::new(cursor);
   parse(reader).await
 }
 
@@ -109,6 +196,15 @@ pub async fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   let cursor = Cursor::new(content);
   let reader = BufReader::new(cursor);
   parse(reader).await
+}
+
+pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
+  if let Ok(text) = String::from_utf8(data.to_vec())
+    && text.trim().starts_with("WEBVTT")
+  {
+    return Some(crate::model::SubtitleFormat::Vtt);
+  }
+  None
 }
 
 pub async fn generate(
@@ -166,6 +262,7 @@ mod tests {
       end,
       text: text.to_string(),
       settings: None,
+      text_parts: Vec::new(),
     }
   }
 
@@ -236,5 +333,35 @@ mod tests {
     let content = "WEBVTT\n\n1\nnot a timestamp\n\n";
     let result = parse_content(content).await;
     assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_parse_bold_tag() {
+    let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\n<b>bold</b>\n\n";
+    let result = parse_content(content).await.unwrap();
+    assert!(result[0].text_parts[0].bold);
+  }
+
+  #[tokio::test]
+  async fn test_parse_voice_tag() {
+    let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\n<v Alice>Hello</v>\n\n";
+    let result = parse_content(content).await.unwrap();
+    assert_eq!(result[0].text, "Hello");
+    assert_eq!(result[0].text_parts.len(), 1);
+    assert!(result[0].text_parts[0].voice.is_some());
+  }
+
+  #[tokio::test]
+  async fn test_parse_bytes() {
+    let data = b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
+    let result = parse_bytes(data.as_ref()).await.unwrap();
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].text, "Hello");
+  }
+
+  #[test]
+  fn test_detect_format() {
+    let data = b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
+    assert_eq!(detect_format(data), Some(crate::model::SubtitleFormat::Vtt));
   }
 }
