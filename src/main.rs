@@ -25,8 +25,14 @@ async fn main() -> AnyResult<()> {
       } else if path.ends_with(".srt") {
         let subtitles = srt::parse_file(&path).await?;
         println!("{}", serde_json::to_string_pretty(&subtitles)?);
+      } else {
+        eprintln!(
+          "Unknown file format. Expected .srt or .vtt extension: {}",
+          path
+        );
       }
     }
+    #[cfg(feature = "http")]
     Some(Commands::Url { url }) => {
       if url.contains(".vtt") {
         let subtitles = vtt::parse_url(&url).await?;
@@ -34,7 +40,13 @@ async fn main() -> AnyResult<()> {
       } else if url.contains(".srt") {
         let subtitles = srt::parse_url(&url).await?;
         println!("{}", serde_json::to_string_pretty(&subtitles)?);
+      } else {
+        eprintln!("Unknown URL format. Expected .srt or .vtt in URL: {}", url);
       }
+    }
+    #[cfg(not(feature = "http"))]
+    Some(Commands::Url { .. }) => {
+      eprintln!("`url` command requires the `http` feature. Rebuild with default features.");
     }
 
     None => {

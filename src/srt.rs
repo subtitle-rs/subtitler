@@ -1,12 +1,12 @@
 use crate::model::Subtitle;
 use crate::types::AnyResult;
 use crate::utils::{format_timestamp, parse_timestamp};
+use anyhow::anyhow;
 #[cfg(feature = "http")]
 use reqwest;
 use std::io::Cursor;
-use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::{fs, io::AsyncWriteExt};
+use tokio::fs::{self, File};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 enum Phase {
   Index,
@@ -44,6 +44,16 @@ where
             settings: None,
           });
           phase = Phase::Timestamp;
+        } else if trimmed.contains("-->") {
+          // no index line — jump directly to timestamp
+          if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
+            let subtitle =
+              Subtitle::new(parse_timestamp(start_str)?, parse_timestamp(end_str)?, "");
+            phase = Phase::Text;
+            current_subtitle = Some(subtitle);
+          } else {
+            return Err(anyhow!("Expected index or timestamp, got: \"{}\"", trimmed));
+          }
         }
       }
       Phase::Timestamp => {
@@ -52,6 +62,8 @@ where
             sub.start = parse_timestamp(start_str)?;
             sub.end = parse_timestamp(end_str)?;
             phase = Phase::Text;
+          } else {
+            return Err(anyhow!("Expected timestamp, got: \"{}\"", trimmed));
           }
         }
       }
@@ -73,8 +85,8 @@ where
   Ok(subtitles)
 }
 
-pub async fn parse_file(file_path: &str) -> AnyResult<Vec<Subtitle>> {
-  let file = File::open(file_path).await?;
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+  let file = File::open(path).await?;
   let reader = BufReader::new(file);
   parse(reader).await
 }
@@ -94,12 +106,16 @@ pub async fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   parse(reader).await
 }
 
-pub async fn generate(subtitles: &[Subtitle], file_path: &str) -> AnyResult<String> {
+pub async fn generate(
+  subtitles: &[Subtitle],
+  file_path: impl AsRef<std::path::Path>,
+) -> AnyResult<String> {
+  let path = file_path.as_ref();
   let mut dest = fs::OpenOptions::new()
     .create(true)
     .write(true)
     .truncate(true)
-    .open(file_path)
+    .open(path)
     .await?;
   let mut content = String::new();
   for (i, subtitle) in subtitles.iter().enumerate() {
@@ -120,10 +136,13 @@ pub async fn generate(subtitles: &[Subtitle], file_path: &str) -> AnyResult<Stri
       content.push('\n');
     }
   }
-  content.push('\n');
+  if !subtitles.is_empty() {
+    content.push('\n');
+  }
   dest.write_all(content.as_bytes()).await?;
+  dest.flush().await?;
 
-  Ok(file_path.to_string())
+  Ok(path.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -195,5 +214,22 @@ mod tests {
     let parsed_back = parse_file(path).await.unwrap();
     let _ = std::fs::remove_file(path);
     assert_eq!(subtitles, parsed_back);
+  }
+
+  #[tokio::test]
+  async fn test_parse_missing_index() {
+    let content = "00:00:01,000 --> 00:00:03,500\nNo index\n\n";
+    let result = parse_content(content).await.unwrap();
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].index, None);
+    assert_eq!(result[0].start, 1000);
+    assert_eq!(result[0].text, "No index");
+  }
+
+  #[tokio::test]
+  async fn test_parse_missing_timestamp_error() {
+    let content = "1\nnot a timestamp\n";
+    let result = parse_content(content).await;
+    assert!(result.is_err());
   }
 }

@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use subtitler::utils::{format_timestamp, pad_left, parse_timestamp, parse_timestamps};
 
 fn bench_parse_timestamp(c: &mut Criterion) {

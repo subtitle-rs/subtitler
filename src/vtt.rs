@@ -1,12 +1,12 @@
 use crate::model::Subtitle;
 use crate::types::AnyResult;
 use crate::utils::{format_timestamp, parse_timestamps};
+use anyhow::anyhow;
 #[cfg(feature = "http")]
 use reqwest;
 use std::io::Cursor;
-use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::{fs, io::AsyncWriteExt};
+use tokio::fs::{self, File};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 enum Phase {
   Header,
@@ -37,11 +37,15 @@ where
     match phase {
       Phase::Header => {
         if trimmed.starts_with("WEBVTT") {
-          phase = Phase::Cue;
+          // header found, but remain in Phase::Header to skip metadata
+          // until the blank line that ends the header block
         }
+        // non-WEBVTT lines before the first blank line are metadata — ignored
       }
       Phase::Cue => {
-        if trimmed.contains("-->") {
+        if trimmed.starts_with("WEBVTT") {
+          // misplaced WEBVTT header — ignore it
+        } else if trimmed.contains("-->") {
           let timestamp = parse_timestamps(&trimmed)?;
           let mut subtitle = Subtitle::new(timestamp.start, timestamp.end, "");
           subtitle.settings = timestamp.settings;
@@ -63,6 +67,8 @@ where
             sub.end = timestamp.end;
             sub.settings = timestamp.settings;
             phase = Phase::Text;
+          } else {
+            return Err(anyhow!("Expected timestamp, got: \"{}\"", trimmed));
           }
         }
       }
@@ -84,8 +90,8 @@ where
   Ok(subtitles)
 }
 
-pub async fn parse_file(file_path: &str) -> AnyResult<Vec<Subtitle>> {
-  let file = File::open(file_path).await?;
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+  let file = File::open(path).await?;
   let reader = BufReader::new(file);
   parse(reader).await
 }
@@ -105,12 +111,16 @@ pub async fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   parse(reader).await
 }
 
-pub async fn generate(subtitles: &[Subtitle], file_path: &str) -> AnyResult<String> {
+pub async fn generate(
+  subtitles: &[Subtitle],
+  file_path: impl AsRef<std::path::Path>,
+) -> AnyResult<String> {
+  let path = file_path.as_ref();
   let mut dest = fs::OpenOptions::new()
     .create(true)
     .write(true)
     .truncate(true)
-    .open(file_path)
+    .open(path)
     .await?;
   let mut content = String::new();
   content.push_str("WEBVTT\n\n");
@@ -135,10 +145,13 @@ pub async fn generate(subtitles: &[Subtitle], file_path: &str) -> AnyResult<Stri
       content.push('\n');
     }
   }
-  content.push('\n');
+  if !subtitles.is_empty() {
+    content.push('\n');
+  }
   dest.write_all(content.as_bytes()).await?;
+  dest.flush().await?;
 
-  Ok(file_path.to_string())
+  Ok(path.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -200,13 +213,28 @@ mod tests {
 
   #[tokio::test]
   async fn test_round_trip() {
-    let original =
-      "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld\n\n";
+    let original = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld\n\n";
     let subtitles = parse_content(original).await.unwrap();
     let path = "test_round_trip_vtt.vtt";
     generate(&subtitles, path).await.unwrap();
     let parsed_back = parse_file(path).await.unwrap();
     let _ = std::fs::remove_file(path);
     assert_eq!(subtitles, parsed_back);
+  }
+
+  #[tokio::test]
+  async fn test_parse_with_metadata_header() {
+    let content =
+      "WEBVTT\nKind: captions\nLanguage: en\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
+    let result = parse_content(content).await.unwrap();
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].text, "Hello");
+  }
+
+  #[tokio::test]
+  async fn test_parse_missing_timestamp_error() {
+    let content = "WEBVTT\n\n1\nnot a timestamp\n\n";
+    let result = parse_content(content).await;
+    assert!(result.is_err());
   }
 }

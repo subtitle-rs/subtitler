@@ -14,7 +14,8 @@ pub fn parse_timestamp(timestamp: &str) -> AnyResult<u64> {
   if let Some(captures) = re.captures(timestamp) {
     let hours = captures
       .get(1)
-      .map_or(0, |m| m.as_str().parse::<u64>().unwrap())
+      .map_or(Ok(0), |m| m.as_str().parse::<u64>())
+      .map_err(|_| anyhow!("Invalid hours in timestamp: \"{}\"", timestamp))?
       * 3600000;
     let minutes = captures[2].parse::<u64>()? * 60000;
     let seconds = captures[3].parse::<u64>()? * 1000;
