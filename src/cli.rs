@@ -6,6 +6,10 @@ pub enum Format {
   Vtt,
   Ass,
   Ssa,
+  #[value(name = "microdvd")]
+  MicroDvd,
+  #[value(name = "subviewer")]
+  SubViewer,
 }
 
 impl Format {
@@ -19,6 +23,8 @@ impl Format {
       Some(Format::Ass)
     } else if lower.ends_with(".ssa") {
       Some(Format::Ssa)
+    } else if lower.ends_with(".sub") {
+      Some(Format::MicroDvd)
     } else {
       None
     }
@@ -32,6 +38,8 @@ impl std::fmt::Display for Format {
       Format::Vtt => write!(f, "vtt"),
       Format::Ass => write!(f, "ass"),
       Format::Ssa => write!(f, "ssa"),
+      Format::MicroDvd => write!(f, "microdvd"),
+      Format::SubViewer => write!(f, "subviewer"),
     }
   }
 }

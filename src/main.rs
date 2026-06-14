@@ -68,6 +68,8 @@ fn resolve_format(data: &[u8], hint: Option<Format>) -> Option<Format> {
     Some(SubtitleFormat::Vtt) => Some(Format::Vtt),
     Some(SubtitleFormat::Ass) => Some(Format::Ass),
     Some(SubtitleFormat::Ssa) => Some(Format::Ssa),
+    Some(SubtitleFormat::MicroDvd) => Some(Format::MicroDvd),
+    Some(SubtitleFormat::SubViewer) => Some(Format::SubViewer),
     None => None,
   }
 }
@@ -94,6 +96,14 @@ async fn parse_to_file(data: &[u8], format: Format) -> AnyResult<SubtitleFile> {
     Format::Ass | Format::Ssa => {
       ass::parse_content(&text)
     }
+    Format::MicroDvd => {
+      let file = subtitler::microdvd::parse_content(&text, None)?;
+      Ok(file)
+    }
+    Format::SubViewer => {
+      let subs = subtitler::subviewer::parse_content(&text)?;
+      Ok(SubtitleFile::Srt(subs))
+    }
   }
 }
 
@@ -109,6 +119,8 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     Format::Srt => srt::parse_content(&content).await?,
     Format::Vtt => vtt::parse_content(&content).await?,
     Format::Ass | Format::Ssa => ass::parse_content(&content)?.subtitles().to_vec(),
+    Format::MicroDvd => subtitler::microdvd::parse_content(&content, None)?.subtitles().to_vec(),
+    Format::SubViewer => subtitler::subviewer::parse_content(&content)?,
   };
 
   if args.json {
@@ -223,6 +235,8 @@ fn format_to_subtitle_format(f: &Format) -> SubtitleFormat {
     Format::Vtt => SubtitleFormat::Vtt,
     Format::Ass => SubtitleFormat::Ass,
     Format::Ssa => SubtitleFormat::Ssa,
+    Format::MicroDvd => SubtitleFormat::MicroDvd,
+    Format::SubViewer => SubtitleFormat::SubViewer,
   }
 }
 
@@ -325,6 +339,8 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
     Some(SubtitleFormat::Vtt) => println!("vtt"),
     Some(SubtitleFormat::Ass) => println!("ass"),
     Some(SubtitleFormat::Ssa) => println!("ssa"),
+    Some(SubtitleFormat::MicroDvd) => println!("microdvd"),
+    Some(SubtitleFormat::SubViewer) => println!("subviewer"),
     None => {
       eprintln!("Unknown format");
       std::process::exit(1);

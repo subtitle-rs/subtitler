@@ -69,6 +69,22 @@ impl Subtitle {
       f64::INFINITY
     }
   }
+
+  pub fn reading_speed_wpm(&self) -> f64 {
+    let word_count = self.text.split_whitespace().count() as f64;
+    let dur_minutes = self.duration_ms() as f64 / 60000.0;
+    if dur_minutes > 0.0 {
+      word_count / dur_minutes
+    } else {
+      f64::INFINITY
+    }
+  }
+
+  pub fn strip_tags(&mut self) {
+    let re = regex::Regex::new(r"</?(?:b|i|u|s|font|v|c)(?:\.[^>]*)?(?:\s[^>]*)?>").unwrap();
+    self.text = re.replace_all(&self.text, "").to_string();
+    self.text_parts.clear();
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -117,6 +133,8 @@ pub enum SubtitleFormat {
   Vtt,
   Ass,
   Ssa,
+  MicroDvd,
+  SubViewer,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -342,6 +360,8 @@ impl SubtitleFile {
         };
         crate::ass::to_string(&info, &styles, subs)
       }
+      SubtitleFormat::MicroDvd => crate::microdvd::to_string(subs, None),
+      SubtitleFormat::SubViewer => crate::subviewer::to_string(subs),
     }
   }
 
@@ -450,6 +470,16 @@ impl SubtitleFile {
         subs.remove(i + 1);
       } else {
         i += 1;
+      }
+    }
+  }
+
+  pub fn remove_overlaps(&mut self) {
+    self.sort();
+    let subs = self.subtitles_mut();
+    for i in 0..subs.len().saturating_sub(1) {
+      if subs[i + 1].start < subs[i].end {
+        subs[i + 1].start = subs[i].end;
       }
     }
   }

@@ -5,8 +5,9 @@
 [![Crates.io](https://img.shields.io/crates/v/subtitler?style=flat-square)](https://crates.io/crates/subtitler)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
 
-- SRT, WebVTT, and ASS/SSA support
+- SRT, WebVTT, ASS/SSA, **MicroDVD**, and **SubViewer** format support
 - Rich text extraction (bold, italic, underline, color, voice tags)
+- Encoding detection and auto-decoding (UTF-8, UTF-16, BOM, chardetng fallback)
 - Format detection, conversion, and validation
 - Frame-based timecode support
 - Utility operations: sort, merge, split, validate, framerate transform
@@ -200,6 +201,30 @@ pub enum SubtitleFile {
 | `to_string(info, styles, subtitles)` | Format as ASS string |
 | `detect_format(data)` | Detect if data is ASS/SSA |
 
+### MicroDVD Module (`subtitler::microdvd`)
+
+| Function | Description |
+|----------|-------------|
+| `parse_content(content, fps)` | Parse MicroDVD frame-based content |
+| `to_string(subtitles, fps)` | Format as MicroDVD string |
+| `to_string_with_fps_header(subtitles, fps)` | Format with FPS declaration header |
+| `detect_format(data)` | Detect if data is MicroDVD |
+
+### SubViewer Module (`subtitler::subviewer`)
+
+| Function | Description |
+|----------|-------------|
+| `parse_content(content)` | Parse SubViewer 1.0/2.0 content |
+| `to_string(subtitles)` | Format as SubViewer 2.0 with headers |
+| `detect_format(data)` | Detect if data is SubViewer |
+
+### Encoding Utilities (`subtitler::encoding`)
+
+| Function | Description |
+|----------|-------------|
+| `detect_encoding(data)` | Auto-detect character encoding (UTF-8/16/BOM/chardetng) |
+| `decode_to_string(data)` | Decode bytes to string using detected encoding |
+
 ### Timestamp Utilities (`subtitler::utils`)
 
 | Function | Description |
@@ -228,6 +253,7 @@ pub enum SubtitleFile {
 | `validate()` | Check for timing issues |
 | `validate_extended(max_chars, max_gap, max_cps)` | Extended validation |
 | `merge_adjacent(max_gap_ms)` | Merge subtitles within gap threshold |
+| `remove_overlaps()` | Fix overlapping subtitles by adjusting start times |
 | `split_long(max_chars)` | Split long subtitles at word boundaries |
 | `transform_framerate(in_fps, out_fps)` | Rescale timestamps for framerate change |
 | `map(fn)` | Transform each subtitle (consuming) |
@@ -242,6 +268,8 @@ pub enum SubtitleFile {
 | `shift(offset_ms)` | Shift this subtitle's timing |
 | `duration_ms()` | Get duration in milliseconds |
 | `chars_per_second()` | Calculate characters-per-second rate |
+| `reading_speed_wpm()` | Calculate reading speed in words per minute |
+| `strip_tags()` | Remove HTML/ASS formatting tags from subtitle text |
 
 ### Validation Issues (`subtitler::model::ValidationIssue`)
 
