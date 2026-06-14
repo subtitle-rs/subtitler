@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
   if let Some(url) = args.get(1) {
     let subtitle = parse_url(url).await?;
     info!("subtitle {:#?}", subtitle);
-    info!("subtitle json {}", serde_json::to_string_pretty(&subtitle)?);  
+    info!("subtitle json {}", serde_json::to_string_pretty(&subtitle)?);
   }
   Ok(())
 }

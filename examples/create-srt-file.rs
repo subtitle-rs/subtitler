@@ -14,8 +14,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[macro_use]
 extern crate tracing;
 
-use subtitler::srt::parse_content;
 use subtitler::srt::generate;
+use subtitler::srt::parse_content;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 #[tokio::main]
