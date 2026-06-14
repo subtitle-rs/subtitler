@@ -107,9 +107,21 @@ where
   let mut subtitles = Vec::new();
   let mut current_subtitle: Option<Subtitle> = None;
   let mut phase = Phase::Index;
+  let mut row: usize = 0;
+  let mut is_first_content_line = true;
 
   while let Some(line) = lines.next_line().await? {
-    let trimmed = line.trim().to_string();
+    row += 1;
+    let mut trimmed = line.trim().to_string();
+
+    // Strip BOM from first content line (matching JS strip-bom behavior)
+    if is_first_content_line && !trimmed.is_empty() {
+      is_first_content_line = false;
+      if trimmed.starts_with('\u{FEFF}') {
+        trimmed = trimmed.trim_start_matches('\u{FEFF}').to_string();
+      }
+    }
+
     if trimmed.is_empty() {
       if let Some(sub) = current_subtitle.take() {
         subtitles.push(sub);
@@ -128,6 +140,14 @@ where
             text: String::new(),
             settings: None,
             text_parts: Vec::new(),
+            style: None,
+            actor: None,
+            layer: None,
+            margin_l: None,
+            margin_r: None,
+            margin_v: None,
+            effect: None,
+            is_comment: false,
           });
           phase = Phase::Timestamp;
         } else if trimmed.contains("-->") {
@@ -137,7 +157,10 @@ where
             phase = Phase::Text;
             current_subtitle = Some(subtitle);
           } else {
-            return Err(anyhow!("Expected index or timestamp, got: \"{}\"", trimmed));
+            return Err(anyhow!(
+              "expected index or timestamp at row {row}, but received: \"{}\"",
+              trimmed
+            ));
           }
         }
       }
@@ -148,7 +171,10 @@ where
             sub.end = parse_timestamp(end_str)?;
             phase = Phase::Text;
           } else {
-            return Err(anyhow!("Expected timestamp, got: \"{}\"", trimmed));
+            return Err(anyhow!(
+              "expected timestamp at row {row}, but received: \"{}\"",
+              trimmed
+            ));
           }
         }
       }
@@ -229,17 +255,7 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
   None
 }
 
-pub async fn generate(
-  subtitles: &[Subtitle],
-  file_path: impl AsRef<std::path::Path>,
-) -> AnyResult<String> {
-  let path = file_path.as_ref();
-  let mut dest = fs::OpenOptions::new()
-    .create(true)
-    .write(true)
-    .truncate(true)
-    .open(path)
-    .await?;
+pub fn to_string(subtitles: &[Subtitle]) -> String {
   let mut content = String::new();
   for (i, subtitle) in subtitles.iter().enumerate() {
     if let Some(index) = subtitle.index {
@@ -262,6 +278,21 @@ pub async fn generate(
   if !subtitles.is_empty() {
     content.push('\n');
   }
+  content
+}
+
+pub async fn generate(
+  subtitles: &[Subtitle],
+  file_path: impl AsRef<std::path::Path>,
+) -> AnyResult<String> {
+  let path = file_path.as_ref();
+  let mut dest = fs::OpenOptions::new()
+    .create(true)
+    .write(true)
+    .truncate(true)
+    .open(path)
+    .await?;
+  let content = to_string(subtitles);
   dest.write_all(content.as_bytes()).await?;
   dest.flush().await?;
 
@@ -281,6 +312,14 @@ mod tests {
       text: text.to_string(),
       settings: None,
       text_parts: Vec::new(),
+      style: None,
+      actor: None,
+      layer: None,
+      margin_l: None,
+      margin_r: None,
+      margin_v: None,
+      effect: None,
+      is_comment: false,
     }
   }
 

@@ -11,6 +11,23 @@ pub struct Subtitle {
   pub settings: Option<String>,
   #[serde(skip_serializing_if = "Vec::is_empty", default)]
   pub text_parts: Vec<TextPart>,
+  // ASS/SSA fields
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub style: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub actor: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub layer: Option<i32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub margin_l: Option<i32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub margin_r: Option<i32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub margin_v: Option<i32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub effect: Option<String>,
+  #[serde(skip_serializing_if = "is_false", default)]
+  pub is_comment: bool,
 }
 
 impl Subtitle {
@@ -22,6 +39,14 @@ impl Subtitle {
       settings: None,
       text: text.to_string(),
       text_parts: Vec::new(),
+      style: None,
+      actor: None,
+      layer: None,
+      margin_l: None,
+      margin_r: None,
+      margin_v: None,
+      effect: None,
+      is_comment: false,
     }
   }
 
@@ -34,6 +59,15 @@ impl Subtitle {
 
   pub fn duration_ms(&self) -> u64 {
     self.end.saturating_sub(self.start)
+  }
+
+  pub fn chars_per_second(&self) -> f64 {
+    let dur = self.duration_ms() as f64 / 1000.0;
+    if dur > 0.0 {
+      self.text.chars().count() as f64 / dur
+    } else {
+      f64::INFINITY
+    }
   }
 }
 
@@ -81,33 +115,190 @@ pub struct Timestamp {
 pub enum SubtitleFormat {
   Srt,
   Vtt,
+  Ass,
+  Ssa,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct AssStyle {
+  pub name: String,
+  pub fontname: String,
+  pub fontsize: u32,
+  pub primary_color: String,
+  pub secondary_color: String,
+  pub outline_color: String,
+  pub back_color: String,
+  pub bold: bool,
+  pub italic: bool,
+  pub underline: bool,
+  pub strikeout: bool,
+  #[serde(default)]
+  pub scale_x: f64,
+  #[serde(default)]
+  pub scale_y: f64,
+  #[serde(default)]
+  pub spacing: f64,
+  #[serde(default)]
+  pub angle: f64,
+  #[serde(default = "default_border_style")]
+  pub border_style: u32,
+  #[serde(default)]
+  pub outline: f64,
+  #[serde(default)]
+  pub shadow: f64,
+  #[serde(default = "default_alignment")]
+  pub alignment: u32,
+  #[serde(default)]
+  pub margin_l: i32,
+  #[serde(default)]
+  pub margin_r: i32,
+  #[serde(default)]
+  pub margin_v: i32,
+  #[serde(default = "default_encoding")]
+  pub encoding: i32,
+}
+
+fn default_border_style() -> u32 { 1 }
+fn default_alignment() -> u32 { 2 }
+fn default_encoding() -> i32 { 1 }
+
+impl AssStyle {
+  pub fn default_style() -> Self {
+    AssStyle {
+      name: "Default".into(),
+      fontname: "Arial".into(),
+      fontsize: 48,
+      primary_color: "&H00FFFFFF".into(),
+      secondary_color: "&H000000FF".into(),
+      outline_color: "&H00000000".into(),
+      back_color: "&H00000000".into(),
+      bold: false,
+      italic: false,
+      underline: false,
+      strikeout: false,
+      scale_x: 100.0,
+      scale_y: 100.0,
+      spacing: 0.0,
+      angle: 0.0,
+      border_style: 1,
+      outline: 2.0,
+      shadow: 2.0,
+      alignment: 2,
+      margin_l: 10,
+      margin_r: 10,
+      margin_v: 10,
+      encoding: 1,
+    }
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum SubtitleFile {
   Srt(Vec<Subtitle>),
-  Vtt(Vec<Subtitle>),
+  Vtt {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    header: Option<String>,
+    subtitles: Vec<Subtitle>,
+  },
+  Ass {
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty", default)]
+    info: std::collections::HashMap<String, String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    styles: Vec<AssStyle>,
+    subtitles: Vec<Subtitle>,
+  },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValidationIssue {
+  Overlap {
+    index_a: usize,
+    index_b: usize,
+    end_a: u64,
+    start_b: u64,
+  },
+  NegativeDuration {
+    index: usize,
+    start: u64,
+    end: u64,
+  },
+  ZeroDuration {
+    index: usize,
+    time: u64,
+  },
+  DecreasingStartTime {
+    index: usize,
+    prev_start: u64,
+    curr_start: u64,
+  },
+  TooLongGap {
+    index: usize,
+    prev_end: u64,
+    curr_start: u64,
+    gap_ms: u64,
+  },
+  TextTooLong {
+    index: usize,
+    chars: usize,
+    max_chars: usize,
+  },
+  CpsTooHigh {
+    index: usize,
+    cps: f64,
+    max_cps: f64,
+  },
+}
+
+impl ValidationIssue {
+  pub fn description(&self) -> String {
+    match self {
+      ValidationIssue::Overlap { index_a, index_b, end_a, start_b } => {
+        format!("subtitle {index_a} (ends at {end_a}ms) overlaps with subtitle {index_b} (starts at {start_b}ms)")
+      }
+      ValidationIssue::NegativeDuration { index, start, end } => {
+        format!("subtitle {index} has negative duration: {start}ms -> {end}ms")
+      }
+      ValidationIssue::ZeroDuration { index, time } => {
+        format!("subtitle {index} has zero duration at {time}ms")
+      }
+      ValidationIssue::DecreasingStartTime { index, prev_start, curr_start } => {
+        format!("subtitle {index} starts at {curr_start}ms before previous subtitle's start time {prev_start}ms")
+      }
+      ValidationIssue::TooLongGap { index, prev_end, curr_start, gap_ms } => {
+        format!("subtitle {index}: {gap_ms}ms gap between {prev_end}ms and {curr_start}ms")
+      }
+      ValidationIssue::TextTooLong { index, chars, max_chars } => {
+        format!("subtitle {index} has {chars} characters (max recommended: {max_chars})")
+      }
+      ValidationIssue::CpsTooHigh { index, cps, max_cps } => {
+        format!("subtitle {index} has {cps:.1} chars/second (max recommended: {max_cps:.1})")
+      }
+    }
+  }
 }
 
 impl SubtitleFile {
   pub fn subtitles(&self) -> &[Subtitle] {
     match self {
       SubtitleFile::Srt(subs) => subs,
-      SubtitleFile::Vtt(subs) => subs,
+      SubtitleFile::Vtt { subtitles: subs, .. } => subs,
+      SubtitleFile::Ass { subtitles: subs, .. } => subs,
     }
   }
 
   pub fn subtitles_mut(&mut self) -> &mut Vec<Subtitle> {
     match self {
       SubtitleFile::Srt(subs) => subs,
-      SubtitleFile::Vtt(subs) => subs,
+      SubtitleFile::Vtt { subtitles: subs, .. } => subs,
+      SubtitleFile::Ass { subtitles: subs, .. } => subs,
     }
   }
 
   pub fn format(&self) -> SubtitleFormat {
     match self {
       SubtitleFile::Srt(_) => SubtitleFormat::Srt,
-      SubtitleFile::Vtt(_) => SubtitleFormat::Vtt,
+      SubtitleFile::Vtt { .. } => SubtitleFormat::Vtt,
+      SubtitleFile::Ass { .. } => SubtitleFormat::Ass,
     }
   }
 
@@ -115,5 +306,394 @@ impl SubtitleFile {
     for sub in self.subtitles_mut().iter_mut() {
       sub.shift(offset_ms);
     }
+  }
+
+  pub fn map<F>(mut self, mut f: F) -> Self
+  where
+    F: FnMut(&mut Subtitle),
+  {
+    for sub in self.subtitles_mut().iter_mut() {
+      f(sub);
+    }
+    self
+  }
+
+  pub fn filter<F>(mut self, mut f: F) -> Self
+  where
+    F: FnMut(&Subtitle) -> bool,
+  {
+    self.subtitles_mut().retain(|s| f(s));
+    self
+  }
+
+  pub fn to_string(&self) -> String {
+    self.to_string_with_format(&self.format())
+  }
+
+  pub fn to_string_with_format(&self, format: &SubtitleFormat) -> String {
+    let subs = self.subtitles();
+    match format {
+      SubtitleFormat::Srt => crate::srt::to_string(subs),
+      SubtitleFormat::Vtt => crate::vtt::to_string(subs, None),
+      SubtitleFormat::Ass | SubtitleFormat::Ssa => {
+        let (info, styles) = match self {
+          SubtitleFile::Ass { info, styles, .. } => (info.clone(), styles.clone()),
+          _ => (std::collections::HashMap::new(), vec![crate::model::AssStyle::default_style()]),
+        };
+        crate::ass::to_string(&info, &styles, subs)
+      }
+    }
+  }
+
+  pub fn sort(&mut self) {
+    self.subtitles_mut().sort_by_key(|s| (s.start, s.end));
+  }
+
+  pub fn validate(&self) -> Vec<ValidationIssue> {
+    let subs = self.subtitles();
+    let mut issues = Vec::new();
+
+    for (i, sub) in subs.iter().enumerate() {
+      if sub.end < sub.start {
+        issues.push(ValidationIssue::NegativeDuration {
+          index: i,
+          start: sub.start,
+          end: sub.end,
+        });
+      }
+      if sub.start == sub.end {
+        issues.push(ValidationIssue::ZeroDuration {
+          index: i,
+          time: sub.start,
+        });
+      }
+    }
+
+    for i in 0..subs.len() {
+      for j in (i + 1)..subs.len() {
+        if subs[j].start < subs[i].end {
+          issues.push(ValidationIssue::Overlap {
+            index_a: i,
+            index_b: j,
+            end_a: subs[i].end,
+            start_b: subs[j].start,
+          });
+        } else {
+          break;
+        }
+      }
+    }
+
+    for i in 1..subs.len() {
+      if subs[i].start < subs[i - 1].start {
+        issues.push(ValidationIssue::DecreasingStartTime {
+          index: i,
+          prev_start: subs[i - 1].start,
+          curr_start: subs[i].start,
+        });
+      }
+    }
+
+    issues
+  }
+
+  pub fn validate_extended(&self, max_chars: usize, max_gap_ms: u64, max_cps: f64) -> Vec<ValidationIssue> {
+    let mut issues = self.validate();
+    let subs = self.subtitles();
+
+    for (i, sub) in subs.iter().enumerate() {
+      let char_count = sub.text.chars().count();
+      if char_count > max_chars {
+        issues.push(ValidationIssue::TextTooLong {
+          index: i,
+          chars: char_count,
+          max_chars,
+        });
+      }
+
+      let cps = sub.chars_per_second();
+      if cps > max_cps {
+        issues.push(ValidationIssue::CpsTooHigh {
+          index: i,
+          cps,
+          max_cps,
+        });
+      }
+    }
+
+    for i in 1..subs.len() {
+      let gap = subs[i].start.saturating_sub(subs[i - 1].end);
+      if gap > max_gap_ms {
+        issues.push(ValidationIssue::TooLongGap {
+          index: i,
+          prev_end: subs[i - 1].end,
+          curr_start: subs[i].start,
+          gap_ms: gap,
+        });
+      }
+    }
+
+    issues
+  }
+
+  pub fn merge_adjacent(&mut self, max_gap_ms: u64) {
+    self.sort();
+    let subs = self.subtitles_mut();
+    let mut i = 0;
+    while i + 1 < subs.len() {
+      let gap = subs[i + 1].start.saturating_sub(subs[i].end);
+      if gap <= max_gap_ms {
+        let next_text = subs[i + 1].text.clone();
+        subs[i].end = subs[i + 1].end;
+        subs[i].text.push('\n');
+        subs[i].text.push_str(&next_text);
+        subs.remove(i + 1);
+      } else {
+        i += 1;
+      }
+    }
+  }
+
+  pub fn split_long(&mut self, max_chars: usize) {
+    self.sort();
+    let subs = self.subtitles_mut();
+    let mut i = 0;
+    while i < subs.len() {
+      let char_count = subs[i].text.chars().count();
+      if char_count <= max_chars {
+        i += 1;
+        continue;
+      }
+
+      let start = subs[i].start;
+      let end = subs[i].end;
+      let duration = end - start;
+      let text = std::mem::take(&mut subs[i].text);
+
+      let chunks = split_text_chunks(&text, max_chars);
+      let num_chunks = chunks.len() as u64;
+      let chunk_duration = duration / num_chunks;
+
+      subs[i].text = chunks[0].clone();
+      subs[i].end = start + chunk_duration;
+
+      for (chunk_idx, chunk) in chunks.iter().enumerate().skip(1) {
+        let new_start = start + (chunk_idx as u64) * chunk_duration;
+        let new_end = if chunk_idx + 1 == chunks.len() as usize {
+          end
+        } else {
+          start + ((chunk_idx + 1) as u64) * chunk_duration
+        };
+        let mut new_sub = Subtitle::new(new_start, new_end, chunk);
+        new_sub.style = subs[i].style.clone();
+        new_sub.actor = subs[i].actor.clone();
+        new_sub.layer = subs[i].layer;
+        new_sub.margin_l = subs[i].margin_l;
+        new_sub.margin_r = subs[i].margin_r;
+        new_sub.margin_v = subs[i].margin_v;
+        new_sub.effect = subs[i].effect.clone();
+        i += 1;
+        subs.insert(i, new_sub);
+      }
+      i += 1;
+    }
+  }
+
+  pub fn transform_framerate(&mut self, in_fps: f64, out_fps: f64) {
+    let ratio = out_fps / in_fps;
+    for sub in self.subtitles_mut().iter_mut() {
+      sub.start = ((sub.start as f64) * ratio).round() as u64;
+      sub.end = ((sub.end as f64) * ratio).round() as u64;
+    }
+  }
+}
+
+fn split_text_chunks(text: &str, max_chars: usize) -> Vec<String> {
+  let mut chunks = Vec::new();
+  let words: Vec<&str> = text.split_whitespace().collect();
+  let mut current = String::new();
+
+  for word in words {
+    let test = if current.is_empty() {
+      word.to_string()
+    } else {
+      format!("{} {}", current, word)
+    };
+
+    if test.chars().count() > max_chars && !current.is_empty() {
+      chunks.push(std::mem::take(&mut current));
+      current.push_str(word);
+    } else {
+      current = test;
+    }
+  }
+
+  if !current.is_empty() {
+    chunks.push(current);
+  }
+
+  chunks
+}
+
+pub fn ms_to_frames(ms: u64, fps: f64) -> u64 {
+  ((ms as f64) * fps / 1000.0).round() as u64
+}
+
+pub fn frames_to_ms(frames: u64, fps: f64) -> u64 {
+  ((frames as f64) * 1000.0 / fps).round() as u64
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_sort() {
+    let mut file = SubtitleFile::Srt(vec![
+      Subtitle::new(5000, 7000, "third"),
+      Subtitle::new(1000, 3000, "first"),
+      Subtitle::new(3000, 5000, "second"),
+    ]);
+    file.sort();
+    let subs = file.subtitles();
+    assert_eq!(subs[0].start, 1000);
+    assert_eq!(subs[1].start, 3000);
+    assert_eq!(subs[2].start, 5000);
+  }
+
+  #[test]
+  fn test_validate_overlap() {
+    let file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 3000, "first"),
+      Subtitle::new(2000, 4000, "overlaps"),
+    ]);
+    let issues = file.validate();
+    assert_eq!(issues.len(), 1);
+    assert!(matches!(issues[0], ValidationIssue::Overlap { .. }));
+  }
+
+  #[test]
+  fn test_validate_negative_duration() {
+    let file = SubtitleFile::Srt(vec![
+      Subtitle::new(3000, 1000, "bad"),
+    ]);
+    let issues = file.validate();
+    assert_eq!(issues.len(), 1);
+    assert!(matches!(issues[0], ValidationIssue::NegativeDuration { .. }));
+  }
+
+  #[test]
+  fn test_validate_zero_duration() {
+    let file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 1000, "instant"),
+    ]);
+    let issues = file.validate();
+    assert_eq!(issues.len(), 1);
+    assert!(matches!(issues[0], ValidationIssue::ZeroDuration { .. }));
+  }
+
+  #[test]
+  fn test_validate_decreasing_start() {
+    let file = SubtitleFile::Srt(vec![
+      Subtitle::new(3000, 5000, "second"),
+      Subtitle::new(1000, 2000, "first"),
+    ]);
+    let issues = file.validate();
+    assert_eq!(issues.len(), 2); // overlap + decreasing
+    assert!(issues.iter().any(|i| matches!(i, ValidationIssue::Overlap { .. })));
+    assert!(issues.iter().any(|i| matches!(i, ValidationIssue::DecreasingStartTime { .. })));
+  }
+
+  #[test]
+  fn test_validate_clean() {
+    let file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 3000, "first"),
+      Subtitle::new(4000, 6000, "second"),
+    ]);
+    assert!(file.validate().is_empty());
+  }
+
+  #[test]
+  fn test_validate_extended() {
+    let file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 3000, "first"),
+      Subtitle::new(10000, 12000, "second with a very large gap"),
+    ]);
+    let issues = file.validate_extended(50, 5000, 30.0);
+    assert!(issues.iter().any(|i| matches!(i, ValidationIssue::TooLongGap { .. })));
+  }
+
+  #[test]
+  fn test_merge_adjacent() {
+    let mut file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 3000, "first"),
+      Subtitle::new(3100, 5000, "second"),
+      Subtitle::new(7000, 9000, "third"),
+    ]);
+    file.merge_adjacent(500);
+    let subs = file.subtitles();
+    assert_eq!(subs.len(), 2);
+    assert_eq!(subs[0].text, "first\nsecond");
+    assert_eq!(subs[0].end, 5000);
+    assert_eq!(subs[1].text, "third");
+  }
+
+  #[test]
+  fn test_merge_adjacent_noop() {
+    let mut file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 3000, "first"),
+      Subtitle::new(5000, 7000, "second"),
+    ]);
+    file.merge_adjacent(100);
+    assert_eq!(file.subtitles().len(), 2);
+  }
+
+  #[test]
+  fn test_split_long() {
+    let mut file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 5000, "this is a very long subtitle that should be split into multiple parts"),
+    ]);
+    file.split_long(20);
+    let subs = file.subtitles();
+    assert!(subs.len() > 1);
+    assert!(subs[0].text.len() <= 20 || subs[0].text.chars().count() <= 20);
+  }
+
+  #[test]
+  fn test_split_long_short() {
+    let mut file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 3000, "short"),
+    ]);
+    file.split_long(20);
+    assert_eq!(file.subtitles().len(), 1);
+  }
+
+  #[test]
+  fn test_transform_framerate() {
+    let mut file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 3000, "test"),
+    ]);
+    file.transform_framerate(23.976, 25.0);
+    let sub = &file.subtitles()[0];
+    // 1000 * 25/23.976 ≈ 1043
+    assert!(sub.start >= 1040 && sub.start <= 1045);
+  }
+
+  #[test]
+  fn test_ms_to_frames() {
+    assert_eq!(ms_to_frames(1000, 25.0), 25);
+    assert_eq!(ms_to_frames(0, 25.0), 0);
+  }
+
+  #[test]
+  fn test_frames_to_ms() {
+    assert_eq!(frames_to_ms(25, 25.0), 1000);
+    assert_eq!(frames_to_ms(0, 25.0), 0);
+  }
+
+  #[test]
+  fn test_chars_per_second() {
+    let sub = Subtitle::new(0, 2000, "Hello World"); // 11 chars / 2s = 5.5
+    assert!((sub.chars_per_second() - 5.5).abs() < 0.01);
   }
 }

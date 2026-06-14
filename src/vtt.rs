@@ -9,11 +9,13 @@ use std::io::Cursor;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+#[derive(PartialEq)]
 enum Phase {
   Header,
   Cue,
   Timestamp,
   Text,
+  VttComment,
 }
 
 fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
@@ -93,7 +95,7 @@ fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
   (plain, parts)
 }
 
-async fn parse<R>(reader: R) -> AnyResult<Vec<Subtitle>>
+async fn parse<R>(reader: R) -> AnyResult<(Option<String>, Vec<Subtitle>)>
 where
   R: AsyncBufReadExt + Unpin,
 {
@@ -101,21 +103,66 @@ where
   let mut subtitles = Vec::new();
   let mut current_subtitle: Option<Subtitle> = None;
   let mut phase = Phase::Header;
+  let mut row: usize = 0;
+  let mut is_first_content_line = true;
+  let mut header_lines: Vec<String> = Vec::new();
+  let mut header: Option<String> = None;
 
   while let Some(line) = lines.next_line().await? {
-    let trimmed = line.trim().to_string();
+    row += 1;
+    let mut trimmed = line.trim().to_string();
+
+    // Strip BOM from first content line (matching JS strip-bom behavior)
+    if is_first_content_line && !trimmed.is_empty() {
+      is_first_content_line = false;
+      if trimmed.starts_with('\u{FEFF}') {
+        trimmed = trimmed.trim_start_matches('\u{FEFF}').to_string();
+      }
+    }
+
     if trimmed.is_empty() {
       if let Some(sub) = current_subtitle.take() {
         subtitles.push(sub);
       }
-      phase = Phase::Cue;
+      if phase == Phase::Header && !header_lines.is_empty() {
+        header = Some(header_lines.join("\n"));
+        header_lines.clear();
+      }
+      phase = match phase {
+        Phase::VttComment => Phase::VttComment,
+        _ => Phase::Cue,
+      };
       continue;
     }
 
     match phase {
-      Phase::Header => if trimmed.starts_with("WEBVTT") {},
+      Phase::Header => {
+        if trimmed.starts_with("WEBVTT") {
+          header_lines.push(trimmed);
+        } else {
+          header_lines.push(trimmed);
+        }
+      }
+      Phase::VttComment => {
+        if trimmed.starts_with("NOTE") {
+        } else if trimmed.contains("-->") {
+          let timestamp = parse_timestamps(&trimmed)?;
+          let mut subtitle = Subtitle::new(timestamp.start, timestamp.end, "");
+          subtitle.settings = timestamp.settings;
+          current_subtitle = Some(subtitle);
+          phase = Phase::Text;
+        } else {
+          let index = trimmed.parse::<usize>().ok();
+          let mut subtitle = Subtitle::new(0, 0, "");
+          subtitle.index = index;
+          current_subtitle = Some(subtitle);
+          phase = Phase::Timestamp;
+        }
+      }
       Phase::Cue => {
         if trimmed.starts_with("WEBVTT") {
+        } else if trimmed.starts_with("NOTE") {
+          phase = Phase::VttComment;
         } else if trimmed.contains("-->") {
           let timestamp = parse_timestamps(&trimmed)?;
           let mut subtitle = Subtitle::new(timestamp.start, timestamp.end, "");
@@ -139,7 +186,10 @@ where
             sub.settings = timestamp.settings;
             phase = Phase::Text;
           } else {
-            return Err(anyhow!("Expected timestamp, got: \"{}\"", trimmed));
+            return Err(anyhow!(
+              "expected timestamp at row {row}, but received: \"{}\"",
+              trimmed
+            ));
           }
         }
       }
@@ -161,26 +211,33 @@ where
     subtitles.push(sub);
   }
 
+  // Finalize header if still in header phase and has content
+  if header.is_none() && !header_lines.is_empty() {
+    header = Some(header_lines.join("\n"));
+  }
+
   for sub in &mut subtitles {
     let (plain, parts) = extract_text_parts(&sub.text);
     sub.text = plain;
     sub.text_parts = parts;
   }
 
-  Ok(subtitles)
+  Ok((header, subtitles))
 }
 
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
   let file = File::open(path).await?;
   let reader = BufReader::new(file);
-  parse(reader).await
+  let (_, subtitles) = parse(reader).await?;
+  Ok(subtitles)
 }
 
 pub async fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
   let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
   let cursor = Cursor::new(text);
   let reader = BufReader::new(cursor);
-  parse(reader).await
+  let (_, subtitles) = parse(reader).await?;
+  Ok(subtitles)
 }
 
 #[cfg(feature = "http")]
@@ -189,10 +246,18 @@ pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
   let content = response.text().await?;
   let cursor = Cursor::new(content);
   let reader = BufReader::new(cursor);
-  parse(reader).await
+  let (_, subtitles) = parse(reader).await?;
+  Ok(subtitles)
 }
 
 pub async fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
+  let cursor = Cursor::new(content);
+  let reader = BufReader::new(cursor);
+  let (_, subtitles) = parse(reader).await?;
+  Ok(subtitles)
+}
+
+pub async fn parse_content_full(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
   let cursor = Cursor::new(content);
   let reader = BufReader::new(cursor);
   parse(reader).await
@@ -207,19 +272,12 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
   None
 }
 
-pub async fn generate(
-  subtitles: &[Subtitle],
-  file_path: impl AsRef<std::path::Path>,
-) -> AnyResult<String> {
-  let path = file_path.as_ref();
-  let mut dest = fs::OpenOptions::new()
-    .create(true)
-    .write(true)
-    .truncate(true)
-    .open(path)
-    .await?;
-  let mut content = String::new();
-  content.push_str("WEBVTT\n\n");
+pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
+  let mut content = if let Some(h) = header {
+    format!("{}\n\n", h)
+  } else {
+    String::from("WEBVTT\n\n")
+  };
   for (i, subtitle) in subtitles.iter().enumerate() {
     if let Some(index) = subtitle.index {
       content.push_str(&index.to_string());
@@ -244,6 +302,21 @@ pub async fn generate(
   if !subtitles.is_empty() {
     content.push('\n');
   }
+  content
+}
+
+pub async fn generate(
+  subtitles: &[Subtitle],
+  file_path: impl AsRef<std::path::Path>,
+) -> AnyResult<String> {
+  let path = file_path.as_ref();
+  let mut dest = fs::OpenOptions::new()
+    .create(true)
+    .write(true)
+    .truncate(true)
+    .open(path)
+    .await?;
+  let content = to_string(subtitles, None);
   dest.write_all(content.as_bytes()).await?;
   dest.flush().await?;
 
@@ -263,6 +336,14 @@ mod tests {
       text: text.to_string(),
       settings: None,
       text_parts: Vec::new(),
+      style: None,
+      actor: None,
+      layer: None,
+      margin_l: None,
+      margin_r: None,
+      margin_v: None,
+      effect: None,
+      is_comment: false,
     }
   }
 

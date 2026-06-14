@@ -90,3 +90,23 @@ path = "examples/parse-vtt-content.rs"
 [[example]]
 name = "create-vtt-file"
 path = "examples/create-vtt-file.rs"
+
+[[example]]
+name = "parse-ass-content"
+path = "examples/parse-ass-content.rs"
+
+[[example]]
+name = "format-convert"
+path = "examples/format-convert.rs"
+
+[[example]]
+name = "utility-ops"
+path = "examples/utility-ops.rs"
+
+[[example]]
+name = "frame-conversion"
+path = "examples/frame-conversion.rs"
+
+[[bench]]
+name = "subtitler_benchmark"
+harness = false

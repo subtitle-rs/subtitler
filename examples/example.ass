@@ -1,0 +1,24 @@
+[Script Info]
+Title: Example ASS
+ScriptType: v4.00+
+PlayResX: 384
+PlayResY: 288
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Italic,Arial,20,&H0000FFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,Hi there! How have you been?
+Dialogue: 0,0:00:04.00,0:00:06.50,Default,,0,0,0,,I've been doing well, thanks for asking!
+Dialogue: 0,0:00:07.00,0:00:09.50,Default,,0,0,0,,What have you been up to lately?
+Dialogue: 0,0:00:10.00,0:00:12.50,Default,,0,0,0,,Just working on some projects.
+Dialogue: 0,0:00:13.00,0:00:15.50,Default,,0,0,0,,Oh cool! What kind of projects?
+Dialogue: 0,0:00:16.00,0:00:18.50,Default,,0,0,0,,Mostly open source stuff.
+Dialogue: 0,0:00:19.00,0:00:21.50,Default,,0,0,0,,That sounds interesting!
+Dialogue: 0,0:00:22.00,0:00:24.50,Default,,0,0,0,,Yeah it keeps me busy.
+Dialogue: 0,0:00:25.00,0:00:27.50,Italic,,0,0,0,,Well, good luck with that!
+Dialogue: 0,0:00:28.00,0:00:30.50,Default,,0,0,0,,Thanks! Talk to you later.
