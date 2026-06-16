@@ -83,7 +83,18 @@ impl Subtitle {
   pub fn strip_tags(&mut self) {
     let re = regex::Regex::new(r"</?(?:b|i|u|s|font|v|c)(?:\.[^>]*)?(?:\s[^>]*)?>").unwrap();
     self.text = re.replace_all(&self.text, "").to_string();
+    let re_ass = regex::Regex::new(r"\{[^}]*\}").unwrap();
+    self.text = re_ass.replace_all(&self.text, "").to_string();
     self.text_parts.clear();
+  }
+
+  pub fn plaintext(&self) -> String {
+    let mut text = self.text.clone();
+    let re_html = regex::Regex::new(r"</?(?:b|i|u|s|font|v|c)(?:\.[^>]*)?(?:\s[^>]*)?>").unwrap();
+    text = re_html.replace_all(&text, "").to_string();
+    let re_ass = regex::Regex::new(r"\{[^}]*\}").unwrap();
+    text = re_ass.replace_all(&text, "").to_string();
+    text.replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ")
   }
 }
 
@@ -208,6 +219,21 @@ impl AssStyle {
       encoding: 1,
     }
   }
+}
+
+pub fn parse_ass_color(color: &str) -> (u8, u8, u8, u8) {
+  let hex = color.trim_start_matches("&H").trim_start_matches("&h");
+  let parsed = u32::from_str_radix(hex, 16).unwrap_or(0x00FFFFFF);
+  let b = (parsed >> 16 & 0xFF) as u8;
+  let g = (parsed >> 8 & 0xFF) as u8;
+  let r = (parsed & 0xFF) as u8;
+  let a = (parsed >> 24 & 0xFF) as u8;
+  (r, g, b, a)
+}
+
+pub fn format_ass_color(r: u8, g: u8, b: u8, a: u8) -> String {
+  let value = ((a as u32) << 24) | ((b as u32) << 16) | ((g as u32) << 8) | (r as u32);
+  format!("&H{:08X}", value)
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -482,6 +508,80 @@ impl SubtitleFile {
         subs[i + 1].start = subs[i].end;
       }
     }
+  }
+
+  pub fn enforce_min_duration(&mut self, min_ms: u64) {
+    self.sort();
+    let subs = self.subtitles_mut();
+    for i in 0..subs.len() {
+      let dur = subs[i].duration_ms();
+      if dur < min_ms {
+        let max_end = if i + 1 < subs.len() {
+          subs[i + 1].start
+        } else {
+          u64::MAX
+        };
+        let desired_end = subs[i].start + min_ms;
+        subs[i].end = desired_end.min(max_end);
+      }
+    }
+  }
+
+  pub fn enforce_max_duration(&mut self, max_ms: u64) {
+    for sub in self.subtitles_mut().iter_mut() {
+      let dur = sub.duration_ms();
+      if dur > max_ms {
+        sub.end = sub.start + max_ms;
+      }
+    }
+  }
+
+  pub fn auto_extend_for_cps(&mut self, max_cps: f64) {
+    self.sort();
+    let subs = self.subtitles_mut();
+    for i in 0..subs.len() {
+      let chars = subs[i].plaintext().chars().count() as f64;
+      let needed_ms = (chars / max_cps * 1000.0).ceil() as u64;
+      let current = subs[i].duration_ms();
+      if current < needed_ms {
+        let max_end = if i + 1 < subs.len() {
+          subs[i + 1].start
+        } else {
+          u64::MAX
+        };
+        subs[i].end = (subs[i].start + needed_ms).min(max_end);
+      }
+    }
+  }
+
+  pub fn extract_range(&self, start_ms: u64, end_ms: u64) -> Vec<Subtitle> {
+    self
+      .subtitles()
+      .iter()
+      .filter(|s| s.start < end_ms && s.end > start_ms)
+      .map(|s| {
+        let mut clone = s.clone();
+        if clone.start < start_ms {
+          clone.start = start_ms;
+        }
+        if clone.end > end_ms {
+          clone.end = end_ms;
+        }
+        clone
+      })
+      .collect()
+  }
+
+  pub fn concatenate(&mut self, other: &SubtitleFile, gap_ms: u64) {
+    let own_end = self.subtitles().iter().map(|s| s.end).max().unwrap_or(0);
+    let offset = own_end + gap_ms;
+    let subs = self.subtitles_mut();
+    for sub in other.subtitles() {
+      let mut clone = sub.clone();
+      clone.shift(offset as i64);
+      subs.push(clone);
+    }
+    self.sort();
   }
 
   pub fn split_long(&mut self, max_chars: usize) {

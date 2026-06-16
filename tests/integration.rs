@@ -540,3 +540,149 @@ fn test_detect_format_unknown() {
   assert_eq!(subtitler::detect_format(b"not a subtitle"), None);
   assert_eq!(subtitler::detect_format(b""), None);
 }
+
+// ── Duration enforcement tests ──
+
+#[test]
+fn test_enforce_min_duration() {
+  let mut file = SubtitleFile::Srt(vec![
+    Subtitle::new(1000, 1200, "short"),  // 200ms → should extend to 1000ms
+    Subtitle::new(2000, 5000, "ok"),
+  ]);
+  file.enforce_min_duration(1000);
+  assert_eq!(file.subtitles()[0].end, 2000);
+  assert_eq!(file.subtitles()[1].end, 5000);
+}
+
+#[test]
+fn test_enforce_max_duration() {
+  let mut file = SubtitleFile::Srt(vec![
+    Subtitle::new(1000, 8000, "very long"),  // 7000ms → trim to 3000ms
+    Subtitle::new(9000, 10000, "short"),
+  ]);
+  file.enforce_max_duration(3000);
+  assert_eq!(file.subtitles()[0].end, 4000);
+  assert_eq!(file.subtitles()[1].end, 10000);
+}
+
+#[test]
+fn test_auto_extend_for_cps() {
+  let mut file = SubtitleFile::Srt(vec![
+    Subtitle::new(0, 500, "This is a very long subtitle text that needs more time"),
+  ]);
+  file.auto_extend_for_cps(20.0);
+  // 54 chars / 20 cps = 2.7s = 2700ms
+  assert!(file.subtitles()[0].end >= 2700);
+}
+
+// ── Batch operation tests ──
+
+#[test]
+fn test_extract_range() {
+  let file = SubtitleFile::Srt(vec![
+    Subtitle::new(1000, 3000, "first"),
+    Subtitle::new(4000, 6000, "second"),
+    Subtitle::new(7000, 9000, "third"),
+  ]);
+  let extracted = file.extract_range(2000, 7000);
+  assert_eq!(extracted.len(), 2);
+  assert_eq!(extracted[0].text, "first");
+  assert_eq!(extracted[0].start, 2000); // clamped
+  assert_eq!(extracted[1].text, "second");
+}
+
+#[test]
+fn test_concatenate() {
+  let mut file1 = SubtitleFile::Srt(vec![
+    Subtitle::new(1000, 3000, "A"),
+    Subtitle::new(4000, 6000, "B"),
+  ]);
+  let file2 = SubtitleFile::Srt(vec![
+    Subtitle::new(1000, 3000, "C"),
+  ]);
+  file1.concatenate(&file2, 1000);
+  assert_eq!(file1.subtitles().len(), 3);
+  assert_eq!(file1.subtitles()[2].text, "C");
+  assert_eq!(file1.subtitles()[2].start, 8000);
+}
+
+// ── Color conversion tests ──
+
+#[test]
+fn test_parse_ass_color() {
+  let (r, g, b, a) = subtitler::model::parse_ass_color("&H00FFFFFF");
+  assert_eq!(r, 255);
+  assert_eq!(g, 255);
+  assert_eq!(b, 255);
+  assert_eq!(a, 0);
+}
+
+#[test]
+fn test_format_ass_color() {
+  let color = subtitler::model::format_ass_color(255, 128, 0, 0);
+  assert_eq!(color, "&H000080FF");
+}
+
+#[test]
+fn test_color_round_trip() {
+  for (r, g, b, a) in [(255u8, 255, 255, 0), (0, 0, 0, 255), (128, 64, 32, 128)] {
+    let formatted = subtitler::model::format_ass_color(r, g, b, a);
+    let (r2, g2, b2, a2) = subtitler::model::parse_ass_color(&formatted);
+    assert_eq!((r, g, b, a), (r2, g2, b2, a2));
+  }
+}
+
+// ── ASS tag parsing tests ──
+
+#[test]
+fn test_ass_to_plaintext() {
+  assert_eq!(
+    subtitler::ass::ass_to_plaintext("{\\i1}Hello{\\i0} World"),
+    "Hello World"
+  );
+  assert_eq!(
+    subtitler::ass::ass_to_plaintext("Line 1\\NLine 2"),
+    "Line 1\nLine 2"
+  );
+}
+
+#[test]
+fn test_parse_ass_tags_bold() {
+  let parts = subtitler::ass::parse_ass_tags("{\\b1}Bold text{\\b0}");
+  assert_eq!(parts.len(), 1);
+  assert!(parts[0].bold);
+  assert_eq!(parts[0].text, "Bold text");
+}
+
+#[test]
+fn test_parse_ass_tags_italic() {
+  let parts = subtitler::ass::parse_ass_tags("{\\i1}Italic{\\i0}");
+  assert_eq!(parts.len(), 1);
+  assert!(parts[0].italic);
+}
+
+// ── Normalize tests ──
+
+#[test]
+fn test_normalize_whitespace_integration() {
+  assert_eq!(
+    subtitler::normalize::normalize_whitespace("hello   world"),
+    "hello world"
+  );
+}
+
+#[test]
+fn test_strip_hearing_impaired_integration() {
+  assert_eq!(
+    subtitler::normalize::strip_hearing_impaired("Hello (LAUGHS)"),
+    "Hello"
+  );
+}
+
+// ── Subtitle.plaintext test ──
+
+#[test]
+fn test_subtitle_plaintext() {
+  let sub = Subtitle::new(0, 1000, "<b>Hello</b> {\\i1}World{\\i0}");
+  assert_eq!(sub.plaintext(), "Hello World");
+}

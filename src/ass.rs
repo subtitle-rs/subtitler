@@ -246,6 +246,97 @@ pub fn to_string(
   buf
 }
 
+pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
+  let mut parts = Vec::new();
+  let mut bold = false;
+  let mut italic = false;
+  let mut underline = false;
+  let _strikeout = false;
+  let mut color: Option<String> = None;
+  let mut current = String::new();
+
+  let re = Regex::new(r"\{([^}]*)\}").unwrap();
+  let mut last_end = 0usize;
+
+  for caps in re.captures_iter(text) {
+    let m = caps.get(0).unwrap();
+    let tag_start = m.start();
+    let tag_end = m.end();
+
+    if tag_start > last_end {
+      let segment = &text[last_end..tag_start];
+      let cleaned = segment.replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ");
+      current.push_str(&cleaned);
+    }
+
+    if !current.is_empty() {
+      parts.push(crate::model::TextPart {
+        text: std::mem::take(&mut current),
+        bold,
+        italic,
+        underline,
+        color: color.clone(),
+        voice: None,
+      });
+    }
+
+    let tag_content = &caps[1];
+    for tag in tag_content.split('\\') {
+      if tag == "b1" || tag == "b" {
+        bold = true;
+      } else if tag == "b0" {
+        bold = false;
+      } else if tag == "i1" || tag == "i" {
+        italic = true;
+      } else if tag == "i0" {
+        italic = false;
+      } else if tag == "u1" || tag == "u" {
+        underline = true;
+      } else if tag == "u0" {
+        underline = false;
+      } else if let Some(c) = tag.strip_prefix("c&") {
+        color = Some(format!("&{}", c));
+      } else if tag == "r" {
+        bold = false;
+        italic = false;
+        underline = false;
+        color = None;
+      }
+    }
+
+    last_end = tag_end;
+  }
+
+  if last_end < text.len() {
+    let segment = &text[last_end..];
+    let cleaned = segment.replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ");
+    current.push_str(&cleaned);
+  }
+
+  if !current.is_empty() {
+    parts.push(crate::model::TextPart {
+      text: current,
+      bold,
+      italic,
+      underline,
+      color: color.clone(),
+      voice: None,
+    });
+  }
+
+  parts
+}
+
+pub fn ass_to_plaintext(text: &str) -> String {
+  let re = Regex::new(r"\{[^}]*\}").unwrap();
+  let stripped = re.replace_all(text, "");
+  stripped
+    .replace("\\N", "\n")
+    .replace("\\n", "\n")
+    .replace("\\h", " ")
+    .to_string()
+}
+
 fn format_ass_timestamp(ms: u64) -> String {
   let total_seconds = ms / 1000;
   let centiseconds = (ms % 1000) / 10;

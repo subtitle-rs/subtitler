@@ -3,6 +3,7 @@ pub mod config;
 pub mod encoding;
 pub mod microdvd;
 pub mod model;
+pub mod normalize;
 pub mod srt;
 pub mod subviewer;
 pub mod types;
