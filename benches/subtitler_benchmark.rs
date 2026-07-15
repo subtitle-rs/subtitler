@@ -556,6 +556,36 @@ fn bench_srt_to_ass_convert(c: &mut Criterion) {
   });
 }
 
+fn bench_regex_hotspots(c: &mut Criterion) {
+  let mut group = c.benchmark_group("regex_hotspots");
+
+  let tagged = "<b>Bold</b> <i>italic</i> <u>under</u> <font color=\"#ff0000\">red</font> plain tail";
+  let sub = subtitler::model::Subtitle::new(0, 1000, tagged);
+
+  group.bench_function("plaintext", |b| {
+    b.iter(|| {
+      black_box(sub.plaintext());
+    });
+  });
+
+  group.bench_function("strip_tags", |b| {
+    b.iter(|| {
+      let mut s = sub.clone();
+      s.strip_tags();
+      black_box(s.text);
+    });
+  });
+
+  let noisy = "12O456 and 1l0 with w0rd plus somern";
+  group.bench_function("fix_ocr_errors", |b| {
+    b.iter(|| {
+      black_box(subtitler::normalize::fix_ocr_errors(noisy));
+    });
+  });
+
+  group.finish();
+}
+
 criterion_group!(
   benches,
   // utility
@@ -600,5 +630,7 @@ criterion_group!(
   // conversion
   bench_srt_to_vtt_convert,
   bench_srt_to_ass_convert,
+  // regex hotspots (perf regression tracking)
+  bench_regex_hotspots,
 );
 criterion_main!(benches);
