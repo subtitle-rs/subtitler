@@ -1,5 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+use std::sync::LazyLock;
+
+static RE_HTML_TAG: LazyLock<regex::Regex> = LazyLock::new(|| {
+  regex::Regex::new(r"</?(?:b|i|u|s|font|v|c)(?:\.[^>]*)?(?:\s[^>]*)?>").unwrap()
+});
+
+static RE_ASS_TAG: LazyLock<regex::Regex> =
+  LazyLock::new(|| regex::Regex::new(r"\{[^}]*\}").unwrap());
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Subtitle {
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -81,19 +90,15 @@ impl Subtitle {
   }
 
   pub fn strip_tags(&mut self) {
-    let re = regex::Regex::new(r"</?(?:b|i|u|s|font|v|c)(?:\.[^>]*)?(?:\s[^>]*)?>").unwrap();
-    self.text = re.replace_all(&self.text, "").to_string();
-    let re_ass = regex::Regex::new(r"\{[^}]*\}").unwrap();
-    self.text = re_ass.replace_all(&self.text, "").to_string();
+    self.text = RE_HTML_TAG.replace_all(&self.text, "").to_string();
+    self.text = RE_ASS_TAG.replace_all(&self.text, "").to_string();
     self.text_parts.clear();
   }
 
   pub fn plaintext(&self) -> String {
     let mut text = self.text.clone();
-    let re_html = regex::Regex::new(r"</?(?:b|i|u|s|font|v|c)(?:\.[^>]*)?(?:\s[^>]*)?>").unwrap();
-    text = re_html.replace_all(&text, "").to_string();
-    let re_ass = regex::Regex::new(r"\{[^}]*\}").unwrap();
-    text = re_ass.replace_all(&text, "").to_string();
+    text = RE_HTML_TAG.replace_all(&text, "").to_string();
+    text = RE_ASS_TAG.replace_all(&text, "").to_string();
     text.replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ")
   }
 }
