@@ -121,7 +121,10 @@ where
     }
 
     if trimmed.is_empty() {
-      if let Some(sub) = current_subtitle.take() {
+      if let Some(mut sub) = current_subtitle.take() {
+        let (plain, parts) = extract_text_parts(&sub.text);
+        sub.text = plain;
+        sub.text_parts = parts;
         subtitles.push(sub);
       }
       if phase == Phase::Header && !header_lines.is_empty() {
@@ -214,12 +217,6 @@ where
   // Finalize header if still in header phase and has content
   if header.is_none() && !header_lines.is_empty() {
     header = Some(header_lines.join("\n"));
-  }
-
-  for sub in &mut subtitles {
-    let (plain, parts) = extract_text_parts(&sub.text);
-    sub.text = plain;
-    sub.text_parts = parts;
   }
 
   Ok((header, subtitles))

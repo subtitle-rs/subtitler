@@ -123,7 +123,10 @@ where
     }
 
     if trimmed.is_empty() {
-      if let Some(sub) = current_subtitle.take() {
+      if let Some(mut sub) = current_subtitle.take() {
+        let (plain, parts) = extract_text_parts(&sub.text);
+        sub.text = plain;
+        sub.text_parts = parts;
         subtitles.push(sub);
       }
       phase = Phase::Index;
@@ -194,13 +197,6 @@ where
     sub.text = plain;
     sub.text_parts = parts;
     subtitles.push(sub);
-  }
-
-  // Post-process: extract tags from all subtitles
-  for sub in &mut subtitles {
-    let (plain, parts) = extract_text_parts(&sub.text);
-    sub.text = plain;
-    sub.text_parts = parts;
   }
 
   Ok(subtitles)
