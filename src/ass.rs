@@ -392,6 +392,7 @@ fn format_ass_timestamp(ms: u64) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::model::SubtitleFormat;
 
   #[test]
   fn test_parse_basic_ass() {

@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate tracing;
 
-use subtitler::model::{SubtitleFile, frames_to_ms, ms_to_frames};
+use subtitler::model::{SubtitleFile, SubtitleFormat, frames_to_ms, ms_to_frames};
 use subtitler::srt;
 use subtitler::types::AnyResult;
 use tracing::Level;

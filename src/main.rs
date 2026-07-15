@@ -4,7 +4,7 @@ mod types;
 use crate::types::AnyResult;
 use clap::Parser;
 use cli::{Commands, Format as CliFormat};
-use subtitler::model::{Format, SubtitleFile};
+use subtitler::model::{Format, SubtitleFile, SubtitleFormat};
 use subtitler::{ass, srt, vtt};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;

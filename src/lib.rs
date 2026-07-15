@@ -11,6 +11,8 @@ pub mod types;
 pub mod utils;
 pub mod vtt;
 
+pub use model::SubtitleFormat;
+
 use model::Format;
 
 pub fn detect_format(data: &[u8]) -> Option<Format> {

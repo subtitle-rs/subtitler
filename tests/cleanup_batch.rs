@@ -1,4 +1,4 @@
-use subtitler::model::{Subtitle, SubtitleFile, ValidationIssue};
+use subtitler::model::{Subtitle, SubtitleFile, SubtitleFormat, ValidationIssue};
 
 #[test]
 fn validate_detects_overlap_in_unsorted_input() {

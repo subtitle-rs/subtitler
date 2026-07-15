@@ -375,126 +375,44 @@ impl ValidationIssue {
   }
 }
 
-impl SubtitleFile {
-  pub fn subtitles(&self) -> &[Subtitle] {
-    match self {
-      SubtitleFile::Srt(subs) => subs,
-      SubtitleFile::Vtt {
-        subtitles: subs, ..
-      } => subs,
-      SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &data.subtitles,
-      SubtitleFile::MicroDvd {
-        subtitles: subs, ..
-      } => subs,
-      SubtitleFile::SubViewer {
-        subtitles: subs, ..
-      } => subs,
-    }
+/// Trait unifying all subtitle format operations. The four required methods
+/// (`subtitles`, `subtitles_mut`, `format`, `to_string_with_format`) are
+/// per-variant; the editing methods below have default implementations that
+/// work through `subtitles()`/`subtitles_mut()`, so every format gets them for
+/// free.
+pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
+  fn subtitles(&self) -> &[Subtitle];
+  fn subtitles_mut(&mut self) -> &mut Vec<Subtitle>;
+  fn format(&self) -> Format;
+  fn to_string_with_format(&self, format: &Format) -> String;
+
+  fn to_string(&self) -> String {
+    self.to_string_with_format(&self.format())
   }
 
-  pub fn subtitles_mut(&mut self) -> &mut Vec<Subtitle> {
-    match self {
-      SubtitleFile::Srt(subs) => subs,
-      SubtitleFile::Vtt {
-        subtitles: subs, ..
-      } => subs,
-      SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &mut data.subtitles,
-      SubtitleFile::MicroDvd {
-        subtitles: subs, ..
-      } => subs,
-      SubtitleFile::SubViewer {
-        subtitles: subs, ..
-      } => subs,
-    }
-  }
-
-  pub fn format(&self) -> Format {
-    match self {
-      SubtitleFile::Srt(_) => Format::Srt,
-      SubtitleFile::Vtt { .. } => Format::Vtt,
-      SubtitleFile::Ass(_) => Format::Ass,
-      SubtitleFile::Ssa(_) => Format::Ssa,
-      SubtitleFile::MicroDvd { .. } => Format::MicroDvd,
-      SubtitleFile::SubViewer { .. } => Format::SubViewer,
-    }
-  }
-
-  pub fn shift_all(&mut self, offset_ms: i64) {
+  fn shift_all(&mut self, offset_ms: i64) {
     for sub in self.subtitles_mut().iter_mut() {
       sub.shift(offset_ms);
     }
   }
 
-  pub fn map<F>(mut self, mut f: F) -> Self
-  where
-    F: FnMut(&mut Subtitle),
-  {
+  fn map<F: FnMut(&mut Subtitle)>(mut self, mut f: F) -> Self {
     for sub in self.subtitles_mut().iter_mut() {
       f(sub);
     }
     self
   }
 
-  pub fn filter<F>(mut self, mut f: F) -> Self
-  where
-    F: FnMut(&Subtitle) -> bool,
-  {
+  fn filter<F: FnMut(&Subtitle) -> bool>(mut self, mut f: F) -> Self {
     self.subtitles_mut().retain(|s| f(s));
     self
   }
 
-  #[allow(clippy::inherent_to_string)]
-  pub fn to_string(&self) -> String {
-    self.to_string_with_format(&self.format())
-  }
-
-  pub fn to_string_with_format(&self, format: &Format) -> String {
-    let subs = self.subtitles();
-    match format {
-      Format::Srt => crate::srt::to_string(subs),
-      Format::Vtt => crate::vtt::to_string(subs, None),
-      Format::Ass | Format::Ssa => {
-        let (info, styles) = match self {
-          SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => {
-            (data.info.clone(), data.styles.clone())
-          }
-          _ => (
-            std::collections::HashMap::new(),
-            vec![crate::model::AssStyle::default_style()],
-          ),
-        };
-        crate::ass::to_string(&info, &styles, subs)
-      }
-      Format::MicroDvd => {
-        let fps = match self {
-          SubtitleFile::MicroDvd { fps, .. } => Some(*fps),
-          _ => None,
-        };
-        // Emit the fps header line when the stored fps differs from the
-        // default, so round-trips preserve fps instead of silently falling
-        // back to 23.976 on re-parse.
-        match fps {
-          Some(f) if (f - crate::microdvd::DEFAULT_FPS).abs() > f64::EPSILON => {
-            crate::microdvd::to_string_with_fps_header(subs, f)
-          }
-          _ => crate::microdvd::to_string(subs, fps),
-        }
-      }
-      Format::SubViewer => {
-        let header = match self {
-          SubtitleFile::SubViewer { header, .. } => header.as_deref(),
-          _ => None,
-        };
-        crate::subviewer::to_string(subs, header)
-      }
-    }
-  }
-
-  pub fn sort(&mut self) {
+  fn sort(&mut self) {
     self.subtitles_mut().sort_by_key(|s| (s.start, s.end));
   }
 
-  pub fn validate(&self) -> Vec<ValidationIssue> {
+  fn validate(&self) -> Vec<ValidationIssue> {
     let subs = self.subtitles();
     let mut issues = Vec::new();
 
@@ -544,7 +462,7 @@ impl SubtitleFile {
     issues
   }
 
-  pub fn validate_extended(
+  fn validate_extended(
     &self,
     max_chars: usize,
     max_gap_ms: u64,
@@ -588,7 +506,7 @@ impl SubtitleFile {
     issues
   }
 
-  pub fn merge_adjacent(&mut self, max_gap_ms: u64) {
+  fn merge_adjacent(&mut self, max_gap_ms: u64) {
     self.sort();
     let subs = self.subtitles_mut();
     let mut i = 0;
@@ -606,7 +524,7 @@ impl SubtitleFile {
     }
   }
 
-  pub fn remove_overlaps(&mut self) {
+  fn remove_overlaps(&mut self) {
     self.sort();
     let subs = self.subtitles_mut();
     for i in 0..subs.len().saturating_sub(1) {
@@ -616,7 +534,7 @@ impl SubtitleFile {
     }
   }
 
-  pub fn enforce_min_duration(&mut self, min_ms: u64) {
+  fn enforce_min_duration(&mut self, min_ms: u64) {
     self.sort();
     let subs = self.subtitles_mut();
     for i in 0..subs.len() {
@@ -633,7 +551,7 @@ impl SubtitleFile {
     }
   }
 
-  pub fn enforce_max_duration(&mut self, max_ms: u64) {
+  fn enforce_max_duration(&mut self, max_ms: u64) {
     for sub in self.subtitles_mut().iter_mut() {
       let dur = sub.duration_ms();
       if dur > max_ms {
@@ -642,7 +560,7 @@ impl SubtitleFile {
     }
   }
 
-  pub fn auto_extend_for_cps(&mut self, max_cps: f64) {
+  fn auto_extend_for_cps(&mut self, max_cps: f64) {
     self.sort();
     let subs = self.subtitles_mut();
     for i in 0..subs.len() {
@@ -660,7 +578,7 @@ impl SubtitleFile {
     }
   }
 
-  pub fn extract_range(&self, start_ms: u64, end_ms: u64) -> Vec<Subtitle> {
+  fn extract_range(&self, start_ms: u64, end_ms: u64) -> Vec<Subtitle> {
     self
       .subtitles()
       .iter()
@@ -678,19 +596,7 @@ impl SubtitleFile {
       .collect()
   }
 
-  pub fn concatenate(&mut self, other: &SubtitleFile, gap_ms: u64) {
-    let own_end = self.subtitles().iter().map(|s| s.end).max().unwrap_or(0);
-    let offset = own_end + gap_ms;
-    let subs = self.subtitles_mut();
-    for sub in other.subtitles() {
-      let mut clone = sub.clone();
-      clone.shift(offset as i64);
-      subs.push(clone);
-    }
-    self.sort();
-  }
-
-  pub fn split_long(&mut self, max_chars: usize) {
+  fn split_long(&mut self, max_chars: usize) {
     self.sort();
     let subs = self.subtitles_mut();
     let mut i = 0;
@@ -735,12 +641,116 @@ impl SubtitleFile {
     }
   }
 
-  pub fn transform_framerate(&mut self, in_fps: f64, out_fps: f64) {
+  fn transform_framerate(&mut self, in_fps: f64, out_fps: f64) {
     let ratio = out_fps / in_fps;
     for sub in self.subtitles_mut().iter_mut() {
       sub.start = ((sub.start as f64) * ratio).round() as u64;
       sub.end = ((sub.end as f64) * ratio).round() as u64;
     }
+  }
+}
+
+impl SubtitleFormat for SubtitleFile {
+  fn subtitles(&self) -> &[Subtitle] {
+    match self {
+      SubtitleFile::Srt(subs) => subs,
+      SubtitleFile::Vtt {
+        subtitles: subs, ..
+      } => subs,
+      SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &data.subtitles,
+      SubtitleFile::MicroDvd {
+        subtitles: subs, ..
+      } => subs,
+      SubtitleFile::SubViewer {
+        subtitles: subs, ..
+      } => subs,
+    }
+  }
+
+  fn subtitles_mut(&mut self) -> &mut Vec<Subtitle> {
+    match self {
+      SubtitleFile::Srt(subs) => subs,
+      SubtitleFile::Vtt {
+        subtitles: subs, ..
+      } => subs,
+      SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &mut data.subtitles,
+      SubtitleFile::MicroDvd {
+        subtitles: subs, ..
+      } => subs,
+      SubtitleFile::SubViewer {
+        subtitles: subs, ..
+      } => subs,
+    }
+  }
+
+  fn format(&self) -> Format {
+    match self {
+      SubtitleFile::Srt(_) => Format::Srt,
+      SubtitleFile::Vtt { .. } => Format::Vtt,
+      SubtitleFile::Ass(_) => Format::Ass,
+      SubtitleFile::Ssa(_) => Format::Ssa,
+      SubtitleFile::MicroDvd { .. } => Format::MicroDvd,
+      SubtitleFile::SubViewer { .. } => Format::SubViewer,
+    }
+  }
+
+  fn to_string_with_format(&self, format: &Format) -> String {
+    let subs = self.subtitles();
+    match format {
+      Format::Srt => crate::srt::to_string(subs),
+      Format::Vtt => crate::vtt::to_string(subs, None),
+      Format::Ass | Format::Ssa => {
+        let (info, styles) = match self {
+          SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => {
+            (data.info.clone(), data.styles.clone())
+          }
+          _ => (
+            std::collections::HashMap::new(),
+            vec![crate::model::AssStyle::default_style()],
+          ),
+        };
+        crate::ass::to_string(&info, &styles, subs)
+      }
+      Format::MicroDvd => {
+        let fps = match self {
+          SubtitleFile::MicroDvd { fps, .. } => Some(*fps),
+          _ => None,
+        };
+        // Emit the fps header line when the stored fps differs from the
+        // default, so round-trips preserve fps instead of silently falling
+        // back to 23.976 on re-parse.
+        match fps {
+          Some(f) if (f - crate::microdvd::DEFAULT_FPS).abs() > f64::EPSILON => {
+            crate::microdvd::to_string_with_fps_header(subs, f)
+          }
+          _ => crate::microdvd::to_string(subs, fps),
+        }
+      }
+      Format::SubViewer => {
+        let header = match self {
+          SubtitleFile::SubViewer { header, .. } => header.as_deref(),
+          _ => None,
+        };
+        crate::subviewer::to_string(subs, header)
+      }
+    }
+  }
+}
+
+impl SubtitleFile {
+  /// Append another file's subtitles after a gap. Kept as an inherent method
+  /// (takes a concrete `&SubtitleFile`, not the trait) so it stays callable
+  /// without trait gymnastics.
+  pub fn concatenate(&mut self, other: &SubtitleFile, gap_ms: u64) {
+    let own_end = self.subtitles().iter().map(|s| s.end).max().unwrap_or(0);
+    let offset = own_end + gap_ms;
+    let subs = self.subtitles_mut();
+    for sub in other.subtitles() {
+      let mut clone = sub.clone();
+      clone.shift(offset as i64);
+      subs.push(clone);
+    }
+    self.sort();
   }
 }
 

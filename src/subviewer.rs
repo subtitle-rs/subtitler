@@ -117,6 +117,7 @@ fn format_subviewer_time(ms: u64) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::model::SubtitleFormat;
 
   #[test]
   fn test_parse_basic() {

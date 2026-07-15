@@ -2,6 +2,7 @@
 extern crate tracing;
 
 use subtitler::ass;
+use subtitler::model::SubtitleFormat;
 use subtitler::types::AnyResult;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;

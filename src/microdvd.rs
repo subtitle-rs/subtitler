@@ -93,6 +93,7 @@ pub fn to_string_with_fps_header(subtitles: &[Subtitle], fps: f64) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::model::SubtitleFormat;
 
   #[test]
   fn test_parse_basic() {
