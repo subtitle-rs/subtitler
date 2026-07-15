@@ -14,8 +14,7 @@ async fn main() -> AnyResult<()> {
   let subscriber = FmtSubscriber::builder()
     .with_max_level(Level::WARN)
     .finish();
-  tracing::subscriber::set_global_default(subscriber)
-    .expect("setting default subscriber failed");
+  tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
   let cli = cli::Cli::parse();
 
@@ -78,8 +77,12 @@ fn resolve_output_format(output: &str, hint: Option<Format>) -> AnyResult<Format
   if let Some(f) = hint {
     return Ok(f);
   }
-  Format::from_ext(output)
-    .ok_or_else(|| anyhow::anyhow!("Cannot determine output format from '{}'. Use --to to specify.", output))
+  Format::from_ext(output).ok_or_else(|| {
+    anyhow::anyhow!(
+      "Cannot determine output format from '{}'. Use --to to specify.",
+      output
+    )
+  })
 }
 
 async fn parse_to_file(data: &[u8], format: Format) -> AnyResult<SubtitleFile> {
@@ -91,11 +94,12 @@ async fn parse_to_file(data: &[u8], format: Format) -> AnyResult<SubtitleFile> {
     }
     Format::Vtt => {
       let (header, subs) = vtt::parse_content_full(&text).await?;
-      Ok(SubtitleFile::Vtt { header, subtitles: subs })
+      Ok(SubtitleFile::Vtt {
+        header,
+        subtitles: subs,
+      })
     }
-    Format::Ass | Format::Ssa => {
-      ass::parse_content(&text)
-    }
+    Format::Ass | Format::Ssa => ass::parse_content(&text),
     Format::MicroDvd => {
       let file = subtitler::microdvd::parse_content(&text, None)?;
       Ok(file)
@@ -119,7 +123,9 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     Format::Srt => srt::parse_content(&content).await?,
     Format::Vtt => vtt::parse_content(&content).await?,
     Format::Ass | Format::Ssa => ass::parse_content(&content)?.subtitles().to_vec(),
-    Format::MicroDvd => subtitler::microdvd::parse_content(&content, None)?.subtitles().to_vec(),
+    Format::MicroDvd => subtitler::microdvd::parse_content(&content, None)?
+      .subtitles()
+      .to_vec(),
     Format::SubViewer => subtitler::subviewer::parse_content(&content)?,
   };
 
@@ -172,8 +178,8 @@ async fn cmd_convert(args: cli::ConvertArgs) -> AnyResult<()> {
 
 async fn cmd_validate(args: cli::ValidateArgs) -> AnyResult<()> {
   let (data, ext) = read_input(&args.input).await?;
-  let format = resolve_format(&data, ext)
-    .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format."))?;
+  let format =
+    resolve_format(&data, ext).ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format."))?;
   let file = parse_to_file(&data, format).await?;
 
   let subs = file.subtitles();
@@ -204,7 +210,11 @@ async fn cmd_validate(args: cli::ValidateArgs) -> AnyResult<()> {
       .collect();
     println!("{}", serde_json::to_string_pretty(&json_issues)?);
   } else {
-    println!("Found {} issues in {} subtitles:\n", issues.len(), subs.len());
+    println!(
+      "Found {} issues in {} subtitles:\n",
+      issues.len(),
+      subs.len()
+    );
     for issue in &issues {
       println!("  [{}] {}", issue_kind(issue), issue.description());
     }
@@ -279,7 +289,9 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
   }
 
   if ops == 0 {
-    anyhow::bail!("No edit operations specified. Use --sort, --shift, --merge, --split, or --transform-fps.");
+    anyhow::bail!(
+      "No edit operations specified. Use --sort, --shift, --merge, --split, or --transform-fps."
+    );
   }
   let output = file.to_string_with_format(&target_fmt);
 
@@ -287,15 +299,18 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
     print!("{output}");
   } else {
     tokio::fs::write(&args.output, &output).await?;
-    eprintln!("Applied {} operation(s): {} -> {} ({})", ops, args.input, args.output, to);
+    eprintln!(
+      "Applied {} operation(s): {} -> {} ({})",
+      ops, args.input, args.output, to
+    );
   }
   Ok(())
 }
 
 async fn cmd_info(args: cli::InfoArgs) -> AnyResult<()> {
   let (data, ext) = read_input(&args.input).await?;
-  let format = resolve_format(&data, ext)
-    .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format."))?;
+  let format =
+    resolve_format(&data, ext).ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format."))?;
   let file = parse_to_file(&data, format.clone()).await?;
   let subs = file.subtitles();
 
@@ -314,7 +329,10 @@ async fn cmd_info(args: cli::InfoArgs) -> AnyResult<()> {
   let min_dur = durations.iter().min().unwrap();
   let max_dur = durations.iter().max().unwrap();
   let total_chars: usize = subs.iter().map(|s| s.text.chars().count()).sum();
-  let max_cps = subs.iter().map(|s| s.chars_per_second()).fold(0.0f64, f64::max);
+  let max_cps = subs
+    .iter()
+    .map(|s| s.chars_per_second())
+    .fold(0.0f64, f64::max);
 
   let validation = file.validate();
 
@@ -322,7 +340,11 @@ async fn cmd_info(args: cli::InfoArgs) -> AnyResult<()> {
   println!("Format:       {}", format);
   println!("Subtitles:    {}", subs.len());
   println!("Time range:   {}ms -> {}ms", first.start, last.end);
-  println!("Duration:     {}ms ({:.1}s)", total_duration, total_duration as f64 / 1000.0);
+  println!(
+    "Duration:     {}ms ({:.1}s)",
+    total_duration,
+    total_duration as f64 / 1000.0
+  );
   println!("Avg duration: {}ms", avg_dur);
   println!("Min duration: {}ms", min_dur);
   println!("Max duration: {}ms", max_dur);

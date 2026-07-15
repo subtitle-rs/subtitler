@@ -13,9 +13,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 static RE_SRT_TAG: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"</?(?:b|i|u|font)(?:\s[^>]*)?>").unwrap());
 
-static RE_SRT_DETECT: LazyLock<Regex> = LazyLock::new(|| {
-  Regex::new(r"^\d+\s*\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->").unwrap()
-});
+static RE_SRT_DETECT: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"^\d+\s*\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->").unwrap());
 
 enum Phase {
   Index,

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use subtitler::ass;
-use subtitler::model::{frames_to_ms, ms_to_frames, Subtitle, SubtitleFile, ValidationIssue};
+use subtitler::model::{Subtitle, SubtitleFile, ValidationIssue, frames_to_ms, ms_to_frames};
 use subtitler::srt;
 use subtitler::vtt;
 
@@ -200,7 +200,8 @@ async fn test_vtt_parse_with_note() {
 
 #[tokio::test]
 async fn test_vtt_parse_header_preserved() {
-  let content = "WEBVTT\nKind: captions\nLanguage: en\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
+  let content =
+    "WEBVTT\nKind: captions\nLanguage: en\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
   let (header, subtitles) = vtt::parse_content_full(content).await.unwrap();
   assert_eq!(subtitles.len(), 1);
   assert!(header.is_some());
@@ -333,7 +334,10 @@ fn test_subtitle_file_validate_negative_duration() {
   let file = SubtitleFile::Srt(vec![Subtitle::new(3000, 1000, "bad")]);
   let issues = file.validate();
   assert_eq!(issues.len(), 1);
-  assert!(matches!(issues[0], ValidationIssue::NegativeDuration { .. }));
+  assert!(matches!(
+    issues[0],
+    ValidationIssue::NegativeDuration { .. }
+  ));
 }
 
 #[test]
@@ -370,9 +374,11 @@ fn test_subtitle_file_merge_noop() {
 
 #[test]
 fn test_subtitle_file_split_long() {
-  let mut file = SubtitleFile::Srt(vec![
-    Subtitle::new(1000, 5000, "this is a very long subtitle that must be split into smaller pieces"),
-  ]);
+  let mut file = SubtitleFile::Srt(vec![Subtitle::new(
+    1000,
+    5000,
+    "this is a very long subtitle that must be split into smaller pieces",
+  )]);
   file.split_long(20);
   assert!(file.subtitles().len() >= 2);
   for sub in file.subtitles() {
@@ -437,9 +443,7 @@ fn test_subtitle_file_filter() {
 
 #[test]
 fn test_subtitle_file_to_string() {
-  let file = SubtitleFile::Srt(vec![
-    Subtitle::new(1000, 3500, "Hello"),
-  ]);
+  let file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3500, "Hello")]);
   let s = file.to_string();
   assert!(s.contains("00:00:01,000 --> 00:00:03,500"));
   assert!(s.contains("Hello"));
@@ -456,7 +460,12 @@ fn test_frame_conversion_round_trip() {
       assert!(
         diff <= tolerance,
         "round-trip failed: {}ms -> {}f @ {}fps -> {}ms (diff={}, tolerance={})",
-        ms, frames, fps, back, diff, tolerance
+        ms,
+        frames,
+        fps,
+        back,
+        diff,
+        tolerance
       );
     }
   }
@@ -546,7 +555,7 @@ fn test_detect_format_unknown() {
 #[test]
 fn test_enforce_min_duration() {
   let mut file = SubtitleFile::Srt(vec![
-    Subtitle::new(1000, 1200, "short"),  // 200ms → should extend to 1000ms
+    Subtitle::new(1000, 1200, "short"), // 200ms → should extend to 1000ms
     Subtitle::new(2000, 5000, "ok"),
   ]);
   file.enforce_min_duration(1000);
@@ -557,7 +566,7 @@ fn test_enforce_min_duration() {
 #[test]
 fn test_enforce_max_duration() {
   let mut file = SubtitleFile::Srt(vec![
-    Subtitle::new(1000, 8000, "very long"),  // 7000ms → trim to 3000ms
+    Subtitle::new(1000, 8000, "very long"), // 7000ms → trim to 3000ms
     Subtitle::new(9000, 10000, "short"),
   ]);
   file.enforce_max_duration(3000);
@@ -567,9 +576,11 @@ fn test_enforce_max_duration() {
 
 #[test]
 fn test_auto_extend_for_cps() {
-  let mut file = SubtitleFile::Srt(vec![
-    Subtitle::new(0, 500, "This is a very long subtitle text that needs more time"),
-  ]);
+  let mut file = SubtitleFile::Srt(vec![Subtitle::new(
+    0,
+    500,
+    "This is a very long subtitle text that needs more time",
+  )]);
   file.auto_extend_for_cps(20.0);
   // 54 chars / 20 cps = 2.7s = 2700ms
   assert!(file.subtitles()[0].end >= 2700);
@@ -597,9 +608,7 @@ fn test_concatenate() {
     Subtitle::new(1000, 3000, "A"),
     Subtitle::new(4000, 6000, "B"),
   ]);
-  let file2 = SubtitleFile::Srt(vec![
-    Subtitle::new(1000, 3000, "C"),
-  ]);
+  let file2 = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "C")]);
   file1.concatenate(&file2, 1000);
   assert_eq!(file1.subtitles().len(), 3);
   assert_eq!(file1.subtitles()[2].text, "C");

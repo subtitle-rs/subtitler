@@ -2,23 +2,18 @@ use crate::model::Subtitle;
 use regex::Regex;
 use std::sync::LazyLock;
 
-static RE_MULTI_SPACE: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r" {2,}").unwrap());
+static RE_MULTI_SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r" {2,}").unwrap());
 
-static RE_TRAILING_SPACE: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"[ \t]+$").unwrap());
+static RE_TRAILING_SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[ \t]+$").unwrap());
 
-static RE_MULTI_NEWLINE: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
+static RE_MULTI_NEWLINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
 
 static RE_SPACE_BEFORE_PUNCT: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r" +([,!.;:?])").unwrap());
 
-static RE_REPEATED_PUNCT: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"([.!?,]){4,}").unwrap());
+static RE_REPEATED_PUNCT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([.!?,]){4,}").unwrap());
 
-static RE_ELLIPSIS_SPACED: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"\.\s*\.\s*\.").unwrap());
+static RE_ELLIPSIS_SPACED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\.\s*\.\s*\.").unwrap());
 
 static RE_HI_PAREN: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"\s*[\(\[][^)\]]{2,60}[\)\]]").unwrap());
@@ -29,8 +24,7 @@ static RE_HI_BRACKET: LazyLock<Regex> =
 static RE_SPEAKER_LABEL: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"^(?:>>|>\s|-\s|[A-Z ]{2,20}:)\s*").unwrap());
 
-static RE_MUSIC_NOTE: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"[♪♫♬]").unwrap());
+static RE_MUSIC_NOTE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[♪♫♬]").unwrap());
 
 static RE_OCR_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
   vec![
@@ -138,7 +132,10 @@ mod tests {
 
   #[test]
   fn test_strip_hearing_impaired() {
-    assert_eq!(strip_hearing_impaired("Hello (LAUGHS) world"), "Hello world");
+    assert_eq!(
+      strip_hearing_impaired("Hello (LAUGHS) world"),
+      "Hello world"
+    );
     assert_eq!(strip_hearing_impaired("[APPLAUSE] Nice"), "Nice");
     assert_eq!(strip_hearing_impaired(">> Hello there"), "Hello there");
     assert_eq!(strip_hearing_impaired("JOHN: What's up?"), "What's up?");

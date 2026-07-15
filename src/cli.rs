@@ -47,7 +47,9 @@ impl std::fmt::Display for Format {
 /// A CLI tool for parsing, converting, validating, and editing subtitles.
 #[derive(Parser)]
 #[command(name = "subtitler")]
-#[command(about = "Subtitle toolkit: parse, convert, validate, and edit subtitles in SRT, WebVTT, and ASS/SSA formats.")]
+#[command(
+  about = "Subtitle toolkit: parse, convert, validate, and edit subtitles in SRT, WebVTT, and ASS/SSA formats."
+)]
 #[command(version)]
 pub struct Cli {
   #[command(subcommand)]

@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate tracing;
 
-use subtitler::model::{frames_to_ms, ms_to_frames, SubtitleFile};
+use subtitler::model::{SubtitleFile, frames_to_ms, ms_to_frames};
 use subtitler::srt;
 use subtitler::types::AnyResult;
 use tracing::Level;
@@ -12,8 +12,7 @@ async fn main() -> AnyResult<()> {
   let subscriber = FmtSubscriber::builder()
     .with_max_level(Level::INFO)
     .finish();
-  tracing::subscriber::set_global_default(subscriber)
-    .expect("setting default subscriber failed");
+  tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
   let content = r#"
 2
@@ -60,7 +59,10 @@ This is a very long subtitle that contains way too much text to be readable at a
   // 3. Merge overlapping/adjacent subtitles
   let mut merge_file = file.clone();
   merge_file.merge_adjacent(500);
-  info!("After merge (gap <= 500ms): {} subtitles", merge_file.subtitles().len());
+  info!(
+    "After merge (gap <= 500ms): {} subtitles",
+    merge_file.subtitles().len()
+  );
   for sub in merge_file.subtitles() {
     info!("  {}ms -> {}ms: {}", sub.start, sub.end, sub.text);
   }
@@ -68,7 +70,10 @@ This is a very long subtitle that contains way too much text to be readable at a
   // 4. Split long subtitles
   let mut split_file = file.clone();
   split_file.split_long(42);
-  info!("After split (max 42 chars): {} subtitles", split_file.subtitles().len());
+  info!(
+    "After split (max 42 chars): {} subtitles",
+    split_file.subtitles().len()
+  );
   for sub in split_file.subtitles() {
     info!(
       "  {}ms -> {}ms ({} chars): {}",
@@ -100,7 +105,10 @@ This is a very long subtitle that contains way too much text to be readable at a
   let fps = 23.976;
   let frames = ms_to_frames(ms, fps);
   let back = frames_to_ms(frames, fps);
-  info!("{}ms @ {:.3}fps = {} frames (round-trip = {}ms)", ms, fps, frames, back);
+  info!(
+    "{}ms @ {:.3}fps = {} frames (round-trip = {}ms)",
+    ms, fps, frames, back
+  );
 
   Ok(())
 }

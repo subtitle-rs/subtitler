@@ -25,8 +25,7 @@ pub fn decode_to_string(data: &[u8]) -> AnyResult<String> {
 
   match encoding {
     "UTF-8" | "UTF-8-BOM" => {
-      let text = String::from_utf8(data.to_vec())
-        .map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+      let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
       Ok(text.trim_start_matches('\u{FEFF}').to_string())
     }
     "UTF-16BE" => {
@@ -44,8 +43,12 @@ pub fn decode_to_string(data: &[u8]) -> AnyResult<String> {
       String::from_utf16(&u16).map_err(|e| anyhow!("Invalid UTF-16LE: {:?}", e))
     }
     _ => {
-      let text = String::from_utf8(data.to_vec())
-        .map_err(|_| anyhow!("Cannot decode encoding '{}'. Try converting to UTF-8 first.", encoding))?;
+      let text = String::from_utf8(data.to_vec()).map_err(|_| {
+        anyhow!(
+          "Cannot decode encoding '{}'. Try converting to UTF-8 first.",
+          encoding
+        )
+      })?;
       Ok(text)
     }
   }

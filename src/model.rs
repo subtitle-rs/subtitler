@@ -2,9 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use std::sync::LazyLock;
 
-static RE_HTML_TAG: LazyLock<regex::Regex> = LazyLock::new(|| {
-  regex::Regex::new(r"</?(?:b|i|u|s|font|v|c)(?:\.[^>]*)?(?:\s[^>]*)?>").unwrap()
-});
+static RE_HTML_TAG: LazyLock<regex::Regex> =
+  LazyLock::new(|| regex::Regex::new(r"</?(?:b|i|u|s|font|v|c)(?:\.[^>]*)?(?:\s[^>]*)?>").unwrap());
 
 static RE_ASS_TAG: LazyLock<regex::Regex> =
   LazyLock::new(|| regex::Regex::new(r"\{[^}]*\}").unwrap());
@@ -99,7 +98,10 @@ impl Subtitle {
     let mut text = self.text.clone();
     text = RE_HTML_TAG.replace_all(&text, "").to_string();
     text = RE_ASS_TAG.replace_all(&text, "").to_string();
-    text.replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ")
+    text
+      .replace("\\N", "\n")
+      .replace("\\n", "\n")
+      .replace("\\h", " ")
   }
 }
 
@@ -192,9 +194,15 @@ pub struct AssStyle {
   pub encoding: i32,
 }
 
-fn default_border_style() -> u32 { 1 }
-fn default_alignment() -> u32 { 2 }
-fn default_encoding() -> i32 { 1 }
+fn default_border_style() -> u32 {
+  1
+}
+fn default_alignment() -> u32 {
+  2
+}
+fn default_encoding() -> i32 {
+  1
+}
 
 impl AssStyle {
   pub fn default_style() -> Self {
@@ -301,8 +309,15 @@ pub enum ValidationIssue {
 impl ValidationIssue {
   pub fn description(&self) -> String {
     match self {
-      ValidationIssue::Overlap { index_a, index_b, end_a, start_b } => {
-        format!("subtitle {index_a} (ends at {end_a}ms) overlaps with subtitle {index_b} (starts at {start_b}ms)")
+      ValidationIssue::Overlap {
+        index_a,
+        index_b,
+        end_a,
+        start_b,
+      } => {
+        format!(
+          "subtitle {index_a} (ends at {end_a}ms) overlaps with subtitle {index_b} (starts at {start_b}ms)"
+        )
       }
       ValidationIssue::NegativeDuration { index, start, end } => {
         format!("subtitle {index} has negative duration: {start}ms -> {end}ms")
@@ -310,16 +325,35 @@ impl ValidationIssue {
       ValidationIssue::ZeroDuration { index, time } => {
         format!("subtitle {index} has zero duration at {time}ms")
       }
-      ValidationIssue::DecreasingStartTime { index, prev_start, curr_start } => {
-        format!("subtitle {index} starts at {curr_start}ms before previous subtitle's start time {prev_start}ms")
+      ValidationIssue::DecreasingStartTime {
+        index,
+        prev_start,
+        curr_start,
+      } => {
+        format!(
+          "subtitle {index} starts at {curr_start}ms before previous subtitle's start time {prev_start}ms"
+        )
       }
-      ValidationIssue::TooLongGap { index, prev_end, curr_start, gap_ms } => {
+      ValidationIssue::TooLongGap {
+        index,
+        prev_end,
+        curr_start,
+        gap_ms,
+      } => {
         format!("subtitle {index}: {gap_ms}ms gap between {prev_end}ms and {curr_start}ms")
       }
-      ValidationIssue::TextTooLong { index, chars, max_chars } => {
+      ValidationIssue::TextTooLong {
+        index,
+        chars,
+        max_chars,
+      } => {
         format!("subtitle {index} has {chars} characters (max recommended: {max_chars})")
       }
-      ValidationIssue::CpsTooHigh { index, cps, max_cps } => {
+      ValidationIssue::CpsTooHigh {
+        index,
+        cps,
+        max_cps,
+      } => {
         format!("subtitle {index} has {cps:.1} chars/second (max recommended: {max_cps:.1})")
       }
     }
@@ -330,16 +364,24 @@ impl SubtitleFile {
   pub fn subtitles(&self) -> &[Subtitle] {
     match self {
       SubtitleFile::Srt(subs) => subs,
-      SubtitleFile::Vtt { subtitles: subs, .. } => subs,
-      SubtitleFile::Ass { subtitles: subs, .. } => subs,
+      SubtitleFile::Vtt {
+        subtitles: subs, ..
+      } => subs,
+      SubtitleFile::Ass {
+        subtitles: subs, ..
+      } => subs,
     }
   }
 
   pub fn subtitles_mut(&mut self) -> &mut Vec<Subtitle> {
     match self {
       SubtitleFile::Srt(subs) => subs,
-      SubtitleFile::Vtt { subtitles: subs, .. } => subs,
-      SubtitleFile::Ass { subtitles: subs, .. } => subs,
+      SubtitleFile::Vtt {
+        subtitles: subs, ..
+      } => subs,
+      SubtitleFile::Ass {
+        subtitles: subs, ..
+      } => subs,
     }
   }
 
@@ -387,7 +429,10 @@ impl SubtitleFile {
       SubtitleFormat::Ass | SubtitleFormat::Ssa => {
         let (info, styles) = match self {
           SubtitleFile::Ass { info, styles, .. } => (info.clone(), styles.clone()),
-          _ => (std::collections::HashMap::new(), vec![crate::model::AssStyle::default_style()]),
+          _ => (
+            std::collections::HashMap::new(),
+            vec![crate::model::AssStyle::default_style()],
+          ),
         };
         crate::ass::to_string(&info, &styles, subs)
       }
@@ -450,7 +495,12 @@ impl SubtitleFile {
     issues
   }
 
-  pub fn validate_extended(&self, max_chars: usize, max_gap_ms: u64, max_cps: f64) -> Vec<ValidationIssue> {
+  pub fn validate_extended(
+    &self,
+    max_chars: usize,
+    max_gap_ms: u64,
+    max_cps: f64,
+  ) -> Vec<ValidationIssue> {
     let mut issues = self.validate();
     let subs = self.subtitles();
 
@@ -711,19 +761,18 @@ mod tests {
 
   #[test]
   fn test_validate_negative_duration() {
-    let file = SubtitleFile::Srt(vec![
-      Subtitle::new(3000, 1000, "bad"),
-    ]);
+    let file = SubtitleFile::Srt(vec![Subtitle::new(3000, 1000, "bad")]);
     let issues = file.validate();
     assert_eq!(issues.len(), 1);
-    assert!(matches!(issues[0], ValidationIssue::NegativeDuration { .. }));
+    assert!(matches!(
+      issues[0],
+      ValidationIssue::NegativeDuration { .. }
+    ));
   }
 
   #[test]
   fn test_validate_zero_duration() {
-    let file = SubtitleFile::Srt(vec![
-      Subtitle::new(1000, 1000, "instant"),
-    ]);
+    let file = SubtitleFile::Srt(vec![Subtitle::new(1000, 1000, "instant")]);
     let issues = file.validate();
     assert_eq!(issues.len(), 1);
     assert!(matches!(issues[0], ValidationIssue::ZeroDuration { .. }));
@@ -739,7 +788,11 @@ mod tests {
     // These two subtitles do not overlap in time (1000-2000 vs 3000-5000),
     // so the only issue is the decreasing start time.
     assert_eq!(issues.len(), 1);
-    assert!(issues.iter().any(|i| matches!(i, ValidationIssue::DecreasingStartTime { .. })));
+    assert!(
+      issues
+        .iter()
+        .any(|i| matches!(i, ValidationIssue::DecreasingStartTime { .. }))
+    );
   }
 
   #[test]
@@ -758,7 +811,11 @@ mod tests {
       Subtitle::new(10000, 12000, "second with a very large gap"),
     ]);
     let issues = file.validate_extended(50, 5000, 30.0);
-    assert!(issues.iter().any(|i| matches!(i, ValidationIssue::TooLongGap { .. })));
+    assert!(
+      issues
+        .iter()
+        .any(|i| matches!(i, ValidationIssue::TooLongGap { .. }))
+    );
   }
 
   #[test]
@@ -788,9 +845,11 @@ mod tests {
 
   #[test]
   fn test_split_long() {
-    let mut file = SubtitleFile::Srt(vec![
-      Subtitle::new(1000, 5000, "this is a very long subtitle that should be split into multiple parts"),
-    ]);
+    let mut file = SubtitleFile::Srt(vec![Subtitle::new(
+      1000,
+      5000,
+      "this is a very long subtitle that should be split into multiple parts",
+    )]);
     file.split_long(20);
     let subs = file.subtitles();
     assert!(subs.len() > 1);
@@ -799,18 +858,14 @@ mod tests {
 
   #[test]
   fn test_split_long_short() {
-    let mut file = SubtitleFile::Srt(vec![
-      Subtitle::new(1000, 3000, "short"),
-    ]);
+    let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "short")]);
     file.split_long(20);
     assert_eq!(file.subtitles().len(), 1);
   }
 
   #[test]
   fn test_transform_framerate() {
-    let mut file = SubtitleFile::Srt(vec![
-      Subtitle::new(1000, 3000, "test"),
-    ]);
+    let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "test")]);
     file.transform_framerate(23.976, 25.0);
     let sub = &file.subtitles()[0];
     // 1000 * 25/23.976 ≈ 1043

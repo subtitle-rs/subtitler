@@ -10,8 +10,7 @@ fn main() -> AnyResult<()> {
   let subscriber = FmtSubscriber::builder()
     .with_max_level(Level::INFO)
     .finish();
-  tracing::subscriber::set_global_default(subscriber)
-    .expect("setting default subscriber failed");
+  tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
   let fps = 23.976;
 

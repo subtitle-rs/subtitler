@@ -13,12 +13,9 @@ static RE_STYLE: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"^Style:\s*([^,]*),([^,]*),(\d+),([^,]*),([^,]*),([^,]*),([^,]*),(-?\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+)").unwrap()
 });
 
-static RE_INFO: LazyLock<Regex> = LazyLock::new(|| {
-  Regex::new(r"^([^:]+):\s*(.*)").unwrap()
-});
+static RE_INFO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([^:]+):\s*(.*)").unwrap());
 
-static RE_ASS_TAG_INLINE: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"\{([^}]*)\}").unwrap());
+static RE_ASS_TAG_INLINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{([^}]*)\}").unwrap());
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
   if let Ok(text) = String::from_utf8(data.to_vec())
@@ -36,7 +33,9 @@ fn parse_ass_time(h: &str, m: &str, s: &str, ms: &str) -> AnyResult<u64> {
   let hours: u64 = h.parse().map_err(|_| anyhow!("Invalid hours: {h}"))?;
   let minutes: u64 = m.parse().map_err(|_| anyhow!("Invalid minutes: {m}"))?;
   let seconds: u64 = s.parse().map_err(|_| anyhow!("Invalid seconds: {s}"))?;
-  let centiseconds: u64 = ms.parse().map_err(|_| anyhow!("Invalid centiseconds: {ms}"))?;
+  let centiseconds: u64 = ms
+    .parse()
+    .map_err(|_| anyhow!("Invalid centiseconds: {ms}"))?;
   Ok(hours * 3600000 + minutes * 60000 + seconds * 1000 + centiseconds * 10)
 }
 
@@ -76,21 +75,35 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
 
   let style = caps.get(9).and_then(|m| {
     let s = m.as_str().trim();
-    if s.is_empty() { None } else { Some(s.to_string()) }
+    if s.is_empty() {
+      None
+    } else {
+      Some(s.to_string())
+    }
   });
   let actor = caps.get(10).and_then(|m| {
     let s = m.as_str().trim();
-    if s.is_empty() { None } else { Some(s.to_string()) }
+    if s.is_empty() {
+      None
+    } else {
+      Some(s.to_string())
+    }
   });
   let margin_l = caps.get(11).and_then(|m| m.as_str().parse::<i32>().ok());
   let margin_r = caps.get(12).and_then(|m| m.as_str().parse::<i32>().ok());
   let margin_v = caps.get(13).and_then(|m| m.as_str().parse::<i32>().ok());
   let effect = caps.get(14).and_then(|m| {
     let s = m.as_str().trim();
-    if s.is_empty() { None } else { Some(s.to_string()) }
+    if s.is_empty() {
+      None
+    } else {
+      Some(s.to_string())
+    }
   });
   let text = caps.get(16).map_or("", |m| m.as_str());
-  let is_comment = caps.get(15).map_or(false, |m| m.as_str().contains("Comment"));
+  let is_comment = caps
+    .get(15)
+    .map_or(false, |m| m.as_str().contains("Comment"));
 
   let mut subtitle = Subtitle::new(start, end, text);
   subtitle.style = style;
@@ -163,8 +176,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 }
 
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
-  let text =
-    String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
   parse_content(&text)
 }
 
@@ -190,7 +202,11 @@ enum Section {
 }
 
 fn format_ass_color(color: &str) -> String {
-  if color.is_empty() { "&H00FFFFFF".to_string() } else { color.to_string() }
+  if color.is_empty() {
+    "&H00FFFFFF".to_string()
+  } else {
+    color.to_string()
+  }
 }
 
 pub fn to_string(
@@ -286,7 +302,10 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
 
     if tag_start > last_end {
       let segment = &text[last_end..tag_start];
-      let cleaned = segment.replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ");
+      let cleaned = segment
+        .replace("\\N", "\n")
+        .replace("\\n", "\n")
+        .replace("\\h", " ");
       current.push_str(&cleaned);
     }
 
@@ -330,7 +349,10 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
 
   if last_end < text.len() {
     let segment = &text[last_end..];
-    let cleaned = segment.replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ");
+    let cleaned = segment
+      .replace("\\N", "\n")
+      .replace("\\n", "\n")
+      .replace("\\h", " ");
     current.push_str(&cleaned);
   }
 
@@ -413,10 +435,7 @@ mod tests {
   #[test]
   fn test_detect_format_ass() {
     let data = b"[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\n";
-    assert_eq!(
-      detect_format(data),
-      Some(crate::model::SubtitleFormat::Ass)
-    );
+    assert_eq!(detect_format(data), Some(crate::model::SubtitleFormat::Ass));
   }
 
   #[test]

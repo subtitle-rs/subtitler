@@ -4,9 +4,8 @@ use anyhow::anyhow;
 use regex::Regex;
 use std::sync::LazyLock;
 
-static RE_MICRODVD: LazyLock<Regex> = LazyLock::new(|| {
-  Regex::new(r"\{(\d+)\}\{(\d+)\}(.*)").unwrap()
-});
+static RE_MICRODVD: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"\{(\d+)\}\{(\d+)\}(.*)").unwrap());
 
 static RE_FPS_HEADER: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"\{(\d+)\}\{(\d+)\}(?:\s*\[(\d+(?:\.\d+)?)\])?\s*(\d+(?:\.\d+)?)").unwrap()
@@ -39,10 +38,9 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile>
     // Check for FPS declaration in a comment-like format or first line
     if subtitles.is_empty() {
       if let Some(caps) = RE_FPS_HEADER.captures(trimmed) {
-        let fps_str = caps.get(3).map_or_else(
-          || caps[4].to_string(),
-          |m| m.as_str().to_string(),
-        );
+        let fps_str = caps
+          .get(3)
+          .map_or_else(|| caps[4].to_string(), |m| m.as_str().to_string());
         if let Ok(f) = fps_str.parse::<f64>() {
           saved_fps = f;
           continue;
@@ -51,7 +49,9 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile>
     }
 
     if let Some(caps) = RE_MICRODVD.captures(trimmed) {
-      let start_frame: u64 = caps[1].parse().map_err(|_| anyhow!("Invalid start frame"))?;
+      let start_frame: u64 = caps[1]
+        .parse()
+        .map_err(|_| anyhow!("Invalid start frame"))?;
       let end_frame: u64 = caps[2].parse().map_err(|_| anyhow!("Invalid end frame"))?;
       let text = caps[3].to_string().replace('|', "\n");
 

@@ -11,7 +11,9 @@ fn validate_detects_overlap_in_unsorted_input() {
   ]);
   let issues = file.validate();
   assert!(
-    issues.iter().any(|i| matches!(i, ValidationIssue::Overlap { .. })),
+    issues
+      .iter()
+      .any(|i| matches!(i, ValidationIssue::Overlap { .. })),
     "expected an Overlap issue on unsorted input, got: {:?}",
     issues
   );
@@ -44,15 +46,20 @@ fn validate_detects_overlap_skipped_after_break() {
   // overlap subs[2]=1000-1500. So the old code reported the wrong pair; the
   // sorted scan must report the true pair (0,2).
   let file = SubtitleFile::Srt(vec![
-    Subtitle::new(0, 2000, "A"), // index 0
+    Subtitle::new(0, 2000, "A"),    // index 0
     Subtitle::new(5000, 6000, "B"), // index 1
     Subtitle::new(1000, 1500, "C"), // index 2, overlaps A but not B
   ]);
   let overlaps = overlap_issues(&file);
   assert!(
-    overlaps
-      .iter()
-      .any(|i| matches!(i, ValidationIssue::Overlap { index_a: 0, index_b: 2, .. })),
+    overlaps.iter().any(|i| matches!(
+      i,
+      ValidationIssue::Overlap {
+        index_a: 0,
+        index_b: 2,
+        ..
+      }
+    )),
     "expected Overlap between original indices 0 and 2, got: {:?}",
     overlaps
   );

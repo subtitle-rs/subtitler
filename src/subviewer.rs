@@ -74,7 +74,9 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
 }
 
 pub fn to_string(subtitles: &[Subtitle]) -> String {
-  let mut buf = String::from("[INFORMATION]\n[TITLE]Subtitles\n[AUTHOR]subtitler\n[SOURCE]\n[FILEPATH]\n[DELAY]0\n[COMMENT]\n[END INFORMATION]\n[SUBTITLE]\n[COLF]&HFFFFFF,[STYLE]bd,[SIZE]18,[FONT]Arial\n\n");
+  let mut buf = String::from(
+    "[INFORMATION]\n[TITLE]Subtitles\n[AUTHOR]subtitler\n[SOURCE]\n[FILEPATH]\n[DELAY]0\n[COMMENT]\n[END INFORMATION]\n[SUBTITLE]\n[COLF]&HFFFFFF,[STYLE]bd,[SIZE]18,[FONT]Arial\n\n",
+  );
 
   for sub in subtitles {
     let start = format_subviewer_time(sub.start);

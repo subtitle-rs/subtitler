@@ -425,13 +425,7 @@ fn bench_subtitle_merge_adjacent(c: &mut Criterion) {
   let file = || {
     SubtitleFile::Srt(
       (0..100)
-        .map(|i| {
-          Subtitle::new(
-            i as u64 * 2500,
-            (i as u64 * 2500) + 2400,
-            "merge test",
-          )
-        })
+        .map(|i| Subtitle::new(i as u64 * 2500, (i as u64 * 2500) + 2400, "merge test"))
         .collect(),
     )
   };
@@ -445,13 +439,11 @@ fn bench_subtitle_merge_adjacent(c: &mut Criterion) {
 }
 
 fn bench_subtitle_split_long(c: &mut Criterion) {
-  let file = SubtitleFile::Srt(vec![
-    Subtitle::new(
-      0,
-      10000,
-      "This is a very long subtitle that will be split into multiple smaller chunks based on word boundaries to test the splitting performance with a moderate amount of text content for the benchmark",
-    ),
-  ]);
+  let file = SubtitleFile::Srt(vec![Subtitle::new(
+    0,
+    10000,
+    "This is a very long subtitle that will be split into multiple smaller chunks based on word boundaries to test the splitting performance with a moderate amount of text content for the benchmark",
+  )]);
   c.bench_function("subtitle_split_long", |b| {
     b.iter(|| {
       let mut f = file.clone();
@@ -506,7 +498,9 @@ fn bench_subtitle_map(c: &mut Criterion) {
   c.bench_function("subtitle_map_1000", |b| {
     b.iter(|| {
       let f = file();
-      black_box(f.map(|sub| { sub.text = sub.text.to_uppercase(); }))
+      black_box(f.map(|sub| {
+        sub.text = sub.text.to_uppercase();
+      }))
     })
   });
 }
@@ -559,7 +553,8 @@ fn bench_srt_to_ass_convert(c: &mut Criterion) {
 fn bench_regex_hotspots(c: &mut Criterion) {
   let mut group = c.benchmark_group("regex_hotspots");
 
-  let tagged = "<b>Bold</b> <i>italic</i> <u>under</u> <font color=\"#ff0000\">red</font> plain tail";
+  let tagged =
+    "<b>Bold</b> <i>italic</i> <u>under</u> <font color=\"#ff0000\">red</font> plain tail";
   let sub = subtitler::model::Subtitle::new(0, 1000, tagged);
 
   group.bench_function("plaintext", |b| {
