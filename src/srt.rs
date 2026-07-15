@@ -5,10 +5,9 @@ use anyhow::anyhow;
 use regex::Regex;
 #[cfg(feature = "http")]
 use reqwest;
-use std::io::Cursor;
 use std::sync::LazyLock;
-use tokio::fs::{self, File};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
 
 static RE_SRT_TAG: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"</?(?:b|i|u|font)(?:\s[^>]*)?>").unwrap());
@@ -102,18 +101,14 @@ fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
   (plain, parts)
 }
 
-async fn parse<R>(reader: R) -> AnyResult<Vec<Subtitle>>
-where
-  R: AsyncBufReadExt + Unpin,
-{
-  let mut lines = reader.lines();
+fn parse(content: &str) -> AnyResult<Vec<Subtitle>> {
   let mut subtitles = Vec::new();
   let mut current_subtitle: Option<Subtitle> = None;
   let mut phase = Phase::Index;
   let mut row: usize = 0;
   let mut is_first_content_line = true;
 
-  while let Some(line) = lines.next_line().await? {
+  for line in content.lines() {
     row += 1;
     let mut trimmed = line.trim().to_string();
 
@@ -206,31 +201,24 @@ where
 }
 
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
-  let file = File::open(path).await?;
-  let reader = BufReader::new(file);
-  parse(reader).await
+  let text = tokio::fs::read_to_string(path).await?;
+  parse(&text)
 }
 
-pub async fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
+pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
   let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
-  let cursor = Cursor::new(text);
-  let reader = BufReader::new(cursor);
-  parse(reader).await
+  parse(&text)
 }
 
 #[cfg(feature = "http")]
 pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  let cursor = Cursor::new(content);
-  let reader = BufReader::new(cursor);
-  parse(reader).await
+  parse(&content)
 }
 
-pub async fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
-  let cursor = Cursor::new(content);
-  let reader = BufReader::new(cursor);
-  parse(reader).await
+pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
+  parse(content)
 }
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
@@ -318,46 +306,46 @@ mod tests {
     }
   }
 
-  #[tokio::test]
-  async fn test_parse_basic_srt() {
+  #[test]
+  fn test_parse_basic_srt() {
     let content =
       "1\n00:00:01,000 --> 00:00:03,500\nHello!\n\n2\n00:00:04,000 --> 00:00:06,500\nWorld!\n\n";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert_eq!(result.len(), 2);
     assert_eq!(result[0], make_subtitle(1, 1000, 3500, "Hello!"));
     assert_eq!(result[1], make_subtitle(2, 4000, 6500, "World!"));
   }
 
-  #[tokio::test]
-  async fn test_parse_multiline_text() {
+  #[test]
+  fn test_parse_multiline_text() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\nLine one\nLine two\n\n";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].text, "Line one\nLine two");
   }
 
-  #[tokio::test]
-  async fn test_parse_start_at_zero() {
+  #[test]
+  fn test_parse_start_at_zero() {
     let content = "1\n00:00:00,000 --> 00:00:03,500\nFrom zero\n\n";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].start, 0);
     assert_eq!(result[0].end, 3500);
     assert_eq!(result[0].text, "From zero");
   }
 
-  #[tokio::test]
-  async fn test_parse_numeric_text_not_mistaken_for_index() {
+  #[test]
+  fn test_parse_numeric_text_not_mistaken_for_index() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n42\n\n";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].text, "42");
   }
 
-  #[tokio::test]
-  async fn test_parse_no_trailing_blank_line() {
+  #[test]
+  fn test_parse_no_trailing_blank_line() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\nHello!";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].text, "Hello!");
   }
@@ -366,7 +354,7 @@ mod tests {
   async fn test_round_trip() {
     let original =
       "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n2\n00:00:04,000 --> 00:00:06,500\nWorld\n\n";
-    let subtitles = parse_content(original).await.unwrap();
+    let subtitles = parse_content(original).unwrap();
     let path = "test_round_trip_srt.srt";
     generate(&subtitles, path).await.unwrap();
     let parsed_back = parse_file(path).await.unwrap();
@@ -374,61 +362,61 @@ mod tests {
     assert_eq!(subtitles, parsed_back);
   }
 
-  #[tokio::test]
-  async fn test_parse_missing_index() {
+  #[test]
+  fn test_parse_missing_index() {
     let content = "00:00:01,000 --> 00:00:03,500\nNo index\n\n";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].index, None);
     assert_eq!(result[0].start, 1000);
     assert_eq!(result[0].text, "No index");
   }
 
-  #[tokio::test]
-  async fn test_parse_missing_timestamp_error() {
+  #[test]
+  fn test_parse_missing_timestamp_error() {
     let content = "1\nnot a timestamp\n";
-    let result = parse_content(content).await;
+    let result = parse_content(content);
     assert!(result.is_err());
   }
 
-  #[tokio::test]
-  async fn test_parse_bold_tag() {
+  #[test]
+  fn test_parse_bold_tag() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n<b>Bold text</b>\n\n";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert_eq!(result[0].text, "Bold text");
     assert_eq!(result[0].text_parts.len(), 1);
     assert!(result[0].text_parts[0].bold);
     assert_eq!(result[0].text_parts[0].text, "Bold text");
   }
 
-  #[tokio::test]
-  async fn test_parse_italic_tag() {
+  #[test]
+  fn test_parse_italic_tag() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n<i>Italic</i> plain\n\n";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert_eq!(result[0].text, "Italic plain");
     assert_eq!(result[0].text_parts.len(), 1);
     assert!(result[0].text_parts[0].italic);
     assert_eq!(result[0].text_parts[0].text, "Italic");
   }
 
-  #[tokio::test]
-  async fn test_parse_underline_tag() {
+  #[test]
+  fn test_parse_underline_tag() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n<u>underline</u>\n\n";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert!(result[0].text_parts[0].underline);
   }
 
-  #[tokio::test]
-  async fn test_parse_font_color_tag() {
+  #[test]
+  fn test_parse_font_color_tag() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n<font color=\"#ff0000\">red</font>\n\n";
-    let result = parse_content(content).await.unwrap();
+    let result = parse_content(content).unwrap();
     assert_eq!(result[0].text_parts[0].color, Some("#ff0000".to_string()));
   }
 
-  #[tokio::test]
-  async fn test_parse_bytes() {
+  #[test]
+  fn test_parse_bytes() {
     let data = b"1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
-    let result = parse_bytes(data.as_ref()).await.unwrap();
+    let result = parse_bytes(data.as_ref()).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].text, "Hello");
   }

@@ -54,7 +54,7 @@ Perfect! I'll see you then.
 Great! Looking forward to it.
 "#;
 
-  let subtitle = parse_content(content).await?;
+  let subtitle = parse_content(content)?;
   info!("subtitle {:#?}", subtitle);
   info!("subtitle json {}", serde_json::to_string_pretty(&subtitle)?);
   Ok(())

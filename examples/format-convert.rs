@@ -28,7 +28,7 @@ I'm doing well, thank you!
 What are your plans for the weekend?
 "#;
 
-  let subtitles = srt::parse_content(srt_content).await?;
+  let subtitles = srt::parse_content(srt_content)?;
   info!("Parsed {} SRT cues", subtitles.len());
 
   // Convert SRT -> VTT
@@ -44,7 +44,7 @@ What are your plans for the weekend?
   info!("ASS output:\n{}", ass_output);
 
   // Round-trip: SRT -> VTT -> parse -> SRT
-  let reparsed = vtt::parse_content(&vtt_output).await?;
+  let reparsed = vtt::parse_content(&vtt_output)?;
   let srt_roundtrip = srt::to_string(&reparsed);
   info!("Round-trip SRT:\n{}", srt_roundtrip);
 

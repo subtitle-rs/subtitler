@@ -49,14 +49,14 @@ async fn test_srt_round_trip_full() {
 
 #[tokio::test]
 async fn test_srt_parse_content_empty() {
-  let result = srt::parse_content("").await.unwrap();
+  let result = srt::parse_content("").unwrap();
   assert!(result.is_empty());
 }
 
 #[tokio::test]
 async fn test_srt_parse_content_only_header_like() {
   let content = "1\n00:00:01,000 --> 00:00:03,000\nx\n\n2\n00:00:04,000 --> 00:00:06,000\ny\n\n";
-  let result = srt::parse_content(content).await.unwrap();
+  let result = srt::parse_content(content).unwrap();
   assert_eq!(result.len(), 2);
 }
 
@@ -64,14 +64,14 @@ async fn test_srt_parse_content_only_header_like() {
 async fn test_srt_consecutive_blank_lines() {
   let content =
     "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n\n2\n00:00:04,000 --> 00:00:06,500\nWorld\n\n";
-  let result = srt::parse_content(content).await.unwrap();
+  let result = srt::parse_content(content).unwrap();
   assert_eq!(result.len(), 2);
 }
 
 #[tokio::test]
 async fn test_srt_empty_text() {
   let content = "1\n00:00:01,000 --> 00:00:03,500\n\n\n";
-  let result = srt::parse_content(content).await.unwrap();
+  let result = srt::parse_content(content).unwrap();
   assert_eq!(result.len(), 1);
   assert_eq!(result[0].text, "");
 }
@@ -79,14 +79,14 @@ async fn test_srt_empty_text() {
 #[tokio::test]
 async fn test_srt_leading_newline() {
   let content = "\n1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
-  let result = srt::parse_content(content).await.unwrap();
+  let result = srt::parse_content(content).unwrap();
   assert_eq!(result[0].text, "Hello");
 }
 
 #[tokio::test]
 async fn test_srt_missing_index() {
   let content = "00:00:01,000 --> 00:00:03,500\nNo index here\n\n";
-  let result = srt::parse_content(content).await.unwrap();
+  let result = srt::parse_content(content).unwrap();
   assert_eq!(result[0].index, None);
 }
 
@@ -101,7 +101,7 @@ async fn test_srt_generate_empty() {
 
 #[tokio::test]
 async fn test_srt_timestamp_error_message() {
-  let err = srt::parse_content("1\nnot a time\n").await.unwrap_err();
+  let err = srt::parse_content("1\nnot a time\n").unwrap_err();
   let msg = format!("{}", err);
   assert!(msg.contains("expected timestamp") || msg.contains("Invalid SRT"));
 }
@@ -141,28 +141,28 @@ async fn test_vtt_round_trip_full() {
 
 #[tokio::test]
 async fn test_vtt_parse_content_empty() {
-  let result = vtt::parse_content("WEBVTT\n\n").await.unwrap();
+  let result = vtt::parse_content("WEBVTT\n\n").unwrap();
   assert!(result.is_empty());
 }
 
 #[tokio::test]
 async fn test_vtt_consecutive_blank_lines() {
   let content = "WEBVTT\n\n\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld\n\n";
-  let result = vtt::parse_content(content).await.unwrap();
+  let result = vtt::parse_content(content).unwrap();
   assert_eq!(result.len(), 2);
 }
 
 #[tokio::test]
 async fn test_vtt_leading_newline() {
   let content = "\nWEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
-  let result = vtt::parse_content(content).await.unwrap();
+  let result = vtt::parse_content(content).unwrap();
   assert_eq!(result[0].text, "Hello");
 }
 
 #[tokio::test]
 async fn test_vtt_cue_id_is_string() {
   let content = "WEBVTT\n\nchapter1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
-  let result = vtt::parse_content(content).await.unwrap();
+  let result = vtt::parse_content(content).unwrap();
   assert_eq!(result[0].index, None);
 }
 
@@ -177,9 +177,7 @@ async fn test_vtt_generate_empty() {
 
 #[tokio::test]
 async fn test_vtt_timestamp_error_message() {
-  let err = vtt::parse_content("WEBVTT\n\n1\nnot a time\n")
-    .await
-    .unwrap_err();
+  let err = vtt::parse_content("WEBVTT\n\n1\nnot a time\n").unwrap_err();
   let msg = format!("{}", err);
   assert!(msg.contains("expected timestamp") || msg.contains("Invalid"));
 }
@@ -187,7 +185,7 @@ async fn test_vtt_timestamp_error_message() {
 #[tokio::test]
 async fn test_vtt_parse_with_bom() {
   let content = "\u{FEFF}WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
-  let result = vtt::parse_content(content).await.unwrap();
+  let result = vtt::parse_content(content).unwrap();
   assert_eq!(result.len(), 1);
   assert_eq!(result[0].text, "Hello");
 }
@@ -195,7 +193,7 @@ async fn test_vtt_parse_with_bom() {
 #[tokio::test]
 async fn test_vtt_parse_with_note() {
   let content = "WEBVTT\n\nNOTE This is a comment\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
-  let result = vtt::parse_content(content).await.unwrap();
+  let result = vtt::parse_content(content).unwrap();
   assert_eq!(result.len(), 1);
   assert_eq!(result[0].text, "Hello");
 }
@@ -204,7 +202,7 @@ async fn test_vtt_parse_with_note() {
 async fn test_vtt_parse_header_preserved() {
   let content =
     "WEBVTT\nKind: captions\nLanguage: en\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
-  let (header, subtitles) = vtt::parse_content_full(content).await.unwrap();
+  let (header, subtitles) = vtt::parse_content_full(content).unwrap();
   assert_eq!(subtitles.len(), 1);
   assert!(header.is_some());
   assert!(header.unwrap().contains("Kind: captions"));

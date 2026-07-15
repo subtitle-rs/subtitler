@@ -101,12 +101,12 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
   match format {
     #[cfg(feature = "srt")]
     CliFormat::Srt => {
-      let subs = srt::parse_content(&text).await?;
+      let subs = srt::parse_content(&text)?;
       Ok(SubtitleFile::Srt(subs))
     }
     #[cfg(feature = "vtt")]
     CliFormat::Vtt => {
-      let (header, subs) = vtt::parse_content_full(&text).await?;
+      let (header, subs) = vtt::parse_content_full(&text)?;
       Ok(SubtitleFile::Vtt {
         header,
         subtitles: subs,
@@ -142,9 +142,9 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
   let content = String::from_utf8(data.to_vec())?;
   let subs = match format {
     #[cfg(feature = "srt")]
-    CliFormat::Srt => srt::parse_content(&content).await?,
+    CliFormat::Srt => srt::parse_content(&content)?,
     #[cfg(feature = "vtt")]
-    CliFormat::Vtt => vtt::parse_content(&content).await?,
+    CliFormat::Vtt => vtt::parse_content(&content)?,
     #[cfg(feature = "ass")]
     CliFormat::Ass => ass::parse_content(&content)?.subtitles().to_vec(),
     #[cfg(feature = "ssa")]

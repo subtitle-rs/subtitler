@@ -116,23 +116,20 @@ fn large_srt(num_entries: usize) -> String {
 fn bench_srt_parse_small(c: &mut Criterion) {
   let content = small_srt();
   c.bench_function("srt_parse_small", |b| {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    b.iter(|| rt.block_on(async { black_box(srt::parse_content(&content).await.unwrap()) }))
+    b.iter(|| black_box(srt::parse_content(&content).unwrap()))
   });
 }
 
 fn bench_srt_parse_large(c: &mut Criterion) {
   let content = large_srt(1000);
   c.bench_function("srt_parse_large", |b| {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    b.iter(|| rt.block_on(async { black_box(srt::parse_content(&content).await.unwrap()) }))
+    b.iter(|| black_box(srt::parse_content(&content).unwrap()))
   });
 }
 
 fn bench_srt_stringify_small(c: &mut Criterion) {
   let content = small_srt();
-  let rt = tokio::runtime::Runtime::new().unwrap();
-  let subs = rt.block_on(async { srt::parse_content(&content).await.unwrap() });
+  let subs = srt::parse_content(&content).unwrap();
   c.bench_function("srt_stringify_small", |b| {
     b.iter(|| black_box(srt::to_string(&subs)))
   });
@@ -140,8 +137,7 @@ fn bench_srt_stringify_small(c: &mut Criterion) {
 
 fn bench_srt_stringify_large(c: &mut Criterion) {
   let content = large_srt(1000);
-  let rt = tokio::runtime::Runtime::new().unwrap();
-  let subs = rt.block_on(async { srt::parse_content(&content).await.unwrap() });
+  let subs = srt::parse_content(&content).unwrap();
   c.bench_function("srt_stringify_large", |b| {
     b.iter(|| black_box(srt::to_string(&subs)))
   });
@@ -227,23 +223,20 @@ fn large_vtt(num_entries: usize) -> String {
 fn bench_vtt_parse_small(c: &mut Criterion) {
   let content = small_vtt();
   c.bench_function("vtt_parse_small", |b| {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    b.iter(|| rt.block_on(async { black_box(vtt::parse_content(&content).await.unwrap()) }))
+    b.iter(|| black_box(vtt::parse_content(&content).unwrap()))
   });
 }
 
 fn bench_vtt_parse_large(c: &mut Criterion) {
   let content = large_vtt(1000);
   c.bench_function("vtt_parse_large", |b| {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    b.iter(|| rt.block_on(async { black_box(vtt::parse_content(&content).await.unwrap()) }))
+    b.iter(|| black_box(vtt::parse_content(&content).unwrap()))
   });
 }
 
 fn bench_vtt_stringify_small(c: &mut Criterion) {
   let content = small_vtt();
-  let rt = tokio::runtime::Runtime::new().unwrap();
-  let subs = rt.block_on(async { vtt::parse_content(&content).await.unwrap() });
+  let subs = vtt::parse_content(&content).unwrap();
   c.bench_function("vtt_stringify_small", |b| {
     b.iter(|| black_box(vtt::to_string(&subs, None)))
   });
@@ -251,8 +244,7 @@ fn bench_vtt_stringify_small(c: &mut Criterion) {
 
 fn bench_vtt_stringify_large(c: &mut Criterion) {
   let content = large_vtt(1000);
-  let rt = tokio::runtime::Runtime::new().unwrap();
-  let subs = rt.block_on(async { vtt::parse_content(&content).await.unwrap() });
+  let subs = vtt::parse_content(&content).unwrap();
   c.bench_function("vtt_stringify_large", |b| {
     b.iter(|| black_box(vtt::to_string(&subs, None)))
   });
@@ -530,8 +522,7 @@ fn bench_subtitle_filter(c: &mut Criterion) {
 
 fn bench_srt_to_vtt_convert(c: &mut Criterion) {
   let content = large_srt(100);
-  let rt = tokio::runtime::Runtime::new().unwrap();
-  let subs = rt.block_on(async { srt::parse_content(&content).await.unwrap() });
+  let subs = srt::parse_content(&content).unwrap();
   c.bench_function("srt_to_vtt_convert_100", |b| {
     b.iter(|| black_box(vtt::to_string(&subs, None)))
   });
@@ -539,8 +530,7 @@ fn bench_srt_to_vtt_convert(c: &mut Criterion) {
 
 fn bench_srt_to_ass_convert(c: &mut Criterion) {
   let content = large_srt(100);
-  let rt = tokio::runtime::Runtime::new().unwrap();
-  let subs = rt.block_on(async { srt::parse_content(&content).await.unwrap() });
+  let subs = srt::parse_content(&content).unwrap();
   c.bench_function("srt_to_ass_convert_100", |b| {
     b.iter(|| {
       black_box(ass::to_string(

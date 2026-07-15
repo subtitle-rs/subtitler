@@ -32,7 +32,7 @@ This subtitle overlaps with the first two!
 This is a very long subtitle that contains way too much text to be readable at a normal reading speed and should be split into more manageable chunks
 "#;
 
-  let subtitles = srt::parse_content(content).await?;
+  let subtitles = srt::parse_content(content)?;
   let mut file = SubtitleFile::Srt(subtitles);
 
   // 1. Sort by start time
