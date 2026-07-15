@@ -162,6 +162,24 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   })
 }
 
+pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
+  let text =
+    String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  parse_content(&text)
+}
+
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
+  let text = tokio::fs::read_to_string(path).await?;
+  parse_content(&text)
+}
+
+#[cfg(feature = "http")]
+pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
+  let response = reqwest::get(url).await?;
+  let content = response.text().await?;
+  parse_content(&content)
+}
+
 #[derive(PartialEq)]
 enum Section {
   None,
@@ -407,5 +425,23 @@ mod tests {
     let parsed = parse_content(content).unwrap();
     let output = parsed.to_string();
     assert!(output.contains("Style: Custom,"));
+  }
+
+  #[test]
+  fn test_parse_bytes() {
+    let data = b"[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: ...\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,Hello\n";
+    let result = parse_bytes(data.as_ref()).unwrap();
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].text, "Hello");
+  }
+
+  #[tokio::test]
+  async fn test_parse_file() {
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: ...\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,FromFile\n";
+    let path = "test_ass_parse_file.ass";
+    std::fs::write(path, content).unwrap();
+    let result = parse_file(path).await.unwrap();
+    let _ = std::fs::remove_file(path);
+    assert_eq!(result.subtitles()[0].text, "FromFile");
   }
 }

@@ -1,5 +1,6 @@
 pub mod ass;
 pub mod config;
+pub mod error;
 pub mod encoding;
 pub mod microdvd;
 pub mod model;
