@@ -225,6 +225,7 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   if let Ok(text) = String::from_utf8(data.to_vec()) {
     let trimmed = text.trim();
     if !trimmed.is_empty() {
+      #[cfg(feature = "vtt")]
       if trimmed.starts_with("WEBVTT") {
         return Some(crate::model::Format::Vtt);
       }
