@@ -36,3 +36,64 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| subviewer::detect_format(data));
   f
 }
+
+/// Parse bytes into a `SubtitleFile`, auto-detecting the format.
+pub fn parse_bytes(data: &[u8]) -> Result<model::SubtitleFile, error::ParseError> {
+  let fmt = detect_format(data).ok_or(error::ParseError::UnknownFormat)?;
+  parse_bytes_as(data, fmt)
+}
+
+/// Parse bytes as a specific format.
+pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, error::ParseError> {
+  match fmt {
+    #[cfg(feature = "srt")]
+    Format::Srt => Ok(model::SubtitleFile::Srt(srt::parse_bytes(data)?)),
+    #[cfg(feature = "vtt")]
+    Format::Vtt => Ok(model::SubtitleFile::Vtt {
+      header: None,
+      subtitles: vtt::parse_bytes(data)?,
+    }),
+    #[cfg(feature = "ass")]
+    Format::Ass => Ok(ass::parse_bytes(data)?),
+    #[cfg(feature = "ssa")]
+    Format::Ssa => match ass::parse_bytes(data)? {
+      model::SubtitleFile::Ass(data) => Ok(model::SubtitleFile::Ssa(data)),
+      other => Ok(other),
+    },
+    #[cfg(feature = "microdvd")]
+    Format::MicroDvd => {
+      let (fps, subs) = microdvd::parse_bytes(data, None)?;
+      Ok(model::SubtitleFile::MicroDvd {
+        fps,
+        subtitles: subs,
+      })
+    }
+    #[cfg(feature = "subviewer")]
+    Format::SubViewer => {
+      let (header, subs) = subviewer::parse_bytes(data)?;
+      Ok(model::SubtitleFile::SubViewer {
+        header,
+        subtitles: subs,
+      })
+    }
+    #[allow(unreachable_patterns)]
+    _ => Err(error::ParseError::Unsupported(fmt)),
+  }
+}
+
+/// Parse a file into a `SubtitleFile`, auto-detecting the format.
+pub async fn parse_file(
+  path: impl AsRef<std::path::Path>,
+) -> Result<model::SubtitleFile, error::ParseError> {
+  let data = tokio::fs::read(path).await?;
+  parse_bytes(&data)
+}
+
+/// Parse a URL into a `SubtitleFile`, auto-detecting the format (requires
+/// the `http` feature).
+#[cfg(feature = "http")]
+pub async fn parse_url(url: &str) -> Result<model::SubtitleFile, error::ParseError> {
+  let response = reqwest::get(url).await?;
+  let bytes = response.bytes().await?;
+  parse_bytes(&bytes)
+}

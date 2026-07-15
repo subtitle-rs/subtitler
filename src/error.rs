@@ -6,7 +6,28 @@
 //! `anyhow::Error` automatically via `thiserror`, so a function returning
 //! `Result<_, SubtitleError>` interops with `AnyResult` callers.
 
+use crate::model::Format;
 use thiserror::Error;
+
+/// Unified parse error for the high-level `subtitler::parse_*` entry points.
+#[derive(Debug, Error)]
+pub enum ParseError {
+  #[error("could not detect subtitle format")]
+  UnknownFormat,
+  #[error("format {0:?} is not enabled (enable its cargo feature)")]
+  Unsupported(Format),
+  #[error("decode/parse error: {0}")]
+  // `anyhow::Error` covers all the per-format parser errors returned via
+  // `AnyResult`; `SubtitleError` is kept for the typed-error migration path.
+  Anyhow(#[from] anyhow::Error),
+  #[error("decode/parse error: {0}")]
+  Decode(#[from] SubtitleError),
+  #[error("I/O error: {0}")]
+  Io(#[from] std::io::Error),
+  #[cfg(feature = "http")]
+  #[error("HTTP error: {0}")]
+  Http(#[from] reqwest::Error),
+}
 
 #[derive(Debug, Error)]
 pub enum SubtitleError {

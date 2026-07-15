@@ -98,3 +98,26 @@ fn subviewer_variant_preserves_header() {
   assert_eq!(subs.len(), 1);
   assert_eq!(subs[0].text, "Hello");
 }
+
+#[test]
+fn unified_parse_bytes_detects_srt() {
+  let data = b"1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
+  let file = subtitler::parse_bytes(data).unwrap();
+  assert!(matches!(file, SubtitleFile::Srt(_)));
+}
+
+#[test]
+fn unified_parse_bytes_detects_vtt() {
+  let data = b"WEBVTT\n\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
+  let file = subtitler::parse_bytes(data).unwrap();
+  assert!(matches!(file, SubtitleFile::Vtt { .. }));
+}
+
+#[test]
+fn unified_parse_bytes_unknown_format_errors() {
+  let result = subtitler::parse_bytes(b"not a subtitle at all\nnope\n");
+  assert!(matches!(
+    result,
+    Err(subtitler::error::ParseError::UnknownFormat)
+  ));
+}

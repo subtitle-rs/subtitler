@@ -70,6 +70,16 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile>
   })
 }
 
+/// Decode bytes to UTF-8 then parse, returning the resolved fps and subtitles.
+pub fn parse_bytes(data: &[u8], fps: Option<f64>) -> AnyResult<(f64, Vec<Subtitle>)> {
+  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let file = parse_content(&text, fps)?;
+  match file {
+    SubtitleFile::MicroDvd { fps, subtitles } => Ok((fps, subtitles)),
+    _ => unreachable!("parse_content returns MicroDvd"),
+  }
+}
+
 pub fn to_string(subtitles: &[Subtitle], fps: Option<f64>) -> String {
   let fps = fps.unwrap_or(DEFAULT_FPS);
   let mut buf = String::new();

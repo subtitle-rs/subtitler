@@ -85,6 +85,12 @@ pub fn parse_content(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)
   Ok((header, subtitles))
 }
 
+/// Decode bytes to UTF-8 then parse, returning the header and subtitles.
+pub fn parse_bytes(data: &[u8]) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
+  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  parse_content(&text)
+}
+
 pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   let mut buf = match header {
     Some(h) => format!("{h}\n\n"),
