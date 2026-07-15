@@ -73,7 +73,7 @@ impl Subtitle {
   pub fn chars_per_second(&self) -> f64 {
     let dur = self.duration_ms() as f64 / 1000.0;
     if dur > 0.0 {
-      self.text.chars().count() as f64 / dur
+      self.plaintext().chars().count() as f64 / dur
     } else {
       f64::INFINITY
     }
@@ -830,5 +830,12 @@ mod tests {
   fn test_chars_per_second() {
     let sub = Subtitle::new(0, 2000, "Hello World"); // 11 chars / 2s = 5.5
     assert!((sub.chars_per_second() - 5.5).abs() < 0.01);
+  }
+
+  #[test]
+  fn test_chars_per_second_counts_plaintext() {
+    // Tags must NOT count toward cps. "<b>Hi</b>" = 2 visible chars.
+    let sub = Subtitle::new(0, 1000, "<b>Hi</b>");
+    assert!((sub.chars_per_second() - 2.0).abs() < 0.01);
   }
 }
