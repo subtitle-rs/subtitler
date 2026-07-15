@@ -198,6 +198,9 @@ pub enum SubtitleFile {
 | Function | Description |
 |----------|-------------|
 | `parse_content(content)` | Parse ASS/SSA from string, returns `SubtitleFile` |
+| `parse_file(path)` | Parse ASS/SSA from file (async) |
+| `parse_bytes(data)` | Parse ASS/SSA from byte slice |
+| `parse_url(url)` | Parse ASS/SSA from HTTP URL (requires `http` feature) |
 | `to_string(info, styles, subtitles)` | Format as ASS string |
 | `detect_format(data)` | Detect if data is ASS/SSA |
 
