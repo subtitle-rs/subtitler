@@ -43,7 +43,14 @@ tracing-subscriber = "^0.3.23"
 criterion = "0.8.2"
 
 [features]
-default = ["http"]
+default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "http"]
+
+srt = []
+vtt = []
+ass = []
+ssa = []
+microdvd = []
+subviewer = []
 http = ["reqwest"]
 
 [profile.release]

@@ -147,11 +147,17 @@ pub struct Timestamp {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum Format {
+  #[cfg(feature = "srt")]
   Srt,
+  #[cfg(feature = "vtt")]
   Vtt,
+  #[cfg(feature = "ass")]
   Ass,
+  #[cfg(feature = "ssa")]
   Ssa,
+  #[cfg(feature = "microdvd")]
   MicroDvd,
+  #[cfg(feature = "subviewer")]
   SubViewer,
 }
 
@@ -262,18 +268,21 @@ pub struct AssData {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum SubtitleFile {
+  #[cfg(feature = "srt")]
   Srt(Vec<Subtitle>),
+  #[cfg(feature = "vtt")]
   Vtt {
     #[serde(skip_serializing_if = "Option::is_none")]
     header: Option<String>,
     subtitles: Vec<Subtitle>,
   },
+  #[cfg(feature = "ass")]
   Ass(AssData),
+  #[cfg(feature = "ssa")]
   Ssa(AssData),
-  MicroDvd {
-    fps: f64,
-    subtitles: Vec<Subtitle>,
-  },
+  #[cfg(feature = "microdvd")]
+  MicroDvd { fps: f64, subtitles: Vec<Subtitle> },
+  #[cfg(feature = "subviewer")]
   SubViewer {
     #[serde(skip_serializing_if = "Option::is_none")]
     header: Option<String>,
@@ -653,14 +662,21 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
 impl SubtitleFormat for SubtitleFile {
   fn subtitles(&self) -> &[Subtitle] {
     match self {
+      #[cfg(feature = "srt")]
       SubtitleFile::Srt(subs) => subs,
+      #[cfg(feature = "vtt")]
       SubtitleFile::Vtt {
         subtitles: subs, ..
       } => subs,
-      SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &data.subtitles,
+      #[cfg(feature = "ass")]
+      SubtitleFile::Ass(data) => &data.subtitles,
+      #[cfg(feature = "ssa")]
+      SubtitleFile::Ssa(data) => &data.subtitles,
+      #[cfg(feature = "microdvd")]
       SubtitleFile::MicroDvd {
         subtitles: subs, ..
       } => subs,
+      #[cfg(feature = "subviewer")]
       SubtitleFile::SubViewer {
         subtitles: subs, ..
       } => subs,
@@ -669,14 +685,21 @@ impl SubtitleFormat for SubtitleFile {
 
   fn subtitles_mut(&mut self) -> &mut Vec<Subtitle> {
     match self {
+      #[cfg(feature = "srt")]
       SubtitleFile::Srt(subs) => subs,
+      #[cfg(feature = "vtt")]
       SubtitleFile::Vtt {
         subtitles: subs, ..
       } => subs,
-      SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &mut data.subtitles,
+      #[cfg(feature = "ass")]
+      SubtitleFile::Ass(data) => &mut data.subtitles,
+      #[cfg(feature = "ssa")]
+      SubtitleFile::Ssa(data) => &mut data.subtitles,
+      #[cfg(feature = "microdvd")]
       SubtitleFile::MicroDvd {
         subtitles: subs, ..
       } => subs,
+      #[cfg(feature = "subviewer")]
       SubtitleFile::SubViewer {
         subtitles: subs, ..
       } => subs,
@@ -685,11 +708,17 @@ impl SubtitleFormat for SubtitleFile {
 
   fn format(&self) -> Format {
     match self {
+      #[cfg(feature = "srt")]
       SubtitleFile::Srt(_) => Format::Srt,
+      #[cfg(feature = "vtt")]
       SubtitleFile::Vtt { .. } => Format::Vtt,
+      #[cfg(feature = "ass")]
       SubtitleFile::Ass(_) => Format::Ass,
+      #[cfg(feature = "ssa")]
       SubtitleFile::Ssa(_) => Format::Ssa,
+      #[cfg(feature = "microdvd")]
       SubtitleFile::MicroDvd { .. } => Format::MicroDvd,
+      #[cfg(feature = "subviewer")]
       SubtitleFile::SubViewer { .. } => Format::SubViewer,
     }
   }
@@ -697,20 +726,15 @@ impl SubtitleFormat for SubtitleFile {
   fn to_string_with_format(&self, format: &Format) -> String {
     let subs = self.subtitles();
     match format {
+      #[cfg(feature = "srt")]
       Format::Srt => crate::srt::to_string(subs),
+      #[cfg(feature = "vtt")]
       Format::Vtt => crate::vtt::to_string(subs, None),
-      Format::Ass | Format::Ssa => {
-        let (info, styles) = match self {
-          SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => {
-            (data.info.clone(), data.styles.clone())
-          }
-          _ => (
-            std::collections::HashMap::new(),
-            vec![crate::model::AssStyle::default_style()],
-          ),
-        };
-        crate::ass::to_string(&info, &styles, subs)
-      }
+      #[cfg(feature = "ass")]
+      Format::Ass => ass_to_string_impl(self, subs),
+      #[cfg(feature = "ssa")]
+      Format::Ssa => ass_to_string_impl(self, subs),
+      #[cfg(feature = "microdvd")]
       Format::MicroDvd => {
         let fps = match self {
           SubtitleFile::MicroDvd { fps, .. } => Some(*fps),
@@ -726,6 +750,7 @@ impl SubtitleFormat for SubtitleFile {
           _ => crate::microdvd::to_string(subs, fps),
         }
       }
+      #[cfg(feature = "subviewer")]
       Format::SubViewer => {
         let header = match self {
           SubtitleFile::SubViewer { header, .. } => header.as_deref(),
@@ -735,6 +760,24 @@ impl SubtitleFormat for SubtitleFile {
       }
     }
   }
+}
+
+/// Shared ASS/SSA serialization (both formats produce the same body; they
+/// differ only in identity). Split out so the trait's `match format` can give
+/// `Ass` and `Ssa` their own `#[cfg]`-gated arms.
+#[cfg(any(feature = "ass", feature = "ssa"))]
+fn ass_to_string_impl(file: &SubtitleFile, subs: &[Subtitle]) -> String {
+  let (info, styles) = match file {
+    #[cfg(feature = "ass")]
+    SubtitleFile::Ass(data) => (data.info.clone(), data.styles.clone()),
+    #[cfg(feature = "ssa")]
+    SubtitleFile::Ssa(data) => (data.info.clone(), data.styles.clone()),
+    _ => (
+      std::collections::HashMap::new(),
+      vec![crate::model::AssStyle::default_style()],
+    ),
+  };
+  crate::ass::to_string(&info, &styles, subs)
 }
 
 impl SubtitleFile {

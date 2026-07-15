@@ -4,8 +4,13 @@ mod types;
 use crate::types::AnyResult;
 use clap::Parser;
 use cli::{Commands, Format as CliFormat};
+#[cfg(feature = "ass")]
+use subtitler::ass;
 use subtitler::model::{Format, SubtitleFile, SubtitleFormat};
-use subtitler::{ass, srt, vtt};
+#[cfg(feature = "srt")]
+use subtitler::srt;
+#[cfg(feature = "vtt")]
+use subtitler::vtt;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -63,11 +68,17 @@ fn resolve_format(data: &[u8], hint: Option<CliFormat>) -> Option<CliFormat> {
     return Some(f);
   }
   match subtitler::detect_format(data) {
+    #[cfg(feature = "srt")]
     Some(Format::Srt) => Some(CliFormat::Srt),
+    #[cfg(feature = "vtt")]
     Some(Format::Vtt) => Some(CliFormat::Vtt),
+    #[cfg(feature = "ass")]
     Some(Format::Ass) => Some(CliFormat::Ass),
+    #[cfg(feature = "ssa")]
     Some(Format::Ssa) => Some(CliFormat::Ssa),
+    #[cfg(feature = "microdvd")]
     Some(Format::MicroDvd) => Some(CliFormat::MicroDvd),
+    #[cfg(feature = "subviewer")]
     Some(Format::SubViewer) => Some(CliFormat::SubViewer),
     None => None,
   }
@@ -88,10 +99,12 @@ fn resolve_output_format(output: &str, hint: Option<CliFormat>) -> AnyResult<Cli
 async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
   let text = String::from_utf8(data.to_vec())?;
   match format {
+    #[cfg(feature = "srt")]
     CliFormat::Srt => {
       let subs = srt::parse_content(&text).await?;
       Ok(SubtitleFile::Srt(subs))
     }
+    #[cfg(feature = "vtt")]
     CliFormat::Vtt => {
       let (header, subs) = vtt::parse_content_full(&text).await?;
       Ok(SubtitleFile::Vtt {
@@ -99,11 +112,16 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
         subtitles: subs,
       })
     }
-    CliFormat::Ass | CliFormat::Ssa => ass::parse_content(&text),
+    #[cfg(feature = "ass")]
+    CliFormat::Ass => ass::parse_content(&text),
+    #[cfg(feature = "ssa")]
+    CliFormat::Ssa => ass::parse_content(&text),
+    #[cfg(feature = "microdvd")]
     CliFormat::MicroDvd => {
       let file = subtitler::microdvd::parse_content(&text, None)?;
       Ok(file)
     }
+    #[cfg(feature = "subviewer")]
     CliFormat::SubViewer => {
       let (header, subs) = subtitler::subviewer::parse_content(&text)?;
       Ok(SubtitleFile::SubViewer {
@@ -123,12 +141,19 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
 
   let content = String::from_utf8(data.to_vec())?;
   let subs = match format {
+    #[cfg(feature = "srt")]
     CliFormat::Srt => srt::parse_content(&content).await?,
+    #[cfg(feature = "vtt")]
     CliFormat::Vtt => vtt::parse_content(&content).await?,
-    CliFormat::Ass | CliFormat::Ssa => ass::parse_content(&content)?.subtitles().to_vec(),
+    #[cfg(feature = "ass")]
+    CliFormat::Ass => ass::parse_content(&content)?.subtitles().to_vec(),
+    #[cfg(feature = "ssa")]
+    CliFormat::Ssa => ass::parse_content(&content)?.subtitles().to_vec(),
+    #[cfg(feature = "microdvd")]
     CliFormat::MicroDvd => subtitler::microdvd::parse_content(&content, None)?
       .subtitles()
       .to_vec(),
+    #[cfg(feature = "subviewer")]
     CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?.1,
   };
 
@@ -244,11 +269,17 @@ fn issue_kind(issue: &subtitler::model::ValidationIssue) -> &'static str {
 
 fn format_to_subtitle_format(f: &CliFormat) -> Format {
   match f {
+    #[cfg(feature = "srt")]
     CliFormat::Srt => Format::Srt,
+    #[cfg(feature = "vtt")]
     CliFormat::Vtt => Format::Vtt,
+    #[cfg(feature = "ass")]
     CliFormat::Ass => Format::Ass,
+    #[cfg(feature = "ssa")]
     CliFormat::Ssa => Format::Ssa,
+    #[cfg(feature = "microdvd")]
     CliFormat::MicroDvd => Format::MicroDvd,
+    #[cfg(feature = "subviewer")]
     CliFormat::SubViewer => Format::SubViewer,
   }
 }
@@ -360,11 +391,17 @@ async fn cmd_info(args: cli::InfoArgs) -> AnyResult<()> {
 async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
   let (data, _) = read_input(&args.input).await?;
   match subtitler::detect_format(&data) {
+    #[cfg(feature = "srt")]
     Some(Format::Srt) => println!("srt"),
+    #[cfg(feature = "vtt")]
     Some(Format::Vtt) => println!("vtt"),
+    #[cfg(feature = "ass")]
     Some(Format::Ass) => println!("ass"),
+    #[cfg(feature = "ssa")]
     Some(Format::Ssa) => println!("ssa"),
+    #[cfg(feature = "microdvd")]
     Some(Format::MicroDvd) => println!("microdvd"),
+    #[cfg(feature = "subviewer")]
     Some(Format::SubViewer) => println!("subviewer"),
     None => {
       eprintln!("Unknown format");

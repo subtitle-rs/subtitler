@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use subtitler::ass;
-use subtitler::model::{Subtitle, SubtitleFile, SubtitleFormat, ValidationIssue, frames_to_ms, ms_to_frames};
+use subtitler::model::{
+  Subtitle, SubtitleFile, SubtitleFormat, ValidationIssue, frames_to_ms, ms_to_frames,
+};
 use subtitler::srt;
 use subtitler::vtt;
 

@@ -2,12 +2,18 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Format {
+  #[cfg(feature = "srt")]
   Srt,
+  #[cfg(feature = "vtt")]
   Vtt,
+  #[cfg(feature = "ass")]
   Ass,
+  #[cfg(feature = "ssa")]
   Ssa,
+  #[cfg(feature = "microdvd")]
   #[value(name = "microdvd")]
   MicroDvd,
+  #[cfg(feature = "subviewer")]
   #[value(name = "subviewer")]
   SubViewer,
 }
@@ -15,30 +21,44 @@ pub enum Format {
 impl Format {
   pub fn from_ext(path: &str) -> Option<Self> {
     let lower = path.to_lowercase();
+    #[cfg(feature = "srt")]
     if lower.ends_with(".srt") {
-      Some(Format::Srt)
-    } else if lower.ends_with(".vtt") {
-      Some(Format::Vtt)
-    } else if lower.ends_with(".ass") {
-      Some(Format::Ass)
-    } else if lower.ends_with(".ssa") {
-      Some(Format::Ssa)
-    } else if lower.ends_with(".sub") {
-      Some(Format::MicroDvd)
-    } else {
-      None
+      return Some(Format::Srt);
     }
+    #[cfg(feature = "vtt")]
+    if lower.ends_with(".vtt") {
+      return Some(Format::Vtt);
+    }
+    #[cfg(feature = "ass")]
+    if lower.ends_with(".ass") {
+      return Some(Format::Ass);
+    }
+    #[cfg(feature = "ssa")]
+    if lower.ends_with(".ssa") {
+      return Some(Format::Ssa);
+    }
+    #[cfg(feature = "microdvd")]
+    if lower.ends_with(".sub") {
+      return Some(Format::MicroDvd);
+    }
+    None
   }
 }
 
 impl std::fmt::Display for Format {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
+      #[cfg(feature = "srt")]
       Format::Srt => write!(f, "srt"),
+      #[cfg(feature = "vtt")]
       Format::Vtt => write!(f, "vtt"),
+      #[cfg(feature = "ass")]
       Format::Ass => write!(f, "ass"),
+      #[cfg(feature = "ssa")]
       Format::Ssa => write!(f, "ssa"),
+      #[cfg(feature = "microdvd")]
       Format::MicroDvd => write!(f, "microdvd"),
+      #[cfg(feature = "subviewer")]
       Format::SubViewer => write!(f, "subviewer"),
     }
   }
