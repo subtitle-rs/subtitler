@@ -105,8 +105,8 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
       Ok(file)
     }
     CliFormat::SubViewer => {
-      let subs = subtitler::subviewer::parse_content(&text)?;
-      Ok(SubtitleFile::Srt(subs))
+      let (header, subs) = subtitler::subviewer::parse_content(&text)?;
+      Ok(SubtitleFile::SubViewer { header, subtitles: subs })
     }
   }
 }
@@ -126,7 +126,7 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     CliFormat::MicroDvd => subtitler::microdvd::parse_content(&content, None)?
       .subtitles()
       .to_vec(),
-    CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?,
+    CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?.1,
   };
 
   if args.json {

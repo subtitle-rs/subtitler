@@ -274,6 +274,11 @@ pub enum SubtitleFile {
     fps: f64,
     subtitles: Vec<Subtitle>,
   },
+  SubViewer {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    header: Option<String>,
+    subtitles: Vec<Subtitle>,
+  },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -379,6 +384,7 @@ impl SubtitleFile {
       } => subs,
       SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &data.subtitles,
       SubtitleFile::MicroDvd { subtitles: subs, .. } => subs,
+      SubtitleFile::SubViewer { subtitles: subs, .. } => subs,
     }
   }
 
@@ -390,6 +396,7 @@ impl SubtitleFile {
       } => subs,
       SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &mut data.subtitles,
       SubtitleFile::MicroDvd { subtitles: subs, .. } => subs,
+      SubtitleFile::SubViewer { subtitles: subs, .. } => subs,
     }
   }
 
@@ -400,6 +407,7 @@ impl SubtitleFile {
       SubtitleFile::Ass(_) => Format::Ass,
       SubtitleFile::Ssa(_) => Format::Ssa,
       SubtitleFile::MicroDvd { .. } => Format::MicroDvd,
+      SubtitleFile::SubViewer { .. } => Format::SubViewer,
     }
   }
 
@@ -464,7 +472,13 @@ impl SubtitleFile {
           _ => crate::microdvd::to_string(subs, fps),
         }
       }
-      Format::SubViewer => crate::subviewer::to_string(subs),
+      Format::SubViewer => {
+        let header = match self {
+          SubtitleFile::SubViewer { header, .. } => header.as_deref(),
+          _ => None,
+        };
+        crate::subviewer::to_string(subs, header)
+      }
     }
   }
 

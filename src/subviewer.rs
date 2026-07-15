@@ -46,9 +46,11 @@ fn parse_subviewer_time(ts: &str) -> AnyResult<u64> {
   Ok(h * 3600000 + m * 60000 + s * 1000 + ms)
 }
 
-pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
+pub fn parse_content(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
   let mut subtitles = Vec::new();
   let mut pending_timestamp: Option<(u64, u64)> = None;
+  let mut header_lines: Vec<String> = Vec::new();
+  let mut saw_timestamp = false;
 
   for line in content.lines() {
     let trimmed = line.trim();
@@ -58,10 +60,14 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
     }
 
     if RE_SUBVIEWER_BRACKET.is_match(trimmed) {
+      if !saw_timestamp {
+        header_lines.push(trimmed.to_string());
+      }
       continue;
     }
 
     if let Some(caps) = RE_SUBVIEWER_LINE.captures(trimmed) {
+      saw_timestamp = true;
       let start = parse_subviewer_time(&caps[1])?;
       let end = parse_subviewer_time(&caps[2])?;
       pending_timestamp = Some((start, end));
@@ -70,13 +76,22 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
     }
   }
 
-  Ok(subtitles)
+  let header = if header_lines.is_empty() {
+    None
+  } else {
+    Some(header_lines.join("\n"))
+  };
+
+  Ok((header, subtitles))
 }
 
-pub fn to_string(subtitles: &[Subtitle]) -> String {
-  let mut buf = String::from(
-    "[INFORMATION]\n[TITLE]Subtitles\n[AUTHOR]subtitler\n[SOURCE]\n[FILEPATH]\n[DELAY]0\n[COMMENT]\n[END INFORMATION]\n[SUBTITLE]\n[COLF]&HFFFFFF,[STYLE]bd,[SIZE]18,[FONT]Arial\n\n",
-  );
+pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
+  let mut buf = match header {
+    Some(h) => format!("{h}\n\n"),
+    None => String::from(
+      "[INFORMATION]\n[TITLE]Subtitles\n[AUTHOR]subtitler\n[SOURCE]\n[FILEPATH]\n[DELAY]0\n[COMMENT]\n[END INFORMATION]\n[SUBTITLE]\n[COLF]&HFFFFFF,[STYLE]bd,[SIZE]18,[FONT]Arial\n\n",
+    ),
+  };
 
   for sub in subtitles {
     let start = format_subviewer_time(sub.start);
@@ -106,7 +121,7 @@ mod tests {
   #[test]
   fn test_parse_basic() {
     let content = "[SUBTITLE]\n[COLF]&HFFFFFF,[STYLE]bd,[SIZE]18,[FONT]Arial\n\n00:00:01.00,00:00:03.50\nHello World\n\n00:00:04.00,00:00:06.50\nGoodbye\n\n";
-    let result = parse_content(content).unwrap();
+    let (_, result) = parse_content(content).unwrap();
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].start, 1000);
     assert_eq!(result[0].end, 3500);
@@ -116,16 +131,16 @@ mod tests {
   #[test]
   fn test_parse_simple() {
     let content = "00:00:01.00,00:00:03.50\nHello\n\n00:00:04.00,00:00:06.50\nWorld\n";
-    let result = parse_content(content).unwrap();
+    let (_, result) = parse_content(content).unwrap();
     assert_eq!(result.len(), 2);
   }
 
   #[test]
   fn test_round_trip() {
     let content = "00:00:01.00,00:00:03.50\nHello\n\n00:00:04.00,00:00:06.50\nWorld\n";
-    let subs = parse_content(content).unwrap();
-    let output = to_string(&subs);
-    let reparsed = parse_content(&output).unwrap();
+    let (_, subs) = parse_content(content).unwrap();
+    let output = to_string(&subs, None);
+    let (_, reparsed) = parse_content(&output).unwrap();
     assert_eq!(subs.len(), reparsed.len());
     assert_eq!(subs[0].text, reparsed[0].text);
     assert_eq!(subs[0].start, reparsed[0].start);
@@ -141,7 +156,7 @@ mod tests {
 
   #[test]
   fn test_parse_empty() {
-    let result = parse_content("").unwrap();
+    let (_, result) = parse_content("").unwrap();
     assert!(result.is_empty());
   }
 }
