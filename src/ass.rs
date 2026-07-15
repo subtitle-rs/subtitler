@@ -1,4 +1,4 @@
-use crate::model::{AssStyle, Subtitle, SubtitleFile};
+use crate::model::{AssData, AssStyle, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use anyhow::anyhow;
 use regex::Regex;
@@ -166,11 +166,11 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
     }
   }
 
-  Ok(SubtitleFile::Ass {
+  Ok(SubtitleFile::Ass(AssData {
     info,
     styles,
     subtitles,
-  })
+  }))
 }
 
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {

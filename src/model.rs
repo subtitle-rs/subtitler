@@ -268,13 +268,7 @@ pub enum SubtitleFile {
     header: Option<String>,
     subtitles: Vec<Subtitle>,
   },
-  Ass {
-    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty", default)]
-    info: std::collections::HashMap<String, String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    styles: Vec<AssStyle>,
-    subtitles: Vec<Subtitle>,
-  },
+  Ass(AssData),
   Ssa(AssData),
 }
 
@@ -379,10 +373,7 @@ impl SubtitleFile {
       SubtitleFile::Vtt {
         subtitles: subs, ..
       } => subs,
-      SubtitleFile::Ass {
-        subtitles: subs, ..
-      } => subs,
-      SubtitleFile::Ssa(data) => &data.subtitles,
+      SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &data.subtitles,
     }
   }
 
@@ -392,10 +383,7 @@ impl SubtitleFile {
       SubtitleFile::Vtt {
         subtitles: subs, ..
       } => subs,
-      SubtitleFile::Ass {
-        subtitles: subs, ..
-      } => subs,
-      SubtitleFile::Ssa(data) => &mut data.subtitles,
+      SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &mut data.subtitles,
     }
   }
 
@@ -403,7 +391,7 @@ impl SubtitleFile {
     match self {
       SubtitleFile::Srt(_) => Format::Srt,
       SubtitleFile::Vtt { .. } => Format::Vtt,
-      SubtitleFile::Ass { .. } => Format::Ass,
+      SubtitleFile::Ass(_) => Format::Ass,
       SubtitleFile::Ssa(_) => Format::Ssa,
     }
   }
@@ -444,8 +432,9 @@ impl SubtitleFile {
       Format::Vtt => crate::vtt::to_string(subs, None),
       Format::Ass | Format::Ssa => {
         let (info, styles) = match self {
-          SubtitleFile::Ass { info, styles, .. } => (info.clone(), styles.clone()),
-          SubtitleFile::Ssa(data) => (data.info.clone(), data.styles.clone()),
+          SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => {
+            (data.info.clone(), data.styles.clone())
+          }
           _ => (
             std::collections::HashMap::new(),
             vec![crate::model::AssStyle::default_style()],
