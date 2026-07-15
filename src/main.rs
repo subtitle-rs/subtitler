@@ -3,8 +3,8 @@ mod types;
 
 use crate::types::AnyResult;
 use clap::Parser;
-use cli::{Commands, Format};
-use subtitler::model::{SubtitleFile, SubtitleFormat};
+use cli::{Commands, Format as CliFormat};
+use subtitler::model::{SubtitleFile, Format};
 use subtitler::{ass, srt, vtt};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -32,8 +32,8 @@ async fn main() -> AnyResult<()> {
 
 // ── Input helpers ──
 
-async fn read_input(input: &str) -> AnyResult<(Vec<u8>, Option<Format>)> {
-  let ext_format = Format::from_ext(input);
+async fn read_input(input: &str) -> AnyResult<(Vec<u8>, Option<CliFormat>)> {
+  let ext_format = CliFormat::from_ext(input);
 
   if input == "-" {
     let mut buf = Vec::new();
@@ -58,26 +58,26 @@ async fn read_input(input: &str) -> AnyResult<(Vec<u8>, Option<Format>)> {
   Ok((data, ext_format))
 }
 
-fn resolve_format(data: &[u8], hint: Option<Format>) -> Option<Format> {
+fn resolve_format(data: &[u8], hint: Option<CliFormat>) -> Option<CliFormat> {
   if let Some(f) = hint {
     return Some(f);
   }
   match subtitler::detect_format(data) {
-    Some(SubtitleFormat::Srt) => Some(Format::Srt),
-    Some(SubtitleFormat::Vtt) => Some(Format::Vtt),
-    Some(SubtitleFormat::Ass) => Some(Format::Ass),
-    Some(SubtitleFormat::Ssa) => Some(Format::Ssa),
-    Some(SubtitleFormat::MicroDvd) => Some(Format::MicroDvd),
-    Some(SubtitleFormat::SubViewer) => Some(Format::SubViewer),
+    Some(Format::Srt) => Some(CliFormat::Srt),
+    Some(Format::Vtt) => Some(CliFormat::Vtt),
+    Some(Format::Ass) => Some(CliFormat::Ass),
+    Some(Format::Ssa) => Some(CliFormat::Ssa),
+    Some(Format::MicroDvd) => Some(CliFormat::MicroDvd),
+    Some(Format::SubViewer) => Some(CliFormat::SubViewer),
     None => None,
   }
 }
 
-fn resolve_output_format(output: &str, hint: Option<Format>) -> AnyResult<Format> {
+fn resolve_output_format(output: &str, hint: Option<CliFormat>) -> AnyResult<CliFormat> {
   if let Some(f) = hint {
     return Ok(f);
   }
-  Format::from_ext(output).ok_or_else(|| {
+  CliFormat::from_ext(output).ok_or_else(|| {
     anyhow::anyhow!(
       "Cannot determine output format from '{}'. Use --to to specify.",
       output
@@ -85,26 +85,26 @@ fn resolve_output_format(output: &str, hint: Option<Format>) -> AnyResult<Format
   })
 }
 
-async fn parse_to_file(data: &[u8], format: Format) -> AnyResult<SubtitleFile> {
+async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
   let text = String::from_utf8(data.to_vec())?;
   match format {
-    Format::Srt => {
+    CliFormat::Srt => {
       let subs = srt::parse_content(&text).await?;
       Ok(SubtitleFile::Srt(subs))
     }
-    Format::Vtt => {
+    CliFormat::Vtt => {
       let (header, subs) = vtt::parse_content_full(&text).await?;
       Ok(SubtitleFile::Vtt {
         header,
         subtitles: subs,
       })
     }
-    Format::Ass | Format::Ssa => ass::parse_content(&text),
-    Format::MicroDvd => {
+    CliFormat::Ass | CliFormat::Ssa => ass::parse_content(&text),
+    CliFormat::MicroDvd => {
       let file = subtitler::microdvd::parse_content(&text, None)?;
       Ok(file)
     }
-    Format::SubViewer => {
+    CliFormat::SubViewer => {
       let subs = subtitler::subviewer::parse_content(&text)?;
       Ok(SubtitleFile::Srt(subs))
     }
@@ -120,13 +120,13 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
 
   let content = String::from_utf8(data.to_vec())?;
   let subs = match format {
-    Format::Srt => srt::parse_content(&content).await?,
-    Format::Vtt => vtt::parse_content(&content).await?,
-    Format::Ass | Format::Ssa => ass::parse_content(&content)?.subtitles().to_vec(),
-    Format::MicroDvd => subtitler::microdvd::parse_content(&content, None)?
+    CliFormat::Srt => srt::parse_content(&content).await?,
+    CliFormat::Vtt => vtt::parse_content(&content).await?,
+    CliFormat::Ass | CliFormat::Ssa => ass::parse_content(&content)?.subtitles().to_vec(),
+    CliFormat::MicroDvd => subtitler::microdvd::parse_content(&content, None)?
       .subtitles()
       .to_vec(),
-    Format::SubViewer => subtitler::subviewer::parse_content(&content)?,
+    CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?,
   };
 
   if args.json {
@@ -239,14 +239,14 @@ fn issue_kind(issue: &subtitler::model::ValidationIssue) -> &'static str {
   }
 }
 
-fn format_to_subtitle_format(f: &Format) -> SubtitleFormat {
+fn format_to_subtitle_format(f: &CliFormat) -> Format {
   match f {
-    Format::Srt => SubtitleFormat::Srt,
-    Format::Vtt => SubtitleFormat::Vtt,
-    Format::Ass => SubtitleFormat::Ass,
-    Format::Ssa => SubtitleFormat::Ssa,
-    Format::MicroDvd => SubtitleFormat::MicroDvd,
-    Format::SubViewer => SubtitleFormat::SubViewer,
+    CliFormat::Srt => Format::Srt,
+    CliFormat::Vtt => Format::Vtt,
+    CliFormat::Ass => Format::Ass,
+    CliFormat::Ssa => Format::Ssa,
+    CliFormat::MicroDvd => Format::MicroDvd,
+    CliFormat::SubViewer => Format::SubViewer,
   }
 }
 
@@ -357,12 +357,12 @@ async fn cmd_info(args: cli::InfoArgs) -> AnyResult<()> {
 async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
   let (data, _) = read_input(&args.input).await?;
   match subtitler::detect_format(&data) {
-    Some(SubtitleFormat::Srt) => println!("srt"),
-    Some(SubtitleFormat::Vtt) => println!("vtt"),
-    Some(SubtitleFormat::Ass) => println!("ass"),
-    Some(SubtitleFormat::Ssa) => println!("ssa"),
-    Some(SubtitleFormat::MicroDvd) => println!("microdvd"),
-    Some(SubtitleFormat::SubViewer) => println!("subviewer"),
+    Some(Format::Srt) => println!("srt"),
+    Some(Format::Vtt) => println!("vtt"),
+    Some(Format::Ass) => println!("ass"),
+    Some(Format::Ssa) => println!("ssa"),
+    Some(Format::MicroDvd) => println!("microdvd"),
+    Some(Format::SubViewer) => println!("subviewer"),
     None => {
       eprintln!("Unknown format");
       std::process::exit(1);

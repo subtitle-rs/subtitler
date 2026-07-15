@@ -11,9 +11,9 @@ pub mod types;
 pub mod utils;
 pub mod vtt;
 
-use model::SubtitleFormat;
+use model::Format;
 
-pub fn detect_format(data: &[u8]) -> Option<SubtitleFormat> {
+pub fn detect_format(data: &[u8]) -> Option<Format> {
   srt::detect_format(data)
     .or_else(|| vtt::detect_format(data))
     .or_else(|| ass::detect_format(data))

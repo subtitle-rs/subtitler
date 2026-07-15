@@ -12,7 +12,7 @@ static RE_SUBVIEWER_BRACKET: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"^\[(?:COLF|STYLE|SIZE|FONT|INFORMATION|TITLE|AUTHOR|SOURCE|FILEPATH|DELAY|COMMENT|END|SUBTITLE)").unwrap()
 });
 
-pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
+pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   if let Ok(text) = String::from_utf8(data.to_vec()) {
     for line in text.lines() {
       let trimmed = line.trim();
@@ -20,7 +20,7 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
         continue;
       }
       if RE_SUBVIEWER_LINE.is_match(trimmed) {
-        return Some(crate::model::SubtitleFormat::SubViewer);
+        return Some(crate::model::Format::SubViewer);
       }
       // If we see non-bracket, non-empty, non-timestamp content first, fail
       break;

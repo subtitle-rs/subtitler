@@ -247,7 +247,7 @@ fn test_ass_detect_format() {
   let data = b"[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nStyle: Default,...\n";
   assert_eq!(
     ass::detect_format(data),
-    Some(subtitler::model::SubtitleFormat::Ass)
+    Some(subtitler::model::Format::Ass)
   );
 }
 
@@ -524,7 +524,7 @@ fn test_subtitle_serde_round_trip() {
 fn test_detect_format_srt() {
   assert_eq!(
     subtitler::detect_format(b"1\n00:00:01,000 --> 00:00:03,500\nHello\n\n"),
-    Some(subtitler::model::SubtitleFormat::Srt)
+    Some(subtitler::model::Format::Srt)
   );
 }
 
@@ -532,7 +532,7 @@ fn test_detect_format_srt() {
 fn test_detect_format_vtt() {
   assert_eq!(
     subtitler::detect_format(b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n"),
-    Some(subtitler::model::SubtitleFormat::Vtt)
+    Some(subtitler::model::Format::Vtt)
   );
 }
 
@@ -540,7 +540,7 @@ fn test_detect_format_vtt() {
 fn test_detect_format_ass() {
   assert_eq!(
     subtitler::detect_format(b"[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nStyle: ...\n"),
-    Some(subtitler::model::SubtitleFormat::Ass)
+    Some(subtitler::model::Format::Ass)
   );
 }
 

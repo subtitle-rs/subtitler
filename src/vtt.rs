@@ -261,11 +261,11 @@ pub async fn parse_content_full(content: &str) -> AnyResult<(Option<String>, Vec
   parse(reader).await
 }
 
-pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
+pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   if let Ok(text) = String::from_utf8(data.to_vec())
     && text.trim().starts_with("WEBVTT")
   {
-    return Some(crate::model::SubtitleFormat::Vtt);
+    return Some(crate::model::Format::Vtt);
   }
   None
 }
@@ -440,6 +440,6 @@ mod tests {
   #[test]
   fn test_detect_format() {
     let data = b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
-    assert_eq!(detect_format(data), Some(crate::model::SubtitleFormat::Vtt));
+    assert_eq!(detect_format(data), Some(crate::model::Format::Vtt));
   }
 }

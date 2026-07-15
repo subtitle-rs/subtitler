@@ -17,14 +17,14 @@ static RE_INFO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([^:]+):\s*(.*)
 
 static RE_ASS_TAG_INLINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{([^}]*)\}").unwrap());
 
-pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
+pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   if let Ok(text) = String::from_utf8(data.to_vec())
     && text.contains("[Script Info]")
   {
     if text.contains("V4+ Styles") || text.contains("V4 Styles") {
-      return Some(crate::model::SubtitleFormat::Ass);
+      return Some(crate::model::Format::Ass);
     }
-    return Some(crate::model::SubtitleFormat::Ssa);
+    return Some(crate::model::Format::Ssa);
   }
   None
 }
@@ -433,7 +433,7 @@ mod tests {
   #[test]
   fn test_detect_format_ass() {
     let data = b"[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\n";
-    assert_eq!(detect_format(data), Some(crate::model::SubtitleFormat::Ass));
+    assert_eq!(detect_format(data), Some(crate::model::Format::Ass));
   }
 
   #[test]

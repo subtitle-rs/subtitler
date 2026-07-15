@@ -146,7 +146,7 @@ pub struct Timestamp {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub enum SubtitleFormat {
+pub enum Format {
   Srt,
   Vtt,
   Ass,
@@ -399,12 +399,12 @@ impl SubtitleFile {
     }
   }
 
-  pub fn format(&self) -> SubtitleFormat {
+  pub fn format(&self) -> Format {
     match self {
-      SubtitleFile::Srt(_) => SubtitleFormat::Srt,
-      SubtitleFile::Vtt { .. } => SubtitleFormat::Vtt,
-      SubtitleFile::Ass { .. } => SubtitleFormat::Ass,
-      SubtitleFile::Ssa(_) => SubtitleFormat::Ssa,
+      SubtitleFile::Srt(_) => Format::Srt,
+      SubtitleFile::Vtt { .. } => Format::Vtt,
+      SubtitleFile::Ass { .. } => Format::Ass,
+      SubtitleFile::Ssa(_) => Format::Ssa,
     }
   }
 
@@ -437,12 +437,12 @@ impl SubtitleFile {
     self.to_string_with_format(&self.format())
   }
 
-  pub fn to_string_with_format(&self, format: &SubtitleFormat) -> String {
+  pub fn to_string_with_format(&self, format: &Format) -> String {
     let subs = self.subtitles();
     match format {
-      SubtitleFormat::Srt => crate::srt::to_string(subs),
-      SubtitleFormat::Vtt => crate::vtt::to_string(subs, None),
-      SubtitleFormat::Ass | SubtitleFormat::Ssa => {
+      Format::Srt => crate::srt::to_string(subs),
+      Format::Vtt => crate::vtt::to_string(subs, None),
+      Format::Ass | Format::Ssa => {
         let (info, styles) = match self {
           SubtitleFile::Ass { info, styles, .. } => (info.clone(), styles.clone()),
           SubtitleFile::Ssa(data) => (data.info.clone(), data.styles.clone()),
@@ -453,8 +453,8 @@ impl SubtitleFile {
         };
         crate::ass::to_string(&info, &styles, subs)
       }
-      SubtitleFormat::MicroDvd => crate::microdvd::to_string(subs, None),
-      SubtitleFormat::SubViewer => crate::subviewer::to_string(subs),
+      Format::MicroDvd => crate::microdvd::to_string(subs, None),
+      Format::SubViewer => crate::subviewer::to_string(subs),
     }
   }
 

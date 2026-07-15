@@ -233,18 +233,18 @@ pub async fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   parse(reader).await
 }
 
-pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
+pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   if let Ok(text) = String::from_utf8(data.to_vec()) {
     let trimmed = text.trim();
     if !trimmed.is_empty() {
       if trimmed.starts_with("WEBVTT") {
-        return Some(crate::model::SubtitleFormat::Vtt);
+        return Some(crate::model::Format::Vtt);
       }
       if RE_SRT_DETECT.is_match(trimmed) {
-        return Some(crate::model::SubtitleFormat::Srt);
+        return Some(crate::model::Format::Srt);
       }
       if trimmed.contains("-->") {
-        return Some(crate::model::SubtitleFormat::Srt);
+        return Some(crate::model::Format::Srt);
       }
     }
   }
@@ -436,13 +436,13 @@ mod tests {
   #[test]
   fn test_detect_format_srt() {
     let data = b"1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
-    assert_eq!(detect_format(data), Some(crate::model::SubtitleFormat::Srt));
+    assert_eq!(detect_format(data), Some(crate::model::Format::Srt));
   }
 
   #[test]
   fn test_detect_format_vtt() {
     let data = b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
-    assert_eq!(detect_format(data), Some(crate::model::SubtitleFormat::Vtt));
+    assert_eq!(detect_format(data), Some(crate::model::Format::Vtt));
   }
 
   #[test]
