@@ -1,7 +1,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use subtitler::model::{Subtitle, SubtitleFile, frames_to_ms, ms_to_frames};
+use subtitler::model::{Subtitle, SubtitleFile, SubtitleFormat, frames_to_ms, ms_to_frames};
 use subtitler::{ass, srt, utils, vtt};
 
 // ── Utility Benchmarks ──
