@@ -28,63 +28,59 @@ cargo install subtitler
 
 ## Quick Start
 
-### Parse SRT content
+### Parse (any format, auto-detect)
+
+```rust
+// High-level entry points auto-detect the format.
+let data = std::fs::read("subtitle.srt")?;
+let file = subtitler::parse_bytes(&data)?;
+println!("{} subtitles, format: {:?}", file.subtitles().len(), file.format());
+
+// Or from a file / URL (async, real I/O):
+// let file = subtitler::parse_file("subtitle.srt").await?;
+// let file = subtitler::parse_url("https://example.com/sub.vtt").await?;
+```
+
+The high-level entry points require the `SubtitleFormat` trait to be in scope
+for methods like `subtitles()` / `validate()`:
+
+```rust
+use subtitler::SubtitleFormat; // brings trait methods into scope
+```
+
+### Parse a specific format (low-level)
 
 ```rust
 use subtitler::srt;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let content = "1\n00:00:01,000 --> 00:00:03,500\nHello, world!\n\n";
-    let subtitles = srt::parse_content(content).await?;
-    println!("{:?}", subtitles);
-    Ok(())
-}
+// Parsing cores are sync (they never did real async I/O).
+let content = "1\n00:00:01,000 --> 00:00:03,500\nHello, world!\n\n";
+let subtitles = srt::parse_content(content)?;
+println!("{:?}", subtitles);
 ```
-
-### Parse WebVTT content
 
 ```rust
 use subtitler::vtt;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello, world!\n\n";
-    let subtitles = vtt::parse_content(content).await?;
-    println!("{:?}", subtitles);
-    Ok(())
-}
+let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello, world!\n\n";
+let subtitles = vtt::parse_content(content)?;
 ```
-
-### Parse ASS/SSA content
 
 ```rust
 use subtitler::ass;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, ...\nStyle: Default,Arial,20,...\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,Hello!\n";
-    let file = ass::parse_content(content)?;
-    println!("{}", file.to_string());
-    Ok(())
-}
+let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, ...\nStyle: Default,Arial,20,...\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,Hello!\n";
+let file = ass::parse_content(content)?;
+println!("{}", file.to_string());
 ```
 
 ### Convert between formats
 
 ```rust
-use subtitler::{srt, vtt};
+use subtitler::SubtitleFormat;
+use subtitler::model::Format;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let content = std::fs::read_to_string("input.srt")?;
-    let subtitles = srt::parse_content(&content).await?;
-
-    // Convert to VTT string
-    let vtt_str = vtt::to_string(&subtitles, None);
-    std::fs::write("output.vtt", vtt_str)?;
-    Ok(())
-}
+let file = subtitler::parse_file("input.srt").await?;
+let vtt_str = file.to_string_with_format(&Format::Vtt);
+std::fs::write("output.vtt", vtt_str)?;
 ```
 
 ### Generate subtitle files
@@ -104,20 +100,45 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-### Auto-detect format
+### Detect format
 
 ```rust
 use subtitler::detect_format;
-use subtitler::model::SubtitleFormat;
+use subtitler::model::Format;
 
 let data = std::fs::read("unknown.sub")?;
 match detect_format(&data) {
-    Some(SubtitleFormat::Srt) => println!("SRT detected"),
-    Some(SubtitleFormat::Vtt) => println!("WebVTT detected"),
-    Some(SubtitleFormat::Ass) => println!("ASS/SSA detected"),
+    Some(Format::Srt) => println!("SRT detected"),
+    Some(Format::Vtt) => println!("WebVTT detected"),
+    Some(Format::Ass) => println!("ASS detected"),
+    Some(Format::Ssa) => println!("SSA detected"),
+    Some(Format::MicroDvd) => println!("MicroDVD detected"),
+    Some(Format::SubViewer) => println!("SubViewer detected"),
     None => println!("Unknown format"),
 }
 ```
+
+## Feature flags
+
+All formats are enabled by default. To trim compile size, disable the formats
+you don't need:
+
+```toml
+[dependencies]
+subtitler = { version = "1.0", default-features = false, features = ["srt", "vtt"] }
+```
+
+| Flag         | Format           |
+|--------------|------------------|
+| `srt`        | SubRip (`.srt`)  |
+| `vtt`        | WebVTT (`.vtt`)  |
+| `ass`        | Advanced SubStation Alpha (`.ass`) |
+| `ssa`        | SubStation Alpha (`.ssa`) |
+| `microdvd`   | MicroDVD (`.sub`)|
+| `subviewer`  | SubViewer        |
+| `http`       | `parse_url()` via `reqwest` |
+
+See `MIGRATION.md` for upgrading from 0.1.x.
 
 ## API Reference
 

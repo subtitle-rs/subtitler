@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-15
+
+### Added
+- `SubtitleFormat` trait consolidating editing methods (`shift_all`, `validate`,
+  `validate_extended`, `merge_adjacent`, `split_long`, `sort`, `map`, `filter`,
+  `remove_overlaps`, `enforce_min_duration`, `enforce_max_duration`,
+  `auto_extend_for_cps`, `extract_range`, `transform_framerate`) with default
+  implementations, so adding a format means implementing 4 required methods.
+- Unified parse entry points: `subtitler::parse_bytes`, `parse_file`,
+  `parse_url` with auto-format-detection.
+- `ParseError` typed error (`UnknownFormat` / `Unsupported` / `Decode` / `Io` /
+  `Http`).
+- Per-format Cargo feature flags (`srt`, `vtt`, `ass`, `ssa`, `microdvd`,
+  `subviewer`) for compile-size trimming.
+- `AssData` shared struct for ASS/SSA, and `SubtitleFile::Ssa` variant.
+- `microdvd::parse_bytes`, `subviewer::parse_bytes` per-format entry points.
+
+### Changed
+- **[BREAKING]** `SubtitleFormat` enum renamed to `Format`.
+- **[BREAKING]** `SubtitleFile` enum expanded to 6 variants. `MicroDvd` and
+  `SubViewer` are now first-class variants (previously collapsed into `Srt`,
+  losing fps/header). `Ass` now wraps `AssData`.
+- **[BREAKING]** `srt::parse_content`, `parse_bytes` and the `vtt::` equivalents
+  are now sync (not `async`). `parse_file`/`parse_url` remain async.
+- MicroDVD round-trip now preserves fps (emits a `{1}{1}fps` header when the
+  stored fps differs from the 23.976 default); SubViewer round-trip now
+  preserves the `[INFORMATION]` header block.
+
+### Removed
+- Implicit degradation of MicroDVD/SubViewer into the `Srt` variant.
+
+### See also
+- `MIGRATION.md` for a 0.1 → 1.0 upgrade guide.
+
+## [Unreleased]
+
 ## [0.1.0] - 2026-07-15
 
 ### Performance

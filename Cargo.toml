@@ -16,7 +16,7 @@ name = "subtitler"
 publish = true # no accidents while in dev
 readme = "README.md" 
 repository = "https://github.com/subtitle-rs/subtitler" 
-version = "0.1.0" 
+version = "1.0.0" 
 
 include = [
   "Cargo.toml",
