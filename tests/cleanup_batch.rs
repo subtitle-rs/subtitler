@@ -66,3 +66,33 @@ fn overlap_issues(file: &SubtitleFile) -> Vec<ValidationIssue> {
     .cloned()
     .collect()
 }
+
+#[test]
+fn srt_output_uses_positional_indices() {
+  // Stored indices are deliberately non-sequential; output must be 1, 2.
+  let mut a = Subtitle::new(1000, 2000, "first");
+  a.index = Some(99);
+  let mut b = Subtitle::new(3000, 4000, "second");
+  b.index = Some(1);
+  let out = subtitler::srt::to_string(&[a, b]);
+  assert!(
+    out.starts_with("1\n00:00:01,000 --> 00:00:02,000\nfirst"),
+    "expected positional index 1 first, got:\n{out}"
+  );
+  assert!(
+    out.contains("\n2\n00:00:03,000 --> 00:00:04,000\nsecond"),
+    "expected positional index 2 second, got:\n{out}"
+  );
+}
+
+#[test]
+fn vtt_output_uses_positional_indices() {
+  let mut a = Subtitle::new(1000, 2000, "first");
+  a.index = Some(42);
+  let out = subtitler::vtt::to_string(&[a], None);
+  // VTT cue identifier line should be "1", not "42".
+  assert!(
+    out.contains("\n1\n00:00:01.000 --> 00:00:02.000\nfirst"),
+    "expected positional index 1, got:\n{out}"
+  );
+}

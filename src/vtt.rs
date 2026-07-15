@@ -279,10 +279,9 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     String::from("WEBVTT\n\n")
   };
   for (i, subtitle) in subtitles.iter().enumerate() {
-    if let Some(index) = subtitle.index {
-      content.push_str(&index.to_string());
-      content.push('\n');
-    }
+    let position = i + 1;
+    content.push_str(&position.to_string());
+    content.push('\n');
     let mut timestamp = format!(
       "{} --> {}",
       format_timestamp(subtitle.start, "WebVTT"),
