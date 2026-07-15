@@ -6,8 +6,17 @@ use regex::Regex;
 #[cfg(feature = "http")]
 use reqwest;
 use std::io::Cursor;
+use std::sync::LazyLock;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+static RE_VTT_TAG: LazyLock<Regex> = LazyLock::new(|| {
+  Regex::new(concat!(
+    r"<v(?:\s+\w+)?>|</v>|",
+    r"</?(?:b|i|u|c)(?:\.[^>]*)?>"
+  ))
+  .unwrap()
+});
 
 #[derive(PartialEq)]
 enum Phase {
@@ -27,11 +36,7 @@ fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
   let mut voice: Option<String> = None;
   let mut last_end = 0;
 
-  let combined = format!(
-    "{}{}",
-    r"<v(?:\s+\w+)?>|</v>|", r"</?(?:b|i|u|c)(?:\.[^>]*)?>"
-  );
-  let re = Regex::new(&combined).unwrap();
+  let re = &RE_VTT_TAG;
 
   for caps in re.find_iter(text) {
     let tag = caps.as_str();

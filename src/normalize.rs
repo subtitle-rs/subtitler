@@ -32,6 +32,16 @@ static RE_SPEAKER_LABEL: LazyLock<Regex> =
 static RE_MUSIC_NOTE: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"[♪♫♬]").unwrap());
 
+static RE_OCR_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+  vec![
+    (Regex::new(r"\brn\b").unwrap(), "m"),
+    (Regex::new(r"(\d)rn(\w)").unwrap(), "${1}m${2}"),
+    (Regex::new(r"(\d)O(\d)").unwrap(), "${1}0${2}"),
+    (Regex::new(r"(\d)l(\d)").unwrap(), "${1}1${2}"),
+    (Regex::new(r"([a-z])0([a-z])").unwrap(), "${1}o${2}"),
+  ]
+});
+
 pub fn normalize_whitespace(text: &str) -> String {
   let lines: Vec<String> = text
     .lines()
@@ -65,17 +75,8 @@ pub fn normalize_punctuation(text: &str) -> String {
 
 pub fn fix_ocr_errors(text: &str) -> String {
   let mut result = text.to_string();
-  let patterns: &[(&str, &str)] = &[
-    (r"\brn\b", "m"),
-    (r"(\d)rn(\w)", "${1}m${2}"),
-    (r"(\d)O(\d)", "${1}0${2}"),
-    (r"(\d)l(\d)", "${1}1${2}"),
-    (r"([a-z])0([a-z])", "${1}o${2}"),
-  ];
-  for (pat, rep) in patterns {
-    if let Ok(re) = Regex::new(pat) {
-      result = re.replace_all(&result, *rep).to_string();
-    }
+  for (re, rep) in RE_OCR_PATTERNS.iter() {
+    result = re.replace_all(&result, *rep).to_string();
   }
   result
 }

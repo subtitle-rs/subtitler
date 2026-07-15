@@ -17,6 +17,9 @@ static RE_INFO: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"^([^:]+):\s*(.*)").unwrap()
 });
 
+static RE_ASS_TAG_INLINE: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"\{([^}]*)\}").unwrap());
+
 pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
   if let Ok(text) = String::from_utf8(data.to_vec())
     && text.contains("[Script Info]")
@@ -255,7 +258,7 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
   let mut color: Option<String> = None;
   let mut current = String::new();
 
-  let re = Regex::new(r"\{([^}]*)\}").unwrap();
+  let re = &RE_ASS_TAG_INLINE;
   let mut last_end = 0usize;
 
   for caps in re.captures_iter(text) {
@@ -328,8 +331,7 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
 }
 
 pub fn ass_to_plaintext(text: &str) -> String {
-  let re = Regex::new(r"\{[^}]*\}").unwrap();
-  let stripped = re.replace_all(text, "");
+  let stripped = RE_ASS_TAG_INLINE.replace_all(text, "");
   stripped
     .replace("\\N", "\n")
     .replace("\\n", "\n")

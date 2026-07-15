@@ -13,6 +13,10 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 static RE_SRT_TAG: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"</?(?:b|i|u|font)(?:\s[^>]*)?>").unwrap());
 
+static RE_SRT_DETECT: LazyLock<Regex> = LazyLock::new(|| {
+  Regex::new(r"^\d+\s*\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->").unwrap()
+});
+
 enum Phase {
   Index,
   Timestamp,
@@ -237,10 +241,7 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::SubtitleFormat> {
       if trimmed.starts_with("WEBVTT") {
         return Some(crate::model::SubtitleFormat::Vtt);
       }
-      if Regex::new(r"^\d+\s*\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->")
-        .unwrap()
-        .is_match(trimmed)
-      {
+      if RE_SRT_DETECT.is_match(trimmed) {
         return Some(crate::model::SubtitleFormat::Srt);
       }
       if trimmed.contains("-->") {
