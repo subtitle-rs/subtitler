@@ -249,6 +249,17 @@ pub fn format_ass_color(r: u8, g: u8, b: u8, a: u8) -> String {
   format!("&H{:08X}", value)
 }
 
+/// Shared ASS/SSA structure. Used by both the `Ass` (v4+) and `Ssa` (v4)
+/// variants of `SubtitleFile`, which differ only in their `format()` tag.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct AssData {
+  #[serde(skip_serializing_if = "std::collections::HashMap::is_empty", default)]
+  pub info: std::collections::HashMap<String, String>,
+  #[serde(skip_serializing_if = "Vec::is_empty", default)]
+  pub styles: Vec<AssStyle>,
+  pub subtitles: Vec<Subtitle>,
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum SubtitleFile {
   Srt(Vec<Subtitle>),
@@ -264,6 +275,7 @@ pub enum SubtitleFile {
     styles: Vec<AssStyle>,
     subtitles: Vec<Subtitle>,
   },
+  Ssa(AssData),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -370,6 +382,7 @@ impl SubtitleFile {
       SubtitleFile::Ass {
         subtitles: subs, ..
       } => subs,
+      SubtitleFile::Ssa(data) => &data.subtitles,
     }
   }
 
@@ -382,6 +395,7 @@ impl SubtitleFile {
       SubtitleFile::Ass {
         subtitles: subs, ..
       } => subs,
+      SubtitleFile::Ssa(data) => &mut data.subtitles,
     }
   }
 
@@ -390,6 +404,7 @@ impl SubtitleFile {
       SubtitleFile::Srt(_) => SubtitleFormat::Srt,
       SubtitleFile::Vtt { .. } => SubtitleFormat::Vtt,
       SubtitleFile::Ass { .. } => SubtitleFormat::Ass,
+      SubtitleFile::Ssa(_) => SubtitleFormat::Ssa,
     }
   }
 
@@ -430,6 +445,7 @@ impl SubtitleFile {
       SubtitleFormat::Ass | SubtitleFormat::Ssa => {
         let (info, styles) = match self {
           SubtitleFile::Ass { info, styles, .. } => (info.clone(), styles.clone()),
+          SubtitleFile::Ssa(data) => (data.info.clone(), data.styles.clone()),
           _ => (
             std::collections::HashMap::new(),
             vec![crate::model::AssStyle::default_style()],
