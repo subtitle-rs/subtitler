@@ -14,9 +14,9 @@ pub fn detect_encoding(data: &[u8]) -> &'static str {
   if std::str::from_utf8(data).is_ok() {
     return "UTF-8";
   }
-  let mut detector = chardetng::EncodingDetector::new();
+  let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
   detector.feed(data, true);
-  let (encoding, _confident) = detector.guess_assess(None, true);
+  let encoding = detector.guess(None, chardetng::Utf8Detection::Allow);
   encoding.name()
 }
 
