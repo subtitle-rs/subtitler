@@ -1,0 +1,24 @@
+use subtitler::model::{Subtitle, SubtitleFile};
+
+#[test]
+fn microdvd_roundtrips_fps() {
+  // {1}{1}30.000 declares fps=30; frames {30}{60} at 30fps = 1000-2000ms.
+  // After round-trip the fps must be preserved (not fall back to 23.976).
+  let content = "{1}{1}30.000\n{30}{60}Hello\n";
+  let file = subtitler::microdvd::parse_content(content, None).unwrap();
+  let out = file.to_string();
+  assert!(
+    out.contains("30.000"),
+    "fps header lost in round-trip; got:\n{out}"
+  );
+}
+
+#[test]
+fn microdvd_variant_preserves_fps_field() {
+  let content = "{1}{1}30.000\n{30}{60}Hello\n";
+  let file = subtitler::microdvd::parse_content(content, None).unwrap();
+  match file {
+    SubtitleFile::MicroDvd { fps, .. } => assert!((fps - 30.0).abs() < 0.001, "fps={fps}"),
+    other => panic!("expected MicroDvd variant, got {other:?}"),
+  }
+}

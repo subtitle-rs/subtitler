@@ -270,6 +270,10 @@ pub enum SubtitleFile {
   },
   Ass(AssData),
   Ssa(AssData),
+  MicroDvd {
+    fps: f64,
+    subtitles: Vec<Subtitle>,
+  },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -374,6 +378,7 @@ impl SubtitleFile {
         subtitles: subs, ..
       } => subs,
       SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &data.subtitles,
+      SubtitleFile::MicroDvd { subtitles: subs, .. } => subs,
     }
   }
 
@@ -384,6 +389,7 @@ impl SubtitleFile {
         subtitles: subs, ..
       } => subs,
       SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &mut data.subtitles,
+      SubtitleFile::MicroDvd { subtitles: subs, .. } => subs,
     }
   }
 
@@ -393,6 +399,7 @@ impl SubtitleFile {
       SubtitleFile::Vtt { .. } => Format::Vtt,
       SubtitleFile::Ass(_) => Format::Ass,
       SubtitleFile::Ssa(_) => Format::Ssa,
+      SubtitleFile::MicroDvd { .. } => Format::MicroDvd,
     }
   }
 
@@ -442,7 +449,21 @@ impl SubtitleFile {
         };
         crate::ass::to_string(&info, &styles, subs)
       }
-      Format::MicroDvd => crate::microdvd::to_string(subs, None),
+      Format::MicroDvd => {
+        let fps = match self {
+          SubtitleFile::MicroDvd { fps, .. } => Some(*fps),
+          _ => None,
+        };
+        // Emit the fps header line when the stored fps differs from the
+        // default, so round-trips preserve fps instead of silently falling
+        // back to 23.976 on re-parse.
+        match fps {
+          Some(f) if (f - crate::microdvd::DEFAULT_FPS).abs() > f64::EPSILON => {
+            crate::microdvd::to_string_with_fps_header(subs, f)
+          }
+          _ => crate::microdvd::to_string(subs, fps),
+        }
+      }
       Format::SubViewer => crate::subviewer::to_string(subs),
     }
   }

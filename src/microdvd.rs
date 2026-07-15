@@ -11,7 +11,7 @@ static RE_FPS_HEADER: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"\{(\d+)\}\{(\d+)\}(?:\s*\[(\d+(?:\.\d+)?)\])?\s*(\d+(?:\.\d+)?)").unwrap()
 });
 
-const DEFAULT_FPS: f64 = 23.976;
+pub const DEFAULT_FPS: f64 = 23.976;
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   if let Ok(text) = String::from_utf8(data.to_vec())
@@ -64,7 +64,10 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile>
     }
   }
 
-  Ok(SubtitleFile::Srt(subtitles))
+  Ok(SubtitleFile::MicroDvd {
+    fps: saved_fps,
+    subtitles,
+  })
 }
 
 pub fn to_string(subtitles: &[Subtitle], fps: Option<f64>) -> String {
