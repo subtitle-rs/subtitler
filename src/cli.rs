@@ -18,6 +18,10 @@ pub enum Format {
   SubViewer,
   #[cfg(feature = "ttml")]
   Ttml,
+  #[cfg(feature = "sbv")]
+  Sbv,
+  #[cfg(feature = "lrc")]
+  Lrc,
 }
 
 impl Format {
@@ -47,6 +51,14 @@ impl Format {
     if lower.ends_with(".ttml") || lower.ends_with(".xml") {
       return Some(Format::Ttml);
     }
+    #[cfg(feature = "sbv")]
+    if lower.ends_with(".sbv") {
+      return Some(Format::Sbv);
+    }
+    #[cfg(feature = "lrc")]
+    if lower.ends_with(".lrc") {
+      return Some(Format::Lrc);
+    }
     None
   }
 }
@@ -68,6 +80,10 @@ impl std::fmt::Display for Format {
       Format::SubViewer => write!(f, "subviewer"),
       #[cfg(feature = "ttml")]
       Format::Ttml => write!(f, "ttml"),
+      #[cfg(feature = "sbv")]
+      Format::Sbv => write!(f, "sbv"),
+      #[cfg(feature = "lrc")]
+      Format::Lrc => write!(f, "lrc"),
     }
   }
 }

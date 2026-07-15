@@ -161,6 +161,10 @@ pub enum Format {
   SubViewer,
   #[cfg(feature = "ttml")]
   Ttml,
+  #[cfg(feature = "sbv")]
+  Sbv,
+  #[cfg(feature = "lrc")]
+  Lrc,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -296,6 +300,10 @@ pub enum SubtitleFile {
     header: Option<String>,
     subtitles: Vec<Subtitle>,
   },
+  #[cfg(feature = "sbv")]
+  Sbv(Vec<Subtitle>),
+  #[cfg(feature = "lrc")]
+  Lrc(Vec<Subtitle>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -692,6 +700,10 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Ttml {
         subtitles: subs, ..
       } => subs,
+      #[cfg(feature = "sbv")]
+      SubtitleFile::Sbv(subs) => subs,
+      #[cfg(feature = "lrc")]
+      SubtitleFile::Lrc(subs) => subs,
     }
   }
 
@@ -719,6 +731,10 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Ttml {
         subtitles: subs, ..
       } => subs,
+      #[cfg(feature = "sbv")]
+      SubtitleFile::Sbv(subs) => subs,
+      #[cfg(feature = "lrc")]
+      SubtitleFile::Lrc(subs) => subs,
     }
   }
 
@@ -738,6 +754,10 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::SubViewer { .. } => Format::SubViewer,
       #[cfg(feature = "ttml")]
       SubtitleFile::Ttml { .. } => Format::Ttml,
+      #[cfg(feature = "sbv")]
+      SubtitleFile::Sbv(_) => Format::Sbv,
+      #[cfg(feature = "lrc")]
+      SubtitleFile::Lrc(_) => Format::Lrc,
     }
   }
 
@@ -784,6 +804,10 @@ impl SubtitleFormat for SubtitleFile {
         };
         crate::ttml::to_string(subs, header)
       }
+      #[cfg(feature = "sbv")]
+      Format::Sbv => crate::sbv::to_string(subs),
+      #[cfg(feature = "lrc")]
+      Format::Lrc => crate::lrc::to_string(subs),
     }
   }
 }

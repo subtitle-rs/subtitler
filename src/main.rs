@@ -82,6 +82,10 @@ fn resolve_format(data: &[u8], hint: Option<CliFormat>) -> Option<CliFormat> {
     Some(Format::SubViewer) => Some(CliFormat::SubViewer),
     #[cfg(feature = "ttml")]
     Some(Format::Ttml) => Some(CliFormat::Ttml),
+    #[cfg(feature = "sbv")]
+    Some(Format::Sbv) => Some(CliFormat::Sbv),
+    #[cfg(feature = "lrc")]
+    Some(Format::Lrc) => Some(CliFormat::Lrc),
     None => None,
   }
 }
@@ -139,6 +143,10 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
         subtitles: subs,
       })
     }
+    #[cfg(feature = "sbv")]
+    CliFormat::Sbv => Ok(SubtitleFile::Sbv(subtitler::sbv::parse_content(&text)?)),
+    #[cfg(feature = "lrc")]
+    CliFormat::Lrc => Ok(SubtitleFile::Lrc(subtitler::lrc::parse_content(&text)?)),
   }
 }
 
@@ -167,6 +175,10 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?.1,
     #[cfg(feature = "ttml")]
     CliFormat::Ttml => subtitler::ttml::parse_content(&content)?,
+    #[cfg(feature = "sbv")]
+    CliFormat::Sbv => subtitler::sbv::parse_content(&content)?,
+    #[cfg(feature = "lrc")]
+    CliFormat::Lrc => subtitler::lrc::parse_content(&content)?,
   };
 
   if args.json {
@@ -295,6 +307,10 @@ fn format_to_subtitle_format(f: &CliFormat) -> Format {
     CliFormat::SubViewer => Format::SubViewer,
     #[cfg(feature = "ttml")]
     CliFormat::Ttml => Format::Ttml,
+    #[cfg(feature = "sbv")]
+    CliFormat::Sbv => Format::Sbv,
+    #[cfg(feature = "lrc")]
+    CliFormat::Lrc => Format::Lrc,
   }
 }
 
@@ -419,6 +435,10 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
     Some(Format::SubViewer) => println!("subviewer"),
     #[cfg(feature = "ttml")]
     Some(Format::Ttml) => println!("ttml"),
+    #[cfg(feature = "sbv")]
+    Some(Format::Sbv) => println!("sbv"),
+    #[cfg(feature = "lrc")]
+    Some(Format::Lrc) => println!("lrc"),
     None => {
       eprintln!("Unknown format");
       std::process::exit(1);
