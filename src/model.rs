@@ -159,6 +159,8 @@ pub enum Format {
   MicroDvd,
   #[cfg(feature = "subviewer")]
   SubViewer,
+  #[cfg(feature = "ttml")]
+  Ttml,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -284,6 +286,12 @@ pub enum SubtitleFile {
   MicroDvd { fps: f64, subtitles: Vec<Subtitle> },
   #[cfg(feature = "subviewer")]
   SubViewer {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    header: Option<String>,
+    subtitles: Vec<Subtitle>,
+  },
+  #[cfg(feature = "ttml")]
+  Ttml {
     #[serde(skip_serializing_if = "Option::is_none")]
     header: Option<String>,
     subtitles: Vec<Subtitle>,
@@ -680,6 +688,10 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::SubViewer {
         subtitles: subs, ..
       } => subs,
+      #[cfg(feature = "ttml")]
+      SubtitleFile::Ttml {
+        subtitles: subs, ..
+      } => subs,
     }
   }
 
@@ -703,6 +715,10 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::SubViewer {
         subtitles: subs, ..
       } => subs,
+      #[cfg(feature = "ttml")]
+      SubtitleFile::Ttml {
+        subtitles: subs, ..
+      } => subs,
     }
   }
 
@@ -720,6 +736,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::MicroDvd { .. } => Format::MicroDvd,
       #[cfg(feature = "subviewer")]
       SubtitleFile::SubViewer { .. } => Format::SubViewer,
+      #[cfg(feature = "ttml")]
+      SubtitleFile::Ttml { .. } => Format::Ttml,
     }
   }
 
@@ -757,6 +775,14 @@ impl SubtitleFormat for SubtitleFile {
           _ => None,
         };
         crate::subviewer::to_string(subs, header)
+      }
+      #[cfg(feature = "ttml")]
+      Format::Ttml => {
+        let header = match self {
+          SubtitleFile::Ttml { header, .. } => header.as_deref(),
+          _ => None,
+        };
+        crate::ttml::to_string(subs, header)
       }
     }
   }

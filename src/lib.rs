@@ -11,6 +11,8 @@ pub mod normalize;
 pub mod srt;
 #[cfg(feature = "subviewer")]
 pub mod subviewer;
+#[cfg(feature = "ttml")]
+pub mod ttml;
 pub mod types;
 pub mod utils;
 #[cfg(feature = "vtt")]
@@ -34,6 +36,8 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| microdvd::detect_format(data));
   #[cfg(feature = "subviewer")]
   let f = f.or_else(|| subviewer::detect_format(data));
+  #[cfg(feature = "ttml")]
+  let f = f.or_else(|| ttml::detect_format(data));
   f
 }
 
@@ -73,6 +77,14 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
       let (header, subs) = subviewer::parse_bytes(data)?;
       Ok(model::SubtitleFile::SubViewer {
         header,
+        subtitles: subs,
+      })
+    }
+    #[cfg(feature = "ttml")]
+    Format::Ttml => {
+      let subs = ttml::parse_bytes(data)?;
+      Ok(model::SubtitleFile::Ttml {
+        header: None,
         subtitles: subs,
       })
     }

@@ -16,6 +16,8 @@ pub enum Format {
   #[cfg(feature = "subviewer")]
   #[value(name = "subviewer")]
   SubViewer,
+  #[cfg(feature = "ttml")]
+  Ttml,
 }
 
 impl Format {
@@ -41,6 +43,10 @@ impl Format {
     if lower.ends_with(".sub") {
       return Some(Format::MicroDvd);
     }
+    #[cfg(feature = "ttml")]
+    if lower.ends_with(".ttml") || lower.ends_with(".xml") {
+      return Some(Format::Ttml);
+    }
     None
   }
 }
@@ -60,6 +66,8 @@ impl std::fmt::Display for Format {
       Format::MicroDvd => write!(f, "microdvd"),
       #[cfg(feature = "subviewer")]
       Format::SubViewer => write!(f, "subviewer"),
+      #[cfg(feature = "ttml")]
+      Format::Ttml => write!(f, "ttml"),
     }
   }
 }

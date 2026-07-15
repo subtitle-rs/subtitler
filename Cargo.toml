@@ -30,6 +30,7 @@ include = [
 anyhow = "^1.0.103"
 chardetng = "^1.0.0"
 clap = {version = "^4.6.1", features = ["derive"]}
+quick-xml = {version = "^0.37", optional = true}
 regex = "^1.13.0"
 reqwest = {version = "0.13.4", optional = true}
 serde = {version = "^1.0.228", features = ["derive"]}
@@ -43,7 +44,7 @@ tracing-subscriber = "^0.3.23"
 criterion = "0.8.2"
 
 [features]
-default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "http"]
+default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "http"]
 
 srt = []
 vtt = []
@@ -51,6 +52,7 @@ ass = []
 ssa = []
 microdvd = []
 subviewer = []
+ttml = ["quick-xml"]
 http = ["reqwest"]
 
 [profile.release]

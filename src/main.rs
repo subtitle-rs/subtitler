@@ -80,6 +80,8 @@ fn resolve_format(data: &[u8], hint: Option<CliFormat>) -> Option<CliFormat> {
     Some(Format::MicroDvd) => Some(CliFormat::MicroDvd),
     #[cfg(feature = "subviewer")]
     Some(Format::SubViewer) => Some(CliFormat::SubViewer),
+    #[cfg(feature = "ttml")]
+    Some(Format::Ttml) => Some(CliFormat::Ttml),
     None => None,
   }
 }
@@ -129,6 +131,14 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
         subtitles: subs,
       })
     }
+    #[cfg(feature = "ttml")]
+    CliFormat::Ttml => {
+      let subs = subtitler::ttml::parse_content(&text)?;
+      Ok(SubtitleFile::Ttml {
+        header: None,
+        subtitles: subs,
+      })
+    }
   }
 }
 
@@ -155,6 +165,8 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
       .to_vec(),
     #[cfg(feature = "subviewer")]
     CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?.1,
+    #[cfg(feature = "ttml")]
+    CliFormat::Ttml => subtitler::ttml::parse_content(&content)?,
   };
 
   if args.json {
@@ -281,6 +293,8 @@ fn format_to_subtitle_format(f: &CliFormat) -> Format {
     CliFormat::MicroDvd => Format::MicroDvd,
     #[cfg(feature = "subviewer")]
     CliFormat::SubViewer => Format::SubViewer,
+    #[cfg(feature = "ttml")]
+    CliFormat::Ttml => Format::Ttml,
   }
 }
 
@@ -403,6 +417,8 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
     Some(Format::MicroDvd) => println!("microdvd"),
     #[cfg(feature = "subviewer")]
     Some(Format::SubViewer) => println!("subviewer"),
+    #[cfg(feature = "ttml")]
+    Some(Format::Ttml) => println!("ttml"),
     None => {
       eprintln!("Unknown format");
       std::process::exit(1);
