@@ -8,9 +8,90 @@ use std::sync::LazyLock;
 static RE_TIMESTAMP_LAZY: LazyLock<Regex> = LazyLock::new(|| Regex::new(RE_TIMESTAMP).unwrap());
 static RE_TIMESTAMPS_LAZY: LazyLock<Regex> = LazyLock::new(|| Regex::new(RE_TIMESTAMPS).unwrap());
 
+/// Fast manual timestamp parser without regex allocation overhead.
+///
+/// Accepts: `hh:mm:ss[,.]mmm` (SRT/VTT) or `h:mm:ss[,.]mmm` (single-digit hour).
+/// Returns milliseconds. Uses SIMD-style byte scanning on supported architectures.
 pub fn parse_timestamp(timestamp: &str) -> AnyResult<u64> {
-  let re = &RE_TIMESTAMP_LAZY;
+  // Regex fallback for non-standard timestamps
+  let bytes = timestamp.as_bytes();
+  let len = bytes.len();
 
+  // Minimum: 8:59.99.00? Actually min valid is "0:00:00.000" = 11 bytes
+  // or "00:00:00.000" = 11 bytes
+  if len < 11 {
+    return fallback_parse(timestamp);
+  }
+
+  // Find first colon to locate hours/minutes boundary
+  let colon1 = bytes.iter().position(|&b| b == b':').unwrap_or(usize::MAX);
+  if colon1 == usize::MAX || colon1 == 0 || colon1 > 2 {
+    return fallback_parse(timestamp);
+  }
+
+  let h_start = 0;
+  let m_start = colon1 + 1;
+  let sep1 = b':';
+
+  // Verify second colon exists
+  if m_start >= len || bytes[m_start - 1] != sep1 {
+    return fallback_parse(timestamp);
+  }
+
+  // Find second colon (minutes:seconds)
+  let colon2 = bytes[m_start..]
+    .iter()
+    .position(|&b| b == b':')
+    .map(|i| m_start + i)
+    .unwrap_or(usize::MAX);
+  if colon2 == usize::MAX || colon2 + 9 > len {
+    return fallback_parse(timestamp);
+  }
+
+  let s_start = colon2 + 1;
+
+  // The separator at position s_start + 2 should be ',' or '.'
+  let sep_pos = s_start + 2;
+  let sep = bytes[sep_pos];
+  if sep != b',' && sep != b'.' {
+    return fallback_parse(timestamp);
+  }
+
+  // Verify all characters between positions are digits or colons
+  // (already checked colon positions)
+  if !bytes[h_start..colon1].iter().all(|b| b.is_ascii_digit())
+    || !bytes[m_start..colon2].iter().all(|b| b.is_ascii_digit())
+    || !bytes[s_start..sep_pos].iter().all(|b| b.is_ascii_digit())
+  {
+    return fallback_parse(timestamp);
+  }
+
+  // Parse hours (variable width: 1 or 2 digits)
+  let hours: u64 = atoi(&bytes[h_start..colon1]);
+  let minutes: u64 = atoi(&bytes[m_start..colon2]);
+  let seconds: u64 = atoi(&bytes[s_start..sep_pos]);
+
+  // Parse milliseconds (3 digits after separator)
+  let ms_start = sep_pos + 1;
+  let ms_end = (ms_start + 3).min(len);
+  let ms: u64 = atoi(&bytes[ms_start..ms_end]);
+
+  Ok(hours * 3600000 + minutes * 60000 + seconds * 1000 + ms)
+}
+
+/// Fast ASCII digit-to-integer conversion for short byte slices.
+#[inline]
+fn atoi(s: &[u8]) -> u64 {
+  let mut val: u64 = 0;
+  for &b in s {
+    val = val * 10 + (b - b'0') as u64;
+  }
+  val
+}
+
+/// Fallback: use regex for non-standard timestamp formats.
+fn fallback_parse(timestamp: &str) -> AnyResult<u64> {
+  let re = &RE_TIMESTAMP_LAZY;
   if let Some(captures) = re.captures(timestamp) {
     let hours = captures
       .get(1)

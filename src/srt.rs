@@ -15,6 +15,7 @@ static RE_SRT_TAG: LazyLock<Regex> =
 static RE_SRT_DETECT: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"^\d+\s*\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->").unwrap());
 
+#[derive(Debug)]
 enum Phase {
   Index,
   Timestamp,
@@ -219,6 +220,130 @@ pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
 
 pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   parse(content)
+}
+
+/// Streaming SRT parser. Processes content incrementally, yielding subtitles
+/// one at a time without allocating a Vec. Useful for large files or streaming
+/// input where you want to process subtitles as they arrive.
+///
+/// ```ignore
+/// use subtitler::srt;
+/// let content = "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
+/// for sub in srt::parse_stream(content) {
+///     let sub = sub?;
+///     println!("{:?}", sub);
+/// }
+/// ```
+pub fn parse_stream<'a>(content: &'a str) -> SrtStream<'a> {
+  SrtStream::new(content)
+}
+
+/// An iterator over SRT subtitles. Yields `Result<Subtitle>` for each cue.
+#[derive(Debug)]
+pub struct SrtStream<'a> {
+  lines: std::str::Lines<'a>,
+  phase: Phase,
+  current_subtitle: Option<Subtitle>,
+  row: usize,
+}
+
+impl<'a> SrtStream<'a> {
+  fn new(content: &'a str) -> Self {
+    SrtStream {
+      lines: content.lines(),
+      phase: Phase::Index,
+      current_subtitle: None,
+      row: 0,
+    }
+  }
+}
+
+impl<'a> Iterator for SrtStream<'a> {
+  type Item = AnyResult<Subtitle>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    for line in self.lines.by_ref() {
+      self.row += 1;
+      let mut trimmed = line.trim().to_string();
+      // Strip BOM (only on first content line)
+      if self.row == 1 && !trimmed.is_empty() && trimmed.starts_with('\u{FEFF}') {
+        trimmed = trimmed.trim_start_matches('\u{FEFF}').to_string();
+      }
+
+      if trimmed.is_empty() {
+        if let Some(mut sub) = self.current_subtitle.take() {
+          let (plain, parts) = extract_text_parts(&sub.text);
+          sub.text = plain;
+          sub.text_parts = parts;
+          self.phase = Phase::Index;
+          return Some(Ok(sub));
+        }
+        self.phase = Phase::Index;
+        continue;
+      }
+
+      match self.phase {
+        Phase::Index => {
+          if let Ok(index) = trimmed.parse::<usize>() {
+            self.current_subtitle = Some(Subtitle {
+              index: Some(index),
+              start: 0,
+              end: 0,
+              text: String::new(),
+              settings: None,
+              text_parts: Vec::new(),
+              style: None,
+              actor: None,
+              layer: None,
+              margin_l: None,
+              margin_r: None,
+              margin_v: None,
+              effect: None,
+              is_comment: false,
+            });
+            self.phase = Phase::Timestamp;
+          } else if trimmed.contains("-->")
+            && let Some((start_str, end_str)) = trimmed.split_once(" --> ")
+          {
+            let start = parse_timestamp(start_str).ok();
+            let end = parse_timestamp(end_str).ok();
+            if let (Some(s), Some(e)) = (start, end) {
+              self.current_subtitle = Some(Subtitle::new(s, e, ""));
+              self.phase = Phase::Text;
+            }
+          }
+        }
+        Phase::Timestamp => {
+          if let Some(sub) = &mut self.current_subtitle
+            && let Some((start_str, end_str)) = trimmed.split_once(" --> ")
+            && let (Ok(s), Ok(e)) = (parse_timestamp(start_str), parse_timestamp(end_str))
+          {
+            sub.start = s;
+            sub.end = e;
+            self.phase = Phase::Text;
+          }
+        }
+        Phase::Text => {
+          if let Some(sub) = &mut self.current_subtitle {
+            if !sub.text.is_empty() {
+              sub.text.push('\n');
+            }
+            sub.text.push_str(&trimmed);
+          }
+        }
+      }
+    }
+
+    // Flush trailing subtitle
+    if let Some(mut sub) = self.current_subtitle.take() {
+      let (plain, parts) = extract_text_parts(&sub.text);
+      sub.text = plain;
+      sub.text_parts = parts;
+      return Some(Ok(sub));
+    }
+
+    None
+  }
 }
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
@@ -449,5 +574,18 @@ mod tests {
   fn test_subtitle_duration() {
     let sub = Subtitle::new(1000, 5000, "test");
     assert_eq!(sub.duration_ms(), 4000);
+  }
+
+  #[test]
+  fn test_stream() {
+    let content =
+      "1\n00:00:01,000 --> 00:00:03,500\nHello!\n\n2\n00:00:04,000 --> 00:00:06,500\nWorld!\n\n";
+    let results: Vec<_> = parse_stream(content)
+      .collect::<Result<Vec<_>, _>>()
+      .unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].start, 1000);
+    assert_eq!(results[0].text, "Hello!");
+    assert_eq!(results[1].text, "World!");
   }
 }
