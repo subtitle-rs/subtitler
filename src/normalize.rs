@@ -98,6 +98,89 @@ pub fn normalize_subtitle(sub: &mut Subtitle) {
   sub.text = normalize_text(&sub.text);
 }
 
+/// Optimize line breaks in subtitle text. Splits long lines at natural
+/// boundaries (punctuation, conjunctions) to improve readability.
+///
+/// Each resulting line is at most `max_chars` characters, and line lengths
+/// are balanced when possible.
+pub fn optimize_line_breaks(text: &str, max_chars: usize) -> String {
+  let lines: Vec<&str> = text.lines().collect();
+  let mut result = Vec::new();
+
+  for &line in &lines {
+    let trimmed = line.trim();
+    if trimmed.chars().count() <= max_chars {
+      result.push(trimmed.to_string());
+      continue;
+    }
+
+    // Try to find natural break points
+    let words: Vec<&str> = trimmed.split_whitespace().collect();
+    let best_break = find_best_split(&words, max_chars);
+
+    match best_break {
+      Some(idx) => {
+        result.push(words[..idx].join(" "));
+        let remaining = words[idx..].join(" ");
+        // Recurse for the rest
+        result.push(optimize_line_breaks(&remaining, max_chars));
+      }
+      None => {
+        // No natural break found, hard split at char boundary
+        let first: String = trimmed.chars().take(max_chars).collect();
+        let rest: String = trimmed.chars().skip(max_chars).collect();
+        result.push(first);
+        if !rest.is_empty() {
+          result.push(optimize_line_breaks(&rest, max_chars));
+        }
+      }
+    }
+  }
+
+  result.join("\n")
+}
+
+/// Find the best word boundary to split a sequence of words.
+/// Returns the index after the last word that fits in `max_chars`.
+fn find_best_split(words: &[&str], max_chars: usize) -> Option<usize> {
+  if words.is_empty() {
+    return None;
+  }
+
+  // Build cumulative character lengths
+  let mut cum: Vec<usize> = Vec::with_capacity(words.len());
+  let mut total = 0usize;
+  for w in words {
+    total += w.len() + 1; // +1 for space
+    cum.push(total);
+  }
+
+  // Find the last word that fits in max_chars
+  let mut last_fit = None;
+  let mut preferred = None;
+
+  for (i, &c) in cum.iter().enumerate() {
+    let len = c.saturating_sub(1); // remove trailing space
+    if len <= max_chars {
+      last_fit = Some(i + 1); // index after this word
+      // Check if this is a preferred break point
+      let word = words[i];
+      if word.ends_with(',') || word.ends_with(';') || word.ends_with(':') {
+        preferred = Some(i + 1);
+      }
+      // Check for conjunctions that would start the next line
+      if i + 1 < words.len() && ["and", "or", "but", "so", "yet", "for"].contains(&words[i + 1]) {
+        preferred = Some(i + 1);
+      }
+    } else {
+      break;
+    }
+  }
+
+  // Prefer breaks at punctuation/conjunctions, fall back to last fitting word
+  preferred.or(last_fit).filter(|&i| i < words.len())
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

@@ -306,7 +306,7 @@ pub enum SubtitleFile {
   Lrc(Vec<Subtitle>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum ValidationIssue {
   Overlap {
     index_a: usize,

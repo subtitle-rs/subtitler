@@ -9,6 +9,7 @@ pub mod lrc;
 pub mod microdvd;
 pub mod model;
 pub mod normalize;
+pub mod quality;
 #[cfg(feature = "sbv")]
 pub mod sbv;
 #[cfg(feature = "srt")]
