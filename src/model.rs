@@ -420,18 +420,20 @@ impl SubtitleFile {
       }
     }
 
-    for i in 0..subs.len() {
-      for j in (i + 1)..subs.len() {
-        if subs[j].start < subs[i].end {
-          issues.push(ValidationIssue::Overlap {
-            index_a: i,
-            index_b: j,
-            end_a: subs[i].end,
-            start_b: subs[j].start,
-          });
-        } else {
-          break;
-        }
+    // Overlap scan is independent of input ordering: sort a copy of the indices
+    // by (start, end) and compare only adjacent pairs in that order. Report the
+    // *original* indices so callers see their file's actual positions.
+    let mut order: Vec<usize> = (0..subs.len()).collect();
+    order.sort_by_key(|&i| (subs[i].start, subs[i].end));
+    for w in order.windows(2) {
+      let (a, b) = (w[0], w[1]);
+      if subs[b].start < subs[a].end {
+        issues.push(ValidationIssue::Overlap {
+          index_a: a,
+          index_b: b,
+          end_a: subs[a].end,
+          start_b: subs[b].start,
+        });
       }
     }
 
@@ -734,8 +736,9 @@ mod tests {
       Subtitle::new(1000, 2000, "first"),
     ]);
     let issues = file.validate();
-    assert_eq!(issues.len(), 2); // overlap + decreasing
-    assert!(issues.iter().any(|i| matches!(i, ValidationIssue::Overlap { .. })));
+    // These two subtitles do not overlap in time (1000-2000 vs 3000-5000),
+    // so the only issue is the decreasing start time.
+    assert_eq!(issues.len(), 1);
     assert!(issues.iter().any(|i| matches!(i, ValidationIssue::DecreasingStartTime { .. })));
   }
 
