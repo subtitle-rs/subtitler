@@ -101,9 +101,7 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
     }
   });
   let text = caps.get(16).map_or("", |m| m.as_str());
-  let is_comment = caps
-    .get(15)
-    .map_or(false, |m| m.as_str().contains("Comment"));
+  let is_comment = caps.get(15).is_some_and(|m| m.as_str().contains("Comment"));
 
   let mut subtitle = Subtitle::new(start, end, text);
   subtitle.style = style;

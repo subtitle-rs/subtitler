@@ -417,6 +417,7 @@ impl SubtitleFile {
     self
   }
 
+  #[allow(clippy::inherent_to_string)]
   pub fn to_string(&self) -> String {
     self.to_string_with_format(&self.format())
   }

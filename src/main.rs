@@ -281,11 +281,11 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
     ops += 1;
   }
 
-  if let Some(fps_pair) = args.transform_fps {
-    if fps_pair.len() == 2 {
-      file.transform_framerate(fps_pair[0], fps_pair[1]);
-      ops += 1;
-    }
+  if let Some(fps_pair) = args.transform_fps
+    && fps_pair.len() == 2
+  {
+    file.transform_framerate(fps_pair[0], fps_pair[1]);
+    ops += 1;
   }
 
   if ops == 0 {

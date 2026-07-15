@@ -36,15 +36,15 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile>
     }
 
     // Check for FPS declaration in a comment-like format or first line
-    if subtitles.is_empty() {
-      if let Some(caps) = RE_FPS_HEADER.captures(trimmed) {
-        let fps_str = caps
-          .get(3)
-          .map_or_else(|| caps[4].to_string(), |m| m.as_str().to_string());
-        if let Ok(f) = fps_str.parse::<f64>() {
-          saved_fps = f;
-          continue;
-        }
+    if subtitles.is_empty()
+      && let Some(caps) = RE_FPS_HEADER.captures(trimmed)
+    {
+      let fps_str = caps
+        .get(3)
+        .map_or_else(|| caps[4].to_string(), |m| m.as_str().to_string());
+      if let Ok(f) = fps_str.parse::<f64>() {
+        saved_fps = f;
+        continue;
       }
     }
 

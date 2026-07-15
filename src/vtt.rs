@@ -145,11 +145,7 @@ where
 
     match phase {
       Phase::Header => {
-        if trimmed.starts_with("WEBVTT") {
-          header_lines.push(trimmed);
-        } else {
-          header_lines.push(trimmed);
-        }
+        header_lines.push(trimmed);
       }
       Phase::VttComment => {
         if trimmed.starts_with("NOTE") {
