@@ -1,4 +1,4 @@
-use subtitler::model::{Subtitle, SubtitleFile};
+use subtitler::model::SubtitleFile;
 
 #[test]
 fn microdvd_roundtrips_fps() {

@@ -383,8 +383,12 @@ impl SubtitleFile {
         subtitles: subs, ..
       } => subs,
       SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &data.subtitles,
-      SubtitleFile::MicroDvd { subtitles: subs, .. } => subs,
-      SubtitleFile::SubViewer { subtitles: subs, .. } => subs,
+      SubtitleFile::MicroDvd {
+        subtitles: subs, ..
+      } => subs,
+      SubtitleFile::SubViewer {
+        subtitles: subs, ..
+      } => subs,
     }
   }
 
@@ -395,8 +399,12 @@ impl SubtitleFile {
         subtitles: subs, ..
       } => subs,
       SubtitleFile::Ass(data) | SubtitleFile::Ssa(data) => &mut data.subtitles,
-      SubtitleFile::MicroDvd { subtitles: subs, .. } => subs,
-      SubtitleFile::SubViewer { subtitles: subs, .. } => subs,
+      SubtitleFile::MicroDvd {
+        subtitles: subs, ..
+      } => subs,
+      SubtitleFile::SubViewer {
+        subtitles: subs, ..
+      } => subs,
     }
   }
 

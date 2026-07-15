@@ -4,7 +4,7 @@ mod types;
 use crate::types::AnyResult;
 use clap::Parser;
 use cli::{Commands, Format as CliFormat};
-use subtitler::model::{SubtitleFile, Format};
+use subtitler::model::{Format, SubtitleFile};
 use subtitler::{ass, srt, vtt};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -106,7 +106,10 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     }
     CliFormat::SubViewer => {
       let (header, subs) = subtitler::subviewer::parse_content(&text)?;
-      Ok(SubtitleFile::SubViewer { header, subtitles: subs })
+      Ok(SubtitleFile::SubViewer {
+        header,
+        subtitles: subs,
+      })
     }
   }
 }
