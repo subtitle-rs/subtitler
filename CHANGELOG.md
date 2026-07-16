@@ -4,7 +4,54 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.10.0] - 2026-07-16
+
+### Added
+- `parse_url_with(url, &client)` for custom `reqwest::Client` configuration.
+- `Subtitle::with_index`, `with_style`, `with_settings`, `with_layer` builder methods.
+- `encoding_rs`-based true decoding for GBK, Shift_JIS, Big5 (was failing).
+- `optimize_line_breaks` text wrapping utility.
+- `SubtitleFile` variant doc comments (all 9 formats documented).
+- `srt::parse_stream` for incremental SRT parsing.
+- 10 new examples (stream-parse, quality-report, normalize-text, etc.).
+- CLI commands: `quality`, `normalize`, `shift`.
+- `parse_url_with(url, &client)` for custom HTTP client configuration.
+- Subtitle builder methods: `with_index`, `with_style`, `with_settings`, `with_layer`.
+- `encoding_rs`-based decoding for GBK/Shift_JIS/Big5 (was failing on non-UTF-8).
+
+### Changed
+- **[BREAKING]** `reqwest` now uses `default-features = false, features = ["rustls"]`.
+- **[BREAKING]** `tokio` features trimmed: `["fs", "io-util", "rt", "macros"]`; all `#[tokio::main]` use `current_thread` flavor.
+- `parse_url` generates its own client (was `reqwest::get`).
+- `microdvd::parse_bytes` returns `SubtitleFile` (was `(f64, Vec<Subtitle>)`).
+- SRT `parse_stream` returns `Err` on malformed timestamps (was silently skipping).
+- SubViewer centiseconds: rejects >2-digit fractional parts.
+- `optimize_line_breaks` rewritten from recursion to loop (stack-safe).
+- `extract_text_parts` skips regex when no `<` character present.
+- VTT NOTE blocks: correctly exit to `Cue` state after the block.
+- VTT voice speaker name: extracts actual name (`<v Alice>` → `"Alice"`).
+- TTML: `<br/>`, `dur`, `tts:fontStyle`/`fontWeight`, namespace-agnostic parsing.
+- `chars_per_second` counts plaintext (was counting tags).
+
+### Fixed
+- ASS `is_comment`: was reading wrong capture group (15→14).
+- SubViewer: `00:00:01.500` incorrectly parsed as 5000ms (now validated).
+- LRC: 5-second default duration instead of zero.
+- SBV `detect_format`: tightened to prevent false positives on SRT content.
+- VTT: header preserved through unified entry point.
+- MicroDVD FPS round-trip: emit fps header when non-default.
+- `RE_TIMESTAMP` regex bounded (`\d{1,}`→`\d{1,4}`) to prevent ReDoS.
+- `main.rs`: tracing subscriber no longer panics on double-init.
+- `optimize_line_breaks` line ordering (LIFO→FIFO queue).
+
+### Performance
+- Byte-scanning timestamp parser (replaces regex on hot path).
+- `LazyLock`-cached regexes (zero compile-time overhead).
+- `SrtStream` streaming iterator (no Vec allocation).
+- Quick skip in `extract_text_parts` when no tags present.
+
+### Removed
+- Example `utility-ops` (superseded by `edit-operations` + `validate-subtitle`).
 
 ## [1.0.0] - 2026-07-16
 
