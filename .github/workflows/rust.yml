@@ -12,9 +12,6 @@ env:
 jobs:
   fmt:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: subtitler
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -22,9 +19,6 @@ jobs:
 
   clippy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: subtitler
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -39,9 +33,6 @@ jobs:
           - ""
           - "--no-default-features"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: subtitler
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -55,9 +46,6 @@ jobs:
           - ""
           - "--no-default-features"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: subtitler
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
