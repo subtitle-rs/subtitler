@@ -66,7 +66,10 @@ fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
       "</u>" | "</u.c1>" | "</u.c2>" => underline = false,
       "</c>" | "</c.c>" | "</c.c1>" | "</c.c2>" => {}
       _ if tag.starts_with("<v") => {
-        voice = Some("v".to_string());
+        // Extract speaker name: <v Alice> → "Alice", <v> → "unknown"
+        let inner = &tag[2..tag.len().saturating_sub(1)];
+        let name = inner.split_whitespace().next().unwrap_or("unknown");
+        voice = Some(name.to_string());
       }
       _ if tag.starts_with("<b") => bold = true,
       _ if tag.starts_with("<i") => italic = true,
@@ -132,7 +135,8 @@ fn parse(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
         header_lines.clear();
       }
       phase = match phase {
-        Phase::VttComment => Phase::VttComment,
+        Phase::VttComment => Phase::Cue,
+        Phase::Header => Phase::Cue,
         _ => Phase::Cue,
       };
       continue;
@@ -143,20 +147,7 @@ fn parse(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
         header_lines.push(trimmed);
       }
       Phase::VttComment => {
-        if trimmed.starts_with("NOTE") {
-        } else if trimmed.contains("-->") {
-          let timestamp = parse_timestamps(&trimmed)?;
-          let mut subtitle = Subtitle::new(timestamp.start, timestamp.end, "");
-          subtitle.settings = timestamp.settings;
-          current_subtitle = Some(subtitle);
-          phase = Phase::Text;
-        } else {
-          let index = trimmed.parse::<usize>().ok();
-          let mut subtitle = Subtitle::new(0, 0, "");
-          subtitle.index = index;
-          current_subtitle = Some(subtitle);
-          phase = Phase::Timestamp;
-        }
+        // Inside a NOTE block — skip all content until blank line (handled above)
       }
       Phase::Cue => {
         if trimmed.starts_with("WEBVTT") {
@@ -433,5 +424,30 @@ mod tests {
   fn test_detect_format() {
     let data = b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
     assert_eq!(detect_format(data), Some(crate::model::Format::Vtt));
+  }
+
+  #[test]
+  fn test_parse_note_block() {
+    // NOTE blocks must be skipped, and subtitles after them must still parse
+    let content = "WEBVTT\n\nNOTE\nThis is a comment\nspanning multiple lines\n\n1\n00:00:01.000 --> 00:00:03.500\nAfter note\n\n";
+    let result = parse_content(content).unwrap();
+    assert_eq!(result.len(), 1, "subtitle after NOTE block was lost");
+    assert_eq!(result[0].text, "After note");
+  }
+
+  #[test]
+  fn test_parse_voice_speaker_name() {
+    let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\n<v Alice>Hello</v>\n\n";
+    let result = parse_content(content).unwrap();
+    assert_eq!(result[0].text_parts[0].voice, Some("Alice".to_string()));
+  }
+
+  #[test]
+  fn test_parse_bytes_full_preserves_header() {
+    let data =
+      b"WEBVTT\nKind: captions\nLanguage: en\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
+    let (header, subs) = parse_bytes_full(data.as_ref()).unwrap();
+    assert!(header.as_deref().unwrap().contains("Kind: captions"));
+    assert_eq!(subs.len(), 1);
   }
 }

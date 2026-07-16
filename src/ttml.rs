@@ -13,13 +13,28 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 use std::io::Cursor;
 
+/// Parse a TTML time value to milliseconds.
+/// Supports: `hh:mm:ss.mmm`, `hh:mm:ss,mmm`, or seconds like `12.5s`.
 fn ttml_to_ms(attr: &str) -> Option<u64> {
-  // Accept hh:mm:ss.mmm or hh:mm:ss,mmm or offset format
+  let attr = attr.trim();
   if attr.contains(':') {
     return parse_timestamp(attr).ok();
   }
-  // Could add frame-based parsing here later
-  None
+  // Handle "123.456s" format (seconds with optional 's' suffix)
+  let num_str = attr.strip_suffix('s').unwrap_or(attr);
+  num_str
+    .parse::<f64>()
+    .ok()
+    .map(|secs| (secs * 1000.0).round() as u64)
+}
+
+/// Extract the local name from a potentially namespaced tag.
+/// `tt:p` → `p`, `p` → `p`
+fn local_name(name: &[u8]) -> &[u8] {
+  match name.iter().position(|&b| b == b':') {
+    Some(pos) => &name[pos + 1..],
+    None => name,
+  }
 }
 
 /// Parse TTML content into a vector of subtitles.
@@ -35,73 +50,106 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   let mut current_text = String::new();
   let mut parts: Vec<TextPart> = Vec::new();
   let mut in_span = false;
-  // Track span-level styling (simplified: only tts:color for now)
+  let mut span_bold = false;
+  let mut span_italic = false;
   let mut span_color: Option<String> = None;
 
   loop {
     match reader.read_event_into(&mut buf) {
-      Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
-        let tag = e.name().as_ref().to_vec();
+      Ok(Event::Start(ref e)) => {
+        let tag = local_name(e.name().as_ref()).to_vec();
         match tag.as_slice() {
-          b"p" | b"tt:p" => {
+          b"p" => {
             in_p = true;
             current_text.clear();
             parts.clear();
-            // Parse begin/end
-            if let Some(b) = e
-              .attributes()
-              .flatten()
-              .find(|a| a.key.as_ref() == b"begin" || a.key.as_ref() == b"tts:begin")
-            {
-              current_start = ttml_to_ms(&String::from_utf8_lossy(&b.value));
-            }
-            if let Some(e_attr) = e
-              .attributes()
-              .flatten()
-              .find(|a| a.key.as_ref() == b"end" || a.key.as_ref() == b"tts:end")
-            {
-              current_end = ttml_to_ms(&String::from_utf8_lossy(&e_attr.value));
+            current_start = None;
+            current_end = None;
+            for attr in e.attributes().flatten() {
+              let key = local_name(attr.key.as_ref());
+              let val = String::from_utf8_lossy(&attr.value);
+              match key {
+                b"begin" => current_start = ttml_to_ms(&val),
+                b"end" => current_end = ttml_to_ms(&val),
+                b"dur" if current_end.is_none() => {
+                  if let (Some(s), Some(d)) = (current_start, ttml_to_ms(&val)) {
+                    current_end = Some(s + d);
+                  }
+                }
+                _ => {}
+              }
             }
           }
-          b"span" | b"tt:span" => {
+          b"span" => {
             in_span = true;
-            span_color = e
-              .attributes()
-              .flatten()
-              .find(|a| {
-                let k = a.key.as_ref();
-                k == b"tts:color" || k == b"color"
-              })
-              .map(|a| String::from_utf8_lossy(&a.value).to_string());
+            span_bold = false;
+            span_italic = false;
+            span_color = None;
+            for attr in e.attributes().flatten() {
+              let key = local_name(attr.key.as_ref());
+              let val = String::from_utf8_lossy(&attr.value);
+              match key {
+                b"color" => span_color = Some(val.to_string()),
+                b"fontWeight" => span_bold = val == "bold",
+                b"fontStyle" => span_italic = val == "italic",
+                _ => {}
+              }
+            }
+          }
+          b"br" if in_p => {
+            current_text.push('\n');
           }
           _ => {}
+        }
+      }
+      Ok(Event::Empty(ref e)) => {
+        let tag = local_name(e.name().as_ref()).to_vec();
+        if tag.as_slice() == b"br" && in_p {
+          current_text.push('\n');
+        } else if tag.as_slice() == b"p" {
+          // Self-closing <p/> — parse begin/end/dur from attributes
+          let mut start = None;
+          let mut end = None;
+          for attr in e.attributes().flatten() {
+            let key = local_name(attr.key.as_ref());
+            let val = String::from_utf8_lossy(&attr.value);
+            match key {
+              b"begin" => start = ttml_to_ms(&val),
+              b"end" => end = ttml_to_ms(&val),
+              b"dur" if end.is_none() => {
+                if let (Some(s), Some(d)) = (start, ttml_to_ms(&val)) {
+                  end = Some(s + d);
+                }
+              }
+              _ => {}
+            }
+          }
+          if let (Some(s), Some(e)) = (start, end) {
+            subtitles.push(Subtitle::new(s, e, ""));
+          }
         }
       }
       Ok(Event::Text(ref e)) => {
         let text = e.unescape()?;
         if in_p && !text.trim().is_empty() {
-          if in_span && !text.trim().is_empty() {
-            let segment = text.to_string();
-            current_text.push_str(&segment);
+          let segment = text.to_string();
+          current_text.push_str(&segment);
+          if in_span || span_bold || span_italic || span_color.is_some() {
             parts.push(TextPart {
               text: segment,
-              bold: false,
-              italic: false,
+              bold: span_bold,
+              italic: span_italic,
               underline: false,
               color: span_color.clone(),
               voice: None,
             });
-          } else if !in_span && !text.trim().is_empty() {
-            let segment = text.to_string();
-            current_text.push_str(&segment);
-            parts.push(TextPart::plain(segment));
           }
         }
       }
       Ok(Event::End(ref e)) => {
-        let tag = e.name().as_ref().to_vec();
+        let tag = local_name(e.name().as_ref()).to_vec();
         match tag.as_slice() {
-          b"p" | b"tt:p" => {
+          b"p" => {
             if let (Some(start), Some(end)) = (current_start, current_end) {
               let mut sub = Subtitle::new(start, end, &current_text);
               sub.text_parts = std::mem::take(&mut parts);
@@ -111,8 +159,10 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
             current_start = None;
             current_end = None;
           }
-          b"span" | b"tt:span" => {
+          b"span" => {
             in_span = false;
+            span_bold = false;
+            span_italic = false;
             span_color = None;
           }
           _ => {}
@@ -237,7 +287,8 @@ mod tests {
     assert_eq!(subs[1].start, 4000);
     assert_eq!(subs[1].end, 6500);
     assert_eq!(subs[1].text, "Colored text");
-    assert_eq!(subs[1].text_parts.len(), 2);
+    // Only the styled span creates a TextPart; plain trailing text doesn't
+    assert_eq!(subs[1].text_parts.len(), 1);
     assert_eq!(subs[1].text_parts[0].color, Some("yellow".to_string()));
   }
 
@@ -258,5 +309,48 @@ mod tests {
   fn test_detect() {
     assert!(detect_format(b"<tt xmlns='http://www.w3.org/ns/ttml'>").is_some());
     assert!(detect_format(b"WEBVTT").is_none());
+  }
+
+  #[test]
+  fn test_parse_br_tag() {
+    let xml = r#"<?xml version="1.0"?>
+<tt xmlns="http://www.w3.org/ns/ttml"><body><div>
+<p begin="00:00:01.000" end="00:00:03.500">Line one<br/>Line two</p>
+</div></body></tt>"#;
+    let subs = parse_content(xml).unwrap();
+    assert_eq!(subs.len(), 1);
+    assert_eq!(subs[0].text, "Line one\nLine two");
+  }
+
+  #[test]
+  fn test_parse_dur_attribute() {
+    let xml = r#"<?xml version="1.0"?>
+<tt xmlns="http://www.w3.org/ns/ttml"><body><div>
+<p begin="00:00:01.000" dur="2.5s">Duration test</p>
+</div></body></tt>"#;
+    let subs = parse_content(xml).unwrap();
+    assert_eq!(subs.len(), 1);
+    assert_eq!(subs[0].start, 1000);
+    assert_eq!(subs[0].end, 3500); // 1000 + 2500
+  }
+
+  #[test]
+  fn test_parse_font_style() {
+    let xml = r#"<?xml version="1.0"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling"><body><div>
+<p begin="00:00:01.000" end="00:00:03.500"><span tts:fontStyle="italic" tts:fontWeight="bold">Styled</span></p>
+</div></body></tt>"#;
+    let subs = parse_content(xml).unwrap();
+    assert_eq!(subs.len(), 1);
+    assert_eq!(subs[0].text_parts.len(), 1);
+    assert!(subs[0].text_parts[0].italic);
+    assert!(subs[0].text_parts[0].bold);
+  }
+
+  #[test]
+  fn test_parse_seconds_format() {
+    assert_eq!(ttml_to_ms("5s"), Some(5000));
+    assert_eq!(ttml_to_ms("2.5s"), Some(2500));
+    assert_eq!(ttml_to_ms("00:00:05.000"), Some(5000));
   }
 }
