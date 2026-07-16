@@ -106,10 +106,14 @@ pub fn normalize_subtitle(sub: &mut Subtitle) {
 pub fn optimize_line_breaks(text: &str, max_chars: usize) -> String {
   let mut result_parts: Vec<String> = Vec::new();
   let mut queue: Vec<String> = text.lines().map(|l| l.trim().to_string()).collect();
+  // Process front-to-back (FIFO)
+  let mut idx = 0;
 
-  while let Some(line) = queue.pop() {
+  while idx < queue.len() {
+    let line = std::mem::take(&mut queue[idx]);
     if line.chars().count() <= max_chars {
       result_parts.push(line);
+      idx += 1;
       continue;
     }
 
@@ -118,23 +122,29 @@ pub fn optimize_line_breaks(text: &str, max_chars: usize) -> String {
     let best_break = find_best_split(&words, max_chars);
 
     match best_break {
-      Some(idx) => {
-        result_parts.push(words[..idx].join(" "));
-        queue.push(words[idx..].join(" "));
+      Some(split_idx) => {
+        result_parts.push(words[..split_idx].join(" "));
+        let remaining = words[split_idx..].join(" ");
+        if remaining.is_empty() {
+          idx += 1; // nothing left, advance
+        } else {
+          queue[idx] = remaining; // process remainder next iteration
+        }
       }
       None => {
         // No natural break found, hard split at char boundary
         let first: String = line.chars().take(max_chars).collect();
         let rest: String = line.chars().skip(max_chars).collect();
         result_parts.push(first);
-        if !rest.is_empty() {
-          queue.push(rest);
+        if rest.is_empty() {
+          idx += 1;
+        } else {
+          queue[idx] = rest;
         }
       }
     }
   }
 
-  result_parts.reverse();
   result_parts.join("\n")
 }
 
@@ -267,4 +277,12 @@ mod tests {
       );
     }
   }
+}
+
+#[cfg(test)]
+#[test]
+fn test_optimize_line_breaks_order() {
+  let result = optimize_line_breaks("abc def ghijklmnop", 5);
+  assert_eq!(result, "abc\ndef\nghijk\nlmnop",
+    "got: {:?} — lines are in wrong order", result);
 }
