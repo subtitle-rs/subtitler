@@ -52,7 +52,10 @@ pub fn decode_to_string(data: &[u8]) -> AnyResult<String> {
         }
         Ok(cow.into_owned())
       } else {
-        anyhow::bail!("Cannot decode encoding '{}'. Try converting to UTF-8 first.", encoding)
+        anyhow::bail!(
+          "Cannot decode encoding '{}'. Try converting to UTF-8 first.",
+          encoding
+        )
       }
     }
   }

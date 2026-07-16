@@ -1,4 +1,4 @@
-use crate::model::Subtitle;
+use crate::model::{Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use anyhow::anyhow;
 use regex::Regex;
@@ -54,7 +54,7 @@ fn parse_subviewer_time(ts: &str) -> AnyResult<u64> {
   Ok(h * 3600000 + m * 60000 + s * 1000 + ms)
 }
 
-pub fn parse_content(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut subtitles = Vec::new();
   let mut pending_timestamp: Option<(u64, u64)> = None;
   let mut header_lines: Vec<String> = Vec::new();
@@ -90,26 +90,24 @@ pub fn parse_content(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)
     Some(header_lines.join("\n"))
   };
 
-  Ok((header, subtitles))
+  Ok(SubtitleFile::SubViewer { header, subtitles })
 }
 
-/// Decode bytes to UTF-8 then parse, returning the header and subtitles.
-pub fn parse_bytes(data: &[u8]) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
+/// Decode bytes to UTF-8 then parse, returning a `SubtitleFile`.
+pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
   parse_content(&text)
 }
 
 /// Parse a SubViewer file asynchronously.
-pub async fn parse_file(
-  path: impl AsRef<std::path::Path>,
-) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   parse_content(&text)
 }
 
 /// Parse a SubViewer file from a URL (requires `http` feature).
 #[cfg(feature = "http")]
-pub async fn parse_url(url: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
+pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
   parse_content(&content)
@@ -147,11 +145,13 @@ fn format_subviewer_time(ms: u64) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::model::SubtitleFormat;
 
   #[test]
   fn test_parse_basic() {
     let content = "[SUBTITLE]\n[COLF]&HFFFFFF,[STYLE]bd,[SIZE]18,[FONT]Arial\n\n00:00:01.00,00:00:03.50\nHello World\n\n00:00:04.00,00:00:06.50\nGoodbye\n\n";
-    let (_, result) = parse_content(content).unwrap();
+    let file = parse_content(content).unwrap();
+    let result = file.subtitles();
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].start, 1000);
     assert_eq!(result[0].end, 3500);
@@ -161,16 +161,18 @@ mod tests {
   #[test]
   fn test_parse_simple() {
     let content = "00:00:01.00,00:00:03.50\nHello\n\n00:00:04.00,00:00:06.50\nWorld\n";
-    let (_, result) = parse_content(content).unwrap();
-    assert_eq!(result.len(), 2);
+    let file = parse_content(content).unwrap();
+    assert_eq!(file.subtitles().len(), 2);
   }
 
   #[test]
   fn test_round_trip() {
     let content = "00:00:01.00,00:00:03.50\nHello\n\n00:00:04.00,00:00:06.50\nWorld\n";
-    let (_, subs) = parse_content(content).unwrap();
+    let file = parse_content(content).unwrap();
+    let subs = file.subtitles().to_vec();
     let output = to_string(&subs, None);
-    let (_, reparsed) = parse_content(&output).unwrap();
+    let reparsed_file = parse_content(&output).unwrap();
+    let reparsed = reparsed_file.subtitles();
     assert_eq!(subs.len(), reparsed.len());
     assert_eq!(subs[0].text, reparsed[0].text);
     assert_eq!(subs[0].start, reparsed[0].start);
@@ -186,7 +188,7 @@ mod tests {
 
   #[test]
   fn test_parse_empty() {
-    let (_, result) = parse_content("").unwrap();
-    assert!(result.is_empty());
+    let file = parse_content("").unwrap();
+    assert!(file.subtitles().is_empty());
   }
 }

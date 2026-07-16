@@ -296,7 +296,14 @@ pub async fn generate(
   let mut open_opts = fs::OpenOptions::new();
   let mut dest = match policy {
     crate::model::WritePolicy::Append => open_opts.create(true).append(true).open(path).await,
-    _ => open_opts.create(true).write(true).truncate(true).open(path).await,
+    _ => {
+      open_opts
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .await
+    }
   }?;
   let content = to_string(subtitles, None);
   dest.write_all(content.as_bytes()).await?;

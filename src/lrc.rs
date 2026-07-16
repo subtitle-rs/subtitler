@@ -73,6 +73,7 @@ impl LrcData {
   }
 
   /// Serialize back to LRC string format.
+  #[allow(clippy::inherent_to_string)]
   pub fn to_string(&self) -> String {
     let mut buf = String::new();
     for line in &self.lines {
@@ -88,11 +89,27 @@ impl LrcData {
     }
     buf
   }
+
+  /// Convert to `Vec<Subtitle>` (compatibility with the deprecated `parse_content`).
+  /// Each timestamp becomes a separate subtitle with a 5-second default display duration.
+  pub fn to_subtitles(&self) -> Vec<Subtitle> {
+    let mut subs = Vec::new();
+    for line in &self.lines {
+      for &t in &line.times_ms {
+        subs.push(Subtitle::new(t, t + 5000, &line.text));
+      }
+    }
+    subs.sort_by_key(|s| s.start);
+    subs
+  }
 }
 
 /// Parse LRC content into a vector of subtitles (each timestamp becomes a
 /// separate subtitle with a 5-second default duration).
-#[deprecated(since = "0.10.0", note = "use LrcData::parse to preserve multi-timestamp lines")]
+#[deprecated(
+  since = "0.10.0",
+  note = "use LrcData::parse to preserve multi-timestamp lines"
+)]
 pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   let data = LrcData::parse(content)?;
   let mut subs = Vec::new();
@@ -203,8 +220,14 @@ mod tests {
     assert_eq!(data.lines[0].times_ms[1], 30000);
     // Round-trip
     let output = data.to_string();
-    assert!(output.contains("[00:10.00]"), "missing first timestamp in:\n{output}");
-    assert!(output.contains("[00:30.00]"), "missing second timestamp:\n{output}");
+    assert!(
+      output.contains("[00:10.00]"),
+      "missing first timestamp in:\n{output}"
+    );
+    assert!(
+      output.contains("[00:30.00]"),
+      "missing second timestamp:\n{output}"
+    );
   }
 
   #[test]

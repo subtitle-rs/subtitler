@@ -82,13 +82,7 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
       Ok(file)
     }
     #[cfg(feature = "subviewer")]
-    Format::SubViewer => {
-      let (header, subs) = subviewer::parse_bytes(data)?;
-      Ok(model::SubtitleFile::SubViewer {
-        header,
-        subtitles: subs,
-      })
-    }
+    Format::SubViewer => Ok(subviewer::parse_bytes(data)?),
     #[cfg(feature = "ttml")]
     Format::Ttml => {
       let subs = ttml::parse_bytes(data)?;

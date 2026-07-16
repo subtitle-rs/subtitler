@@ -133,13 +133,7 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
       Ok(file)
     }
     #[cfg(feature = "subviewer")]
-    CliFormat::SubViewer => {
-      let (header, subs) = subtitler::subviewer::parse_content(&text)?;
-      Ok(SubtitleFile::SubViewer {
-        header,
-        subtitles: subs,
-      })
-    }
+    CliFormat::SubViewer => subtitler::subviewer::parse_content(&text),
     #[cfg(feature = "ttml")]
     CliFormat::Ttml => {
       let subs = subtitler::ttml::parse_content(&text)?;
@@ -178,7 +172,9 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
       .subtitles()
       .to_vec(),
     #[cfg(feature = "subviewer")]
-    CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?.1,
+    CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?
+      .subtitles()
+      .to_vec(),
     #[cfg(feature = "ttml")]
     CliFormat::Ttml => subtitler::ttml::parse_content(&content)?,
     #[cfg(feature = "sbv")]

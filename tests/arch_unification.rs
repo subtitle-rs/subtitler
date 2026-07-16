@@ -90,13 +90,18 @@ fn microdvd_variant_preserves_fps_field() {
 #[test]
 fn subviewer_variant_preserves_header() {
   let content = "[INFORMATION]\n[TITLE]My Film\n[AUTHOR]Me\n[END INFORMATION]\n[SUBTITLE]\n[COLF]&HFFFFFF,[STYLE]bd,[SIZE]18,[FONT]Arial\n\n00:00:01.00,00:00:03.50\nHello\n";
-  let (header, subs) = subtitler::subviewer::parse_content(content).unwrap();
-  assert!(
-    header.as_deref().unwrap().contains("My Film"),
-    "header lost: {header:?}"
-  );
-  assert_eq!(subs.len(), 1);
-  assert_eq!(subs[0].text, "Hello");
+  let file = subtitler::subviewer::parse_content(content).unwrap();
+  match file {
+    SubtitleFile::SubViewer { header, subtitles } => {
+      assert!(
+        header.as_deref().unwrap().contains("My Film"),
+        "header lost: {header:?}"
+      );
+      assert_eq!(subtitles.len(), 1);
+      assert_eq!(subtitles[0].text, "Hello");
+    }
+    _ => panic!("expected SubViewer variant"),
+  }
 }
 
 #[test]
@@ -134,19 +139,22 @@ fn sbv_multiline_text() {
 #[test]
 fn lrc_multi_timestamp_round_trip() {
   let content = "[00:10.00][00:30.00]Repeated line\n";
-  let subs = subtitler::lrc::parse_content(content).unwrap();
+  let data = subtitler::lrc::LrcData::parse(content).unwrap();
+  assert_eq!(data.lines.len(), 1, "one LRC line");
+  assert_eq!(data.lines[0].times_ms.len(), 2, "two timestamps");
+  assert_eq!(data.lines[0].text, "Repeated line");
+
+  // Convert to subtitles for compatibility
+  let subs = data.to_subtitles();
   assert_eq!(subs.len(), 2, "two timestamps should produce two cues");
-  // Both get the same text
   assert_eq!(subs[0].text, "Repeated line");
-  assert_eq!(subs[1].text, "Repeated line");
-  // First uses start + 5s default duration
   assert_eq!(subs[0].start, 10000);
   assert_eq!(subs[0].end, 15000);
   assert_eq!(subs[1].start, 30000);
   assert_eq!(subs[1].end, 35000);
 
   // Round-trip: serialize back, each cue becomes its own LRC line
-  let output = subtitler::lrc::to_string(&subs);
+  let output = data.to_string();
   assert!(output.contains("[00:10.00]"));
   assert!(output.contains("[00:30.00]"));
 }
