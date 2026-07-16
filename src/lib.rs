@@ -25,7 +25,8 @@ pub mod vtt;
 
 pub use model::SubtitleFormat;
 
-use model::Format;
+// Re-export commonly used types for convenience
+pub use model::{Format, Subtitle, SubtitleFile, TextPart, WritePolicy};
 
 pub fn detect_format(data: &[u8]) -> Option<Format> {
   #[cfg(feature = "srt")]
