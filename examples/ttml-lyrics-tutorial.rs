@@ -33,7 +33,8 @@ fn main() -> subtitler::types::AnyResult<()> {
              [00:05.00]No hell below us\n";
 
   println!("\n=== LRC ===");
-  let lrc_data = subtitler::lrc::LrcData::parse(lrc)?; let subs = lrc_data.to_subtitles();
+  let lrc_data = subtitler::lrc::LrcData::parse(lrc)?;
+  let subs = lrc_data.to_subtitles();
   for (i, s) in subs.iter().enumerate() {
     println!("  [{}] {}-{}ms '{}'", i, s.start, s.end, s.text);
   }
