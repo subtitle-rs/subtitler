@@ -43,13 +43,17 @@ pub fn decode_to_string(data: &[u8]) -> AnyResult<String> {
       String::from_utf16(&u16).map_err(|e| anyhow!("Invalid UTF-16LE: {:?}", e))
     }
     _ => {
-      let text = String::from_utf8(data.to_vec()).map_err(|_| {
-        anyhow!(
-          "Cannot decode encoding '{}'. Try converting to UTF-8 first.",
-          encoding
-        )
-      })?;
-      Ok(text)
+      // True decoding via encoding_rs for GBK, Shift_JIS, Big5, etc.
+      let label = encoding.as_bytes();
+      if let Some(enc) = encoding_rs::Encoding::for_label_no_replacement(label) {
+        let (cow, _enc, had_errors) = enc.decode(data);
+        if had_errors {
+          eprintln!("warning: encoding '{encoding}' had decoding errors");
+        }
+        Ok(cow.into_owned())
+      } else {
+        anyhow::bail!("Cannot decode encoding '{}'. Try converting to UTF-8 first.", encoding)
+      }
     }
   }
 }

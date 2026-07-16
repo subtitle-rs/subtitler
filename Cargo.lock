@@ -1430,6 +1430,7 @@ dependencies = [
  "chardetng",
  "clap",
  "criterion",
+ "encoding_rs",
  "quick-xml",
  "regex",
  "reqwest",
