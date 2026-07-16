@@ -128,10 +128,6 @@ name = "format-convert"
 path = "examples/format-convert.rs"
 
 [[example]]
-name = "utility-ops"
-path = "examples/utility-ops.rs"
-
-[[example]]
 name = "frame-conversion"
 path = "examples/frame-conversion.rs"
 
