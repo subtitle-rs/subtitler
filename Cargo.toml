@@ -11,16 +11,11 @@ description = "Parse, convert, validate, edit, and generate subtitles in 9 forma
 documentation = "https://docs.rs/subtitler" 
 edition = "2024" 
 keywords = [
-  "subtitles",
   "subtitle",
   "srt",
-  "webvtt",
   "vtt",
   "ass",
-  "ttml",
-  "lrc",
-  "timed-text",
-  "subrip",
+  "parser",
 ] 
 license = "Apache-2.0" 
 name = "subtitler" 
