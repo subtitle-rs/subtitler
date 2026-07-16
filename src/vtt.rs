@@ -134,11 +134,7 @@ fn parse(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
         header = Some(header_lines.join("\n"));
         header_lines.clear();
       }
-      phase = match phase {
-        Phase::VttComment => Phase::Cue,
-        Phase::Header => Phase::Cue,
-        _ => Phase::Cue,
-      };
+      phase = Phase::Cue;
       continue;
     }
 
@@ -216,14 +212,14 @@ pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subt
 }
 
 pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
-  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let text = crate::encoding::decode_to_string(data)?;
   let (_, subtitles) = parse(&text)?;
   Ok(subtitles)
 }
 
 /// Parse VTT bytes, preserving the header block.
 pub fn parse_bytes_full(data: &[u8]) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
-  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let text = crate::encoding::decode_to_string(data)?;
   parse(&text)
 }
 

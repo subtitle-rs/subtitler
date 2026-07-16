@@ -207,7 +207,7 @@ pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subt
 }
 
 pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
-  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let text = crate::encoding::decode_to_string(data)?;
   parse(&text)
 }
 
@@ -305,11 +305,12 @@ impl<'a> Iterator for SrtStream<'a> {
           } else if trimmed.contains("-->")
             && let Some((start_str, end_str)) = trimmed.split_once(" --> ")
           {
-            let start = parse_timestamp(start_str).ok();
-            let end = parse_timestamp(end_str).ok();
-            if let (Some(s), Some(e)) = (start, end) {
-              self.current_subtitle = Some(Subtitle::new(s, e, ""));
-              self.phase = Phase::Text;
+            match (parse_timestamp(start_str), parse_timestamp(end_str)) {
+              (Ok(s), Ok(e)) => {
+                self.current_subtitle = Some(Subtitle::new(s, e, ""));
+                self.phase = Phase::Text;
+              }
+              (Err(e), _) | (_, Err(e)) => return Some(Err(e)),
             }
           }
         }

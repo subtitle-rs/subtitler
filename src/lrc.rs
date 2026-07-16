@@ -5,7 +5,6 @@
 
 use crate::model::Subtitle;
 use crate::types::AnyResult;
-use anyhow::anyhow;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -64,7 +63,7 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
 
 /// Parse LRC from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
-  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let text = crate::encoding::decode_to_string(data)?;
   parse_content(&text)
 }
 

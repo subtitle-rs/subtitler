@@ -5,7 +5,6 @@
 use crate::model::Subtitle;
 use crate::types::AnyResult;
 use crate::utils::parse_timestamp;
-use anyhow::anyhow;
 
 /// Parse SBV content into a vector of subtitles.
 pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
@@ -44,7 +43,7 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
 
 /// Parse SBV from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
-  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let text = crate::encoding::decode_to_string(data)?;
   parse_content(&text)
 }
 

@@ -39,7 +39,15 @@ fn parse_subviewer_time(ts: &str) -> AnyResult<u64> {
   let s_parts: Vec<&str> = parts[2].split('.').collect();
   let s: u64 = s_parts[0].parse()?;
   let ms: u64 = if s_parts.len() > 1 {
-    s_parts[1].parse::<u64>()? * 10 // SubViewer uses centiseconds, convert to ms
+    let centisecs_str = s_parts[1];
+    // SubViewer uses centiseconds (0-99), validate
+    if centisecs_str.len() > 2 {
+      return Err(anyhow!(
+        "Invalid SubViewer time: fractional part must be at most 2 digits (centiseconds), got '{}'",
+        centisecs_str
+      ));
+    }
+    centisecs_str.parse::<u64>()? * 10 // centiseconds → ms
   } else {
     0
   };
@@ -87,7 +95,7 @@ pub fn parse_content(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)
 
 /// Decode bytes to UTF-8 then parse, returning the header and subtitles.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
-  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let text = crate::encoding::decode_to_string(data)?;
   parse_content(&text)
 }
 

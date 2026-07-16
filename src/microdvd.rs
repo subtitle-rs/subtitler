@@ -72,7 +72,7 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile>
 
 /// Decode bytes to UTF-8 then parse, returning the resolved fps and subtitles.
 pub fn parse_bytes(data: &[u8], fps: Option<f64>) -> AnyResult<(f64, Vec<Subtitle>)> {
-  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let text = crate::encoding::decode_to_string(data)?;
   let file = parse_content(&text, fps)?;
   match file {
     SubtitleFile::MicroDvd { fps, subtitles } => Ok((fps, subtitles)),

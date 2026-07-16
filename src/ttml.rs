@@ -211,6 +211,9 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
 }
 
 /// Serialize subtitles to a minimal TTML document.
+///
+/// Note: `_header` is reserved for metadata preservation (not yet implemented;
+/// the `<head>` block is currently omitted).
 pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
   let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 

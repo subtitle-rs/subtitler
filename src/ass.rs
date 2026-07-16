@@ -101,7 +101,7 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
     }
   });
   let text = caps.get(16).map_or("", |m| m.as_str());
-  let is_comment = caps.get(15).is_some_and(|m| m.as_str().contains("Comment"));
+  let is_comment = caps.get(14).is_some_and(|m| m.as_str().contains("Comment"));
 
   let mut subtitle = Subtitle::new(start, end, text);
   subtitle.style = style;
@@ -174,7 +174,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 }
 
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
-  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  let text = crate::encoding::decode_to_string(data)?;
   parse_content(&text)
 }
 
@@ -461,5 +461,15 @@ mod tests {
     let result = parse_file(path).await.unwrap();
     let _ = std::fs::remove_file(path);
     assert_eq!(result.subtitles()[0].text, "FromFile");
+  }
+
+  #[test]
+  fn test_is_comment_uses_effect() {
+    // Parsing a line with Comment in the Effect column (group 14, not 15)
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,Comment,Visible text\n";
+    let parsed = parse_content(content).unwrap();
+    assert!(parsed.subtitles()[0].is_comment);
+    // Text must be "Visible text" even though "Comment" appears in the Effect column
+    assert_eq!(parsed.subtitles()[0].text, "Visible text");
   }
 }

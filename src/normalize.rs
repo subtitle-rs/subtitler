@@ -104,40 +104,38 @@ pub fn normalize_subtitle(sub: &mut Subtitle) {
 /// Each resulting line is at most `max_chars` characters, and line lengths
 /// are balanced when possible.
 pub fn optimize_line_breaks(text: &str, max_chars: usize) -> String {
-  let lines: Vec<&str> = text.lines().collect();
-  let mut result = Vec::new();
+  let mut result_parts: Vec<String> = Vec::new();
+  let mut queue: Vec<String> = text.lines().map(|l| l.trim().to_string()).collect();
 
-  for &line in &lines {
-    let trimmed = line.trim();
-    if trimmed.chars().count() <= max_chars {
-      result.push(trimmed.to_string());
+  while let Some(line) = queue.pop() {
+    if line.chars().count() <= max_chars {
+      result_parts.push(line);
       continue;
     }
 
     // Try to find natural break points
-    let words: Vec<&str> = trimmed.split_whitespace().collect();
+    let words: Vec<&str> = line.split_whitespace().collect();
     let best_break = find_best_split(&words, max_chars);
 
     match best_break {
       Some(idx) => {
-        result.push(words[..idx].join(" "));
-        let remaining = words[idx..].join(" ");
-        // Recurse for the rest
-        result.push(optimize_line_breaks(&remaining, max_chars));
+        result_parts.push(words[..idx].join(" "));
+        queue.push(words[idx..].join(" "));
       }
       None => {
         // No natural break found, hard split at char boundary
-        let first: String = trimmed.chars().take(max_chars).collect();
-        let rest: String = trimmed.chars().skip(max_chars).collect();
-        result.push(first);
+        let first: String = line.chars().take(max_chars).collect();
+        let rest: String = line.chars().skip(max_chars).collect();
+        result_parts.push(first);
         if !rest.is_empty() {
-          result.push(optimize_line_breaks(&rest, max_chars));
+          queue.push(rest);
         }
       }
     }
   }
 
-  result.join("\n")
+  result_parts.reverse();
+  result_parts.join("\n")
 }
 
 /// Find the best word boundary to split a sequence of words.
