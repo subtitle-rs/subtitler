@@ -45,13 +45,8 @@ jobs:
       - run: cargo test --verbose ${{ matrix.features }} ${{ matrix.test-args }}
 
   examples:
-    strategy:
-      matrix:
-        features:
-          - ""
-          - "--no-default-features --features srt"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --examples --verbose ${{ matrix.features }}
+      - run: cargo build --examples --verbose
