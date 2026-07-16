@@ -497,11 +497,6 @@ fn test_subtitle_serde_round_trip() {
     text_parts: Vec::new(),
     style: None,
     actor: None,
-    layer: None,
-    margin_l: None,
-    margin_r: None,
-    margin_v: None,
-    effect: None,
     is_comment: false,
   };
   let json = serde_json::to_string(&sub).unwrap();

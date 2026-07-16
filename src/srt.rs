@@ -149,11 +149,6 @@ fn parse(content: &str) -> AnyResult<Vec<Subtitle>> {
             text_parts: Vec::new(),
             style: None,
             actor: None,
-            layer: None,
-            margin_l: None,
-            margin_r: None,
-            margin_v: None,
-            effect: None,
             is_comment: false,
           });
           phase = Phase::Timestamp;
@@ -299,11 +294,6 @@ impl<'a> Iterator for SrtStream<'a> {
               text_parts: Vec::new(),
               style: None,
               actor: None,
-              layer: None,
-              margin_l: None,
-              margin_r: None,
-              margin_v: None,
-              effect: None,
               is_comment: false,
             });
             self.phase = Phase::Timestamp;
@@ -442,11 +432,6 @@ mod tests {
       text_parts: Vec::new(),
       style: None,
       actor: None,
-      layer: None,
-      margin_l: None,
-      margin_r: None,
-      margin_v: None,
-      effect: None,
       is_comment: false,
     }
   }

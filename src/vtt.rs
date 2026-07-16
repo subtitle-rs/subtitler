@@ -327,11 +327,6 @@ mod tests {
       text_parts: Vec::new(),
       style: None,
       actor: None,
-      layer: None,
-      margin_l: None,
-      margin_r: None,
-      margin_v: None,
-      effect: None,
       is_comment: false,
     }
   }

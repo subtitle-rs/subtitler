@@ -39,16 +39,6 @@ pub struct Subtitle {
   pub style: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub actor: Option<String>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub layer: Option<i32>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub margin_l: Option<i32>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub margin_r: Option<i32>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub margin_v: Option<i32>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub effect: Option<String>,
   #[serde(skip_serializing_if = "is_false", default)]
   pub is_comment: bool,
 }
@@ -64,11 +54,6 @@ impl Subtitle {
       text_parts: Vec::new(),
       style: None,
       actor: None,
-      layer: None,
-      margin_l: None,
-      margin_r: None,
-      margin_v: None,
-      effect: None,
       is_comment: false,
     }
   }
@@ -88,12 +73,6 @@ impl Subtitle {
   /// Builder-style: set the settings string (VTT).
   pub fn with_settings(mut self, settings: impl Into<String>) -> Self {
     self.settings = Some(settings.into());
-    self
-  }
-
-  /// Builder-style: set the layer (ASS/SSA).
-  pub fn with_layer(mut self, layer: i32) -> Self {
-    self.layer = Some(layer);
     self
   }
 
@@ -727,11 +706,6 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
         let mut new_sub = Subtitle::new(new_start, new_end, chunk);
         new_sub.style = subs[i].style.clone();
         new_sub.actor = subs[i].actor.clone();
-        new_sub.layer = subs[i].layer;
-        new_sub.margin_l = subs[i].margin_l;
-        new_sub.margin_r = subs[i].margin_r;
-        new_sub.margin_v = subs[i].margin_v;
-        new_sub.effect = subs[i].effect.clone();
         i += 1;
         subs.insert(i, new_sub);
       }

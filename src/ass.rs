@@ -89,27 +89,12 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
       Some(s.to_string())
     }
   });
-  let margin_l = caps.get(11).and_then(|m| m.as_str().parse::<i32>().ok());
-  let margin_r = caps.get(12).and_then(|m| m.as_str().parse::<i32>().ok());
-  let margin_v = caps.get(13).and_then(|m| m.as_str().parse::<i32>().ok());
-  let effect = caps.get(14).and_then(|m| {
-    let s = m.as_str().trim();
-    if s.is_empty() {
-      None
-    } else {
-      Some(s.to_string())
-    }
-  });
   let text = caps.get(16).map_or("", |m| m.as_str());
   let is_comment = caps.get(14).is_some_and(|m| m.as_str().contains("Comment"));
 
   let mut subtitle = Subtitle::new(start, end, text);
   subtitle.style = style;
   subtitle.actor = actor;
-  subtitle.margin_l = margin_l;
-  subtitle.margin_r = margin_r;
-  subtitle.margin_v = margin_v;
-  subtitle.effect = effect;
   subtitle.is_comment = is_comment;
   Some(subtitle)
 }
@@ -267,11 +252,11 @@ pub fn to_string(
     let end = format_ass_timestamp(sub.end);
     let style = sub.style.as_deref().unwrap_or("Default");
     let actor = sub.actor.as_deref().unwrap_or("");
-    let margin_l = sub.margin_l.unwrap_or(0);
-    let margin_r = sub.margin_r.unwrap_or(0);
-    let margin_v = sub.margin_v.unwrap_or(0);
-    let effect = sub.effect.as_deref().unwrap_or("");
-    let layer = sub.layer.unwrap_or(0);
+    let margin_l = 0;
+    let margin_r = 0;
+    let margin_v = 0;
+    let effect = "";
+    let layer = 0;
     buf.push_str(&format!(
       "Dialogue: {},{},{},{},{},{},{},{},{},{}\n",
       layer, start, end, style, actor, margin_l, margin_r, margin_v, effect, sub.text
