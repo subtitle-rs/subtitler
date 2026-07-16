@@ -283,6 +283,9 @@ mod tests {
 #[test]
 fn test_optimize_line_breaks_order() {
   let result = optimize_line_breaks("abc def ghijklmnop", 5);
-  assert_eq!(result, "abc\ndef\nghijk\nlmnop",
-    "got: {:?} — lines are in wrong order", result);
+  assert_eq!(
+    result, "abc\ndef\nghijk\nlmnop",
+    "got: {:?} — lines are in wrong order",
+    result
+  );
 }
