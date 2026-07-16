@@ -23,12 +23,12 @@ fn main() {
   println!("\n=== Whitespace Normalization ===");
   let ws = "hello    world\n\n\n\nbye";
   println!("  Input:  {:?}", ws);
-  println!("  Output: {:?}", normalize::normalize_whitespace(&ws));
+  println!("  Output: {:?}", normalize::normalize_whitespace(ws));
 
   println!("\n=== Punctuation Fix ===");
   let punct = "hello , world ! what ???";
   println!("  Input:  {}", punct);
-  println!("  Output: {}", normalize::normalize_punctuation(&punct));
+  println!("  Output: {}", normalize::normalize_punctuation(punct));
 
   println!("\n=== Smart Line Breaking ===");
   let long = "This is a very long subtitle line that should be broken at natural word boundaries";
@@ -38,5 +38,5 @@ fn main() {
   println!("\n=== Full Pipeline (normalize_text) ===");
   let dirty = "Hello   \u{201C}world\u{201D} !  (LAUGHS)";
   println!("  Input:  {}", dirty);
-  println!("  Output: {}", normalize::normalize_text(&dirty));
+  println!("  Output: {}", normalize::normalize_text(dirty));
 }
