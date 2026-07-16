@@ -113,6 +113,41 @@ pub fn to_string_with_fps_header(subtitles: &[Subtitle], fps: f64) -> String {
   buf
 }
 
+
+pub struct MicroDvdStream<'a> {
+  lines: std::str::Lines<'a>,
+  _fps: f64,
+  saved_fps: f64,
+}
+impl<'a> MicroDvdStream<'a> {
+  pub fn new(content: &'a str, fps: Option<f64>) -> Self {
+    let f = fps.unwrap_or(DEFAULT_FPS);
+    MicroDvdStream { lines: content.lines(), _fps: f, saved_fps: f }
+  }
+}
+impl<'a> Iterator for MicroDvdStream<'a> {
+  type Item = AnyResult<Subtitle>;
+  fn next(&mut self) -> Option<Self::Item> {
+    for line in self.lines.by_ref() {
+      let trimmed = line.trim();
+      if trimmed.is_empty() { continue; }
+      if let Some(caps) = RE_FPS_HEADER.captures(trimmed) {
+        if let Some(fps_str) = caps.get(3).or(caps.get(4)) {
+          if let Ok(f) = fps_str.as_str().parse::<f64>() { self.saved_fps = f; continue; }
+        }
+      }
+      if let Some(caps) = RE_MICRODVD.captures(trimmed) {
+        if let (Ok(s), Ok(e)) = (caps[1].parse::<u64>(), caps[2].parse::<u64>()) {
+          let text = caps[3].to_string().replace('|', "
+");
+          return Some(Ok(Subtitle::new(frames_to_ms(s, self.saved_fps), frames_to_ms(e, self.saved_fps), &text)));
+        }
+      }
+    }
+    None
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

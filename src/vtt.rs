@@ -312,6 +312,63 @@ pub async fn generate(
   Ok(path.to_string_lossy().into_owned())
 }
 
+
+pub struct VttStream<'a> {
+  lines: std::str::Lines<'a>,
+  phase: u8,
+  current_subtitle: Option<Subtitle>,
+  in_note: bool,
+}
+
+impl<'a> VttStream<'a> {
+  pub fn new(content: &'a str) -> Self {
+    VttStream { lines: content.lines(), phase: 0, current_subtitle: None, in_note: false }
+  }
+}
+
+impl<'a> Iterator for VttStream<'a> {
+  type Item = AnyResult<Subtitle>;
+  fn next(&mut self) -> Option<Self::Item> {
+    for line in self.lines.by_ref() {
+      let trimmed = line.trim().to_string();
+      if trimmed.is_empty() {
+        if let Some(mut sub) = self.current_subtitle.take() {
+          let (plain, _) = extract_text_parts(&sub.text);
+          sub.text = plain; self.phase = 0;
+          return Some(Ok(sub));
+        }
+        self.phase = 0; self.in_note = false; continue;
+      }
+      if self.phase == 0 && trimmed.starts_with("WEBVTT") { self.phase = 1; continue; }
+      if self.phase == 0 { continue; }
+      if trimmed.starts_with("NOTE") { self.in_note = true; continue; }
+      if self.in_note { continue; }
+      if trimmed.contains("-->") {
+        if let Some(mut sub) = self.current_subtitle.take() {
+          let (plain, _) = extract_text_parts(&sub.text);
+          sub.text = plain;
+          self.phase = 1;
+          if let Ok(ts) = parse_timestamps(&trimmed) {
+            self.current_subtitle = Some(Subtitle::new(ts.start, ts.end, ""));
+          }
+          return Some(Ok(sub));
+        }
+        if let Ok(ts) = parse_timestamps(&trimmed) {
+          self.current_subtitle = Some(Subtitle::new(ts.start, ts.end, ""));
+        }
+        self.phase = 1;
+      } else if let Some(sub) = &mut self.current_subtitle {
+        if !sub.text.is_empty() { sub.text.push('\n'); }
+        sub.text.push_str(&trimmed);
+      }
+    }
+    if let Some(mut sub) = self.current_subtitle.take() {
+      let (plain, _) = extract_text_parts(&sub.text);
+      sub.text = plain; return Some(Ok(sub));
+    }
+    None
+  }
+}
 #[cfg(test)]
 mod tests {
   use super::*;
