@@ -173,19 +173,24 @@ pub fn to_string(subtitles: &[Subtitle]) -> String {
   buf
 }
 
-
 pub struct LrcStream<'a> {
   lines: std::str::Lines<'a>,
 }
 impl<'a> LrcStream<'a> {
-  pub fn new(content: &'a str) -> Self { LrcStream { lines: content.lines() } }
+  pub fn new(content: &'a str) -> Self {
+    LrcStream {
+      lines: content.lines(),
+    }
+  }
 }
 impl<'a> Iterator for LrcStream<'a> {
   type Item = AnyResult<Subtitle>;
   fn next(&mut self) -> Option<Self::Item> {
     for line in self.lines.by_ref() {
       let trimmed = line.trim();
-      if trimmed.is_empty() { continue; }
+      if trimmed.is_empty() {
+        continue;
+      }
       let mut times = Vec::new();
       let mut last_end = 0usize;
       for caps in RE_LRC_LINE.captures_iter(trimmed) {
@@ -193,9 +198,13 @@ impl<'a> Iterator for LrcStream<'a> {
         times.push(lrc_time_to_ms(&caps[1], &caps[2], &caps[3]));
         last_end = m.end();
       }
-      if times.is_empty() || last_end >= trimmed.len() { continue; }
+      if times.is_empty() || last_end >= trimmed.len() {
+        continue;
+      }
       let text = trimmed[last_end..].trim().to_string();
-      if text.is_empty() { continue; }
+      if text.is_empty() {
+        continue;
+      }
       let t = times[0];
       return Some(Ok(Subtitle::new(t, t + 5000, &text)));
     }

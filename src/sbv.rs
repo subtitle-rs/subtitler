@@ -107,14 +107,15 @@ fn format_sbv_time(ms: u64) -> String {
   format!("{}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
 }
 
-
 pub struct SbVStream<'a> {
   lines: std::str::Lines<'a>,
 }
 
 impl<'a> SbVStream<'a> {
   pub fn new(content: &'a str) -> Self {
-    SbVStream { lines: content.lines() }
+    SbVStream {
+      lines: content.lines(),
+    }
   }
 }
 
@@ -123,7 +124,9 @@ impl<'a> Iterator for SbVStream<'a> {
   fn next(&mut self) -> Option<Self::Item> {
     for line in self.lines.by_ref() {
       let trimmed = line.trim();
-      if trimmed.is_empty() { continue; }
+      if trimmed.is_empty() {
+        continue;
+      }
       return Some(parse_sbv_line(trimmed));
     }
     None

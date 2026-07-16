@@ -142,22 +142,32 @@ fn format_subviewer_time(ms: u64) -> String {
   )
 }
 
-
 pub struct SubViewerStream<'a> {
   lines: std::str::Lines<'a>,
 }
 impl<'a> SubViewerStream<'a> {
-  pub fn new(content: &'a str) -> Self { SubViewerStream { lines: content.lines() } }
+  pub fn new(content: &'a str) -> Self {
+    SubViewerStream {
+      lines: content.lines(),
+    }
+  }
 }
 impl<'a> Iterator for SubViewerStream<'a> {
   type Item = AnyResult<Subtitle>;
   fn next(&mut self) -> Option<Self::Item> {
     for line in self.lines.by_ref() {
       let trimmed = line.trim();
-      if trimmed.is_empty() || RE_SUBVIEWER_BRACKET.is_match(trimmed) { continue; }
+      if trimmed.is_empty() || RE_SUBVIEWER_BRACKET.is_match(trimmed) {
+        continue;
+      }
       if let Some(caps) = RE_SUBVIEWER_LINE.captures(trimmed) {
-        if let (Ok(s), Ok(e)) = (parse_subviewer_time(&caps[1]), parse_subviewer_time(&caps[2])) {
-          let text = self.lines.by_ref()
+        if let (Ok(s), Ok(e)) = (
+          parse_subviewer_time(&caps[1]),
+          parse_subviewer_time(&caps[2]),
+        ) {
+          let text = self
+            .lines
+            .by_ref()
             .find(|l| !l.trim().is_empty() && !RE_SUBVIEWER_BRACKET.is_match(l.trim()))
             .unwrap_or("");
           return Some(Ok(Subtitle::new(s, e, text.trim())));
