@@ -556,6 +556,7 @@ mod tests {
   }
 
   #[test]
+  #[cfg(feature = "vtt")]
   fn test_detect_format_vtt() {
     let data = b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
     assert_eq!(detect_format(data), Some(crate::model::Format::Vtt));
