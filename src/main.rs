@@ -30,6 +30,9 @@ async fn main() -> AnyResult<()> {
     Commands::Edit(args) => cmd_edit(args).await?,
     Commands::Info(args) => cmd_info(args).await?,
     Commands::Detect(args) => cmd_detect(args).await?,
+    Commands::Quality(args) => cmd_quality(args).await?,
+    Commands::Normalize(args) => cmd_normalize(args).await?,
+    Commands::Shift(args) => cmd_shift(args).await?,
   }
 
   Ok(())
@@ -443,6 +446,98 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
       eprintln!("Unknown format");
       std::process::exit(1);
     }
+  }
+  Ok(())
+}
+
+async fn cmd_quality(args: cli::QualityArgs) -> AnyResult<()> {
+  let (data, ext) = read_input(&args.input).await?;
+  let format =
+    resolve_format(&data, ext).ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format."))?;
+  let file = parse_to_file(&data, format).await?;
+
+  let report = subtitler::quality::generate_report(
+    file.subtitles(),
+    args.max_chars,
+    args.max_gap,
+    args.max_cps,
+  );
+
+  if args.json {
+    println!("{}", serde_json::to_string_pretty(&report)?);
+  } else {
+    println!("=== Quality Report ===");
+    println!("File:         {}", args.input);
+    println!("Subtitles:    {}", report.total_subtitles);
+    println!("Total issues: {}", report.total_issues);
+    println!("Avg duration: {} ms", report.avg_duration_ms);
+    println!("Avg CPS:      {:.1}", report.avg_cps);
+    println!("Avg WPM:      {:.1}", report.avg_wpm);
+    if let Some(worst) = report.subtitles.iter().max_by_key(|s| s.issues.len()) {
+      if !worst.issues.is_empty() {
+        println!(
+          "Worst: subtitle #{} — {} issues",
+          worst.index + 1,
+          worst.issues.len()
+        );
+      }
+    }
+  }
+  Ok(())
+}
+
+async fn cmd_normalize(args: cli::NormalizeArgs) -> AnyResult<()> {
+  let (data, ext) = read_input(&args.input).await?;
+  let format = resolve_format(&data, args.format.or(ext))
+    .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format. Use --format to specify."))?;
+  let mut file = parse_to_file(&data, format).await?;
+
+  for sub in file.subtitles_mut() {
+    if args.all || args.fix_ocr {
+      sub.text = subtitler::normalize::fix_ocr_errors(&sub.text);
+    }
+    if args.all || args.strip_hi {
+      sub.text = subtitler::normalize::strip_hearing_impaired(&sub.text);
+    }
+    if args.all || args.quotes {
+      sub.text = subtitler::normalize::normalize_quotes(&sub.text);
+    }
+    if args.all || args.whitespace {
+      sub.text = subtitler::normalize::normalize_whitespace(&sub.text);
+    }
+  }
+
+  let output = file.to_string();
+  if args.output == "-" {
+    print!("{output}");
+  } else {
+    tokio::fs::write(&args.output, &output).await?;
+    eprintln!(
+      "Wrote: {} ({} subtitles)",
+      args.output,
+      file.subtitles().len()
+    );
+  }
+  Ok(())
+}
+
+async fn cmd_shift(args: cli::ShiftArgs) -> AnyResult<()> {
+  let (data, ext) = read_input(&args.input).await?;
+  let format = resolve_format(&data, args.format.or(ext))
+    .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format. Use --format to specify."))?;
+  let mut file = parse_to_file(&data, format).await?;
+
+  file.shift_all(args.offset);
+
+  let output = file.to_string();
+  if args.output == "-" {
+    print!("{output}");
+  } else {
+    tokio::fs::write(&args.output, &output).await?;
+    eprintln!(
+      "Shifted by {} ms: {} -> {}",
+      args.offset, args.input, args.output
+    );
   }
   Ok(())
 }

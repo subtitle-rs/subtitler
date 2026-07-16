@@ -7,15 +7,27 @@ categories = [
   "multimedia",
   "parser-implementations",
 ] 
-description = "Subtitler is a library for parsing and generating subtitles" 
+description = "Parse, convert, validate, edit, and generate subtitles in 9 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC). Full CLI included." 
 documentation = "https://docs.rs/subtitler" 
 edition = "2024" 
-keywords = ["subtitler", "vtt", "srt", "subtitle", "sub-title"] 
+keywords = [
+  "subtitles",
+  "subtitle",
+  "srt",
+  "webvtt",
+  "vtt",
+  "ass",
+  "ttml",
+  "lrc",
+  "timed-text",
+  "subrip",
+] 
 license = "Apache-2.0" 
 name = "subtitler" 
-publish = true # no accidents while in dev
+publish = true
 readme = "README.md" 
 repository = "https://github.com/subtitle-rs/subtitler" 
+rust-version = "1.85"
 version = "1.0.0" 
 
 include = [
@@ -30,24 +42,22 @@ include = [
   "benches/**/*",
 ]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-anyhow = "^1.0.103"
-chardetng = "^1.0.0"
-clap = {version = "^4.6.1", features = ["derive"]}
-quick-xml = {version = "^0.37", optional = true}
-regex = "^1.13.0"
-reqwest = {version = "0.13.4", optional = true}
-serde = {version = "^1.0.228", features = ["derive"]}
-serde_json = "^1.0.150"
-thiserror = "^2.0.18"
-tokio = {version = "^1.52.3", features = ["fs", "io-util", "rt-multi-thread", "macros"]}
-tracing = "^0.1.44"
-tracing-subscriber = "^0.3.23"
+anyhow = "1"
+chardetng = "1"
+clap = {version = "4", features = ["derive"]}
+quick-xml = {version = "0.37", optional = true}
+regex = "1"
+reqwest = {version = "0.13", optional = true}
+serde = {version = "1", features = ["derive"]}
+serde_json = "1"
+thiserror = "2"
+tokio = {version = "1", features = ["fs", "io-util", "rt-multi-thread", "macros"]}
+tracing = "0.1"
+tracing-subscriber = "0.3"
 
 [dev-dependencies]
-criterion = "0.8.2"
+criterion = "0.8"
 
 [features]
 default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "http"]
@@ -124,6 +134,38 @@ path = "examples/utility-ops.rs"
 [[example]]
 name = "frame-conversion"
 path = "examples/frame-conversion.rs"
+
+[[example]]
+name = "stream-parse"
+path = "examples/stream-parse.rs"
+
+[[example]]
+name = "quality-report"
+path = "examples/quality-report.rs"
+
+[[example]]
+name = "normalize-text"
+path = "examples/normalize-text.rs"
+
+[[example]]
+name = "convert-all-formats"
+path = "examples/format-convert-all.rs"
+
+[[example]]
+name = "edit-operations"
+path = "examples/edit-operations.rs"
+
+[[example]]
+name = "parse-ttml-lrc"
+path = "examples/ttml-lyrics-tutorial.rs"
+
+[[example]]
+name = "detect-and-validate"
+path = "examples/validate-subtitle.rs"
+
+[[example]]
+name = "batch-process"
+path = "examples/translate-subtitle.rs"
 
 [[bench]]
 name = "subtitler_benchmark"

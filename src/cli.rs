@@ -92,7 +92,7 @@ impl std::fmt::Display for Format {
 #[derive(Parser)]
 #[command(name = "subtitler")]
 #[command(
-  about = "Subtitle toolkit: parse, convert, validate, and edit subtitles in SRT, WebVTT, and ASS/SSA formats."
+  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 9 formats."
 )]
 #[command(version)]
 pub struct Cli {
@@ -119,6 +119,15 @@ pub enum Commands {
 
   /// Detect subtitle format
   Detect(DetectArgs),
+
+  /// Generate a quality report (JSON or human-readable)
+  Quality(QualityArgs),
+
+  /// Normalize subtitle text (OCR fix, hearing-impaired removal, whitespace)
+  Normalize(NormalizeArgs),
+
+  /// Shift all timestamps by a fixed offset
+  Shift(ShiftArgs),
 }
 
 /// Parse a subtitle file or URL and display its contents.
@@ -240,4 +249,81 @@ pub struct InfoArgs {
 pub struct DetectArgs {
   /// File path or URL
   pub input: String,
+}
+
+/// Generate a quality report.
+#[derive(clap::Args)]
+pub struct QualityArgs {
+  /// Input file path or URL
+  pub input: String,
+
+  /// Maximum characters per subtitle line
+  #[arg(long, default_value = "42")]
+  pub max_chars: usize,
+
+  /// Maximum gap between subtitles in milliseconds
+  #[arg(long, default_value = "5000")]
+  pub max_gap: u64,
+
+  /// Maximum characters per second
+  #[arg(long, default_value = "25.0")]
+  pub max_cps: f64,
+
+  /// Output as JSON
+  #[arg(short, long)]
+  pub json: bool,
+}
+
+/// Normalize subtitle text.
+#[derive(clap::Args)]
+pub struct NormalizeArgs {
+  /// Input file path or URL
+  pub input: String,
+
+  /// Output file path (use "-" for stdout)
+  #[arg(short, long)]
+  pub output: String,
+
+  /// Remove hearing-impaired tags ([LAUGHS], (APPLAUSE), ♪, etc.)
+  #[arg(long)]
+  pub strip_hi: bool,
+
+  /// Fix common OCR errors (0→o, l→1, O→0)
+  #[arg(long)]
+  pub fix_ocr: bool,
+
+  /// Normalize quotes (smart quotes → ASCII)
+  #[arg(long)]
+  pub quotes: bool,
+
+  /// Normalize whitespace (collapse multiple spaces, trim)
+  #[arg(long)]
+  pub whitespace: bool,
+
+  /// Apply all normalizations (equivalent to --strip-hi --fix-ocr --quotes --whitespace)
+  #[arg(long)]
+  pub all: bool,
+
+  /// Force input format (auto-detected by default)
+  #[arg(short, long)]
+  pub format: Option<Format>,
+}
+
+/// Shift all timestamps by a fixed offset.
+#[derive(clap::Args)]
+pub struct ShiftArgs {
+  /// Input file path or URL
+  pub input: String,
+
+  /// Output file path (use "-" for stdout)
+  #[arg(short, long)]
+  pub output: String,
+
+  /// Offset in milliseconds (positive = delay, negative = advance)
+  #[arg(allow_hyphen_values = true)]
+  pub offset: i64,
+
+  /// Force input format (auto-detected by default)
+  #[arg(short, long)]
+  pub format: Option<Format>,
 }
