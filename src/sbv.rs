@@ -48,14 +48,41 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
   parse_content(&text)
 }
 
-/// Detect if data looks like SBV (contains timestamp pattern).
+/// Parse an SBV file asynchronously.
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+  let text = tokio::fs::read_to_string(path).await?;
+  parse_content(&text)
+}
+
+/// Parse an SBV file from a URL (requires `http` feature).
+#[cfg(feature = "http")]
+pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+  let response = reqwest::get(url).await?;
+  let content = response.text().await?;
+  parse_content(&content)
+}
+
+/// Detect if data looks like SBV (YouTube subtitle format).
+/// SBV lines have the pattern: `H:MM:SS.mmm,H:MM:SS.mmm,text`
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   let text = std::str::from_utf8(data).ok()?;
-  // SBV lines start with time,time,text
-  if text.lines().any(|l| {
+  let has_sbv = text.lines().any(|l| {
     let t = l.trim();
-    !t.is_empty() && t.split(',').count() >= 3 && t.starts_with(|c: char| c.is_ascii_digit())
-  }) {
+    if t.is_empty() || !t.starts_with(|c: char| c.is_ascii_digit()) {
+      return false;
+    }
+    // Must have at least 2 commas (time1,time2,text)
+    let parts: Vec<&str> = t.splitn(3, ',').collect();
+    if parts.len() < 3 {
+      return false;
+    }
+    // Both time fields must contain ':' and '.' (SBV time format)
+    parts[0].contains(':')
+      && parts[0].contains('.')
+      && parts[1].contains(':')
+      && parts[1].contains('.')
+  });
+  if has_sbv {
     return Some(crate::model::Format::Sbv);
   }
   None

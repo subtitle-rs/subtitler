@@ -231,4 +231,42 @@ mod tests {
     normalize_subtitle(&mut sub);
     assert_eq!(sub.text, "Hello \"world\"!");
   }
+
+  #[test]
+  fn test_optimize_line_breaks_short() {
+    // Short line stays unchanged
+    assert_eq!(optimize_line_breaks("Hello World", 42), "Hello World");
+  }
+
+  #[test]
+  fn test_optimize_line_breaks_long() {
+    let long =
+      "This is a very long subtitle line that definitely exceeds the maximum character limit";
+    let result = optimize_line_breaks(long, 42);
+    // Should be split into multiple lines
+    assert!(result.contains('\n'));
+    // Each line should be at most ~42 chars (allowing word boundaries)
+    for line in result.lines() {
+      assert!(
+        line.chars().count() <= 42 + 10,
+        "line too long: '{}' ({} chars)",
+        line,
+        line.chars().count()
+      );
+    }
+  }
+
+  #[test]
+  fn test_optimize_line_breaks_preserves_content() {
+    let input = "The quick brown fox jumps over the lazy dog and runs away";
+    let result = optimize_line_breaks(input, 20);
+    // All words should be present in the output
+    for word in input.split_whitespace() {
+      assert!(
+        result.contains(word),
+        "word '{}' lost in line break optimization",
+        word
+      );
+    }
+  }
 }

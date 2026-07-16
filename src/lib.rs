@@ -62,10 +62,13 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     #[cfg(feature = "srt")]
     Format::Srt => Ok(model::SubtitleFile::Srt(srt::parse_bytes(data)?)),
     #[cfg(feature = "vtt")]
-    Format::Vtt => Ok(model::SubtitleFile::Vtt {
-      header: None,
-      subtitles: vtt::parse_bytes(data)?,
-    }),
+    Format::Vtt => {
+      let (header, subs) = vtt::parse_bytes_full(data)?;
+      Ok(model::SubtitleFile::Vtt {
+        header,
+        subtitles: subs,
+      })
+    }
     #[cfg(feature = "ass")]
     Format::Ass => Ok(ass::parse_bytes(data)?),
     #[cfg(feature = "ssa")]

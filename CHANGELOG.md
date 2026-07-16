@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (post-1.0)
+
+- TTML/IMSC subtitle format (`ttml` feature, `quick-xml` based).
+- SBV (YouTube) subtitle format (`sbv` feature).
+- LRC (Lyrics) subtitle format (`lrc` feature).
+- `quality` module: `QualityReport` generator (JSON-serializable),
+  `Translator` trait for machine translation, `DummyTranslator`.
+- `normalize::optimize_line_breaks` — smart line splitting at natural
+  boundaries for readability.
+- `srt::parse_stream` / `SrtStream` — streaming iterator for incremental SRT
+  parsing without allocating a `Vec`.
+- Manual byte-scanning timestamp parser (replaces regex on the hot path).
+
+### Fixed (post-1.0)
+
+- `microdvd::parse_bytes`: replaced `unreachable!()` with proper `Err`.
+- `sbv::detect_format`: tightened detection to require `H:MM:SS.mmm` time
+  format, preventing false positives on SRT files.
+- `vtt::parse_bytes` / unified `parse_bytes_as`: now preserves the WEBVTT
+  header block via new `parse_bytes_full`.
+- LRC parser: subtitles now have a 5-second default display duration instead
+  of zero duration.
+
 ## [1.0.0] - 2026-07-15
 
 ### Added

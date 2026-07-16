@@ -230,6 +230,12 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
   Ok(subtitles)
 }
 
+/// Parse VTT bytes, preserving the header block.
+pub fn parse_bytes_full(data: &[u8]) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
+  let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+  parse(&text)
+}
+
 #[cfg(feature = "http")]
 pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
   let response = reqwest::get(url).await?;

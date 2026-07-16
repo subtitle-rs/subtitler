@@ -91,6 +91,22 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
   parse_content(&text)
 }
 
+/// Parse a SubViewer file asynchronously.
+pub async fn parse_file(
+  path: impl AsRef<std::path::Path>,
+) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
+  let text = tokio::fs::read_to_string(path).await?;
+  parse_content(&text)
+}
+
+/// Parse a SubViewer file from a URL (requires `http` feature).
+#[cfg(feature = "http")]
+pub async fn parse_url(url: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
+  let response = reqwest::get(url).await?;
+  let content = response.text().await?;
+  parse_content(&content)
+}
+
 pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   let mut buf = match header {
     Some(h) => format!("{h}\n\n"),

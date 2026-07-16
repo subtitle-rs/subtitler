@@ -136,6 +136,9 @@ subtitler = { version = "1.0", default-features = false, features = ["srt", "vtt
 | `ssa`        | SubStation Alpha (`.ssa`) |
 | `microdvd`   | MicroDVD (`.sub`)|
 | `subviewer`  | SubViewer        |
+| `ttml`       | TTML/IMSC (`.ttml`, `.xml`) |
+| `sbv`        | YouTube SBV (`.sbv`) |
+| `lrc`        | Lyrics LRC (`.lrc`) |
 | `http`       | `parse_url()` via `reqwest` |
 
 See `MIGRATION.md` for upgrading from 0.1.x.

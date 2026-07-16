@@ -76,8 +76,25 @@ pub fn parse_bytes(data: &[u8], fps: Option<f64>) -> AnyResult<(f64, Vec<Subtitl
   let file = parse_content(&text, fps)?;
   match file {
     SubtitleFile::MicroDvd { fps, subtitles } => Ok((fps, subtitles)),
-    _ => unreachable!("parse_content returns MicroDvd"),
+    _ => Err(anyhow!("parse_content did not return MicroDvd variant")),
   }
+}
+
+/// Parse a MicroDVD file asynchronously.
+pub async fn parse_file(
+  path: impl AsRef<std::path::Path>,
+  fps: Option<f64>,
+) -> AnyResult<SubtitleFile> {
+  let text = tokio::fs::read_to_string(path).await?;
+  parse_content(&text, fps)
+}
+
+/// Parse a MicroDVD file from a URL (requires `http` feature).
+#[cfg(feature = "http")]
+pub async fn parse_url(url: &str, fps: Option<f64>) -> AnyResult<SubtitleFile> {
+  let response = reqwest::get(url).await?;
+  let content = response.text().await?;
+  parse_content(&content, fps)
 }
 
 pub fn to_string(subtitles: &[Subtitle], fps: Option<f64>) -> String {

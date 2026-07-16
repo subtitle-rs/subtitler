@@ -52,8 +52,8 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
     }
 
     for (time, _, _) in times {
-      // LRC cues have zero duration by default
-      subtitles.push(Subtitle::new(time, time, text));
+      // LRC cues have no explicit end; use a default display duration of 5s
+      subtitles.push(Subtitle::new(time, time + 5000, text));
     }
   }
 
@@ -66,6 +66,20 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
 pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
   let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
   parse_content(&text)
+}
+
+/// Parse an LRC file asynchronously.
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+  let text = tokio::fs::read_to_string(path).await?;
+  parse_content(&text)
+}
+
+/// Parse an LRC file from a URL (requires `http` feature).
+#[cfg(feature = "http")]
+pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+  let response = reqwest::get(url).await?;
+  let content = response.text().await?;
+  parse_content(&content)
 }
 
 /// Detect if data looks like LRC.
@@ -106,7 +120,7 @@ mod tests {
     let subs = parse_content(content).unwrap();
     assert_eq!(subs.len(), 2);
     assert_eq!(subs[0].start, 1500);
-    assert_eq!(subs[0].end, 1500); // zero-duration
+    assert_eq!(subs[0].end, 6500); // default 5s display duration
     assert_eq!(subs[0].text, "Hello");
     assert_eq!(subs[1].start, 3200);
   }

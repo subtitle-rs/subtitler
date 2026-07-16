@@ -134,6 +134,20 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
   parse_content(text)
 }
 
+/// Parse a TTML file asynchronously.
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+  let text = tokio::fs::read_to_string(path).await?;
+  parse_content(&text)
+}
+
+/// Parse a TTML file from a URL (requires `http` feature).
+#[cfg(feature = "http")]
+pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+  let response = reqwest::get(url).await?;
+  let content = response.text().await?;
+  parse_content(&content)
+}
+
 /// Detect if data looks like TTML (contains `<tt` root element).
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   let text = std::str::from_utf8(data).ok()?;
@@ -195,7 +209,8 @@ pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
   let _ = writer.write_event(Event::End(BytesEnd::new("body")));
   let _ = writer.write_event(Event::End(BytesEnd::new("tt")));
 
-  String::from_utf8(writer.into_inner().into_inner()).unwrap_or_default()
+  String::from_utf8(writer.into_inner().into_inner())
+    .expect("TTML writer always produces valid UTF-8")
 }
 
 #[cfg(test)]
