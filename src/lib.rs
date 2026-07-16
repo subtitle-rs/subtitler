@@ -118,7 +118,18 @@ pub async fn parse_file(
 /// the `http` feature).
 #[cfg(feature = "http")]
 pub async fn parse_url(url: &str) -> Result<model::SubtitleFile, error::ParseError> {
-  let response = reqwest::get(url).await?;
+  let client = reqwest::Client::new();
+  parse_url_with(url, &client).await
+}
+
+/// Parse a URL with a custom `reqwest::Client`, allowing configuration of
+/// timeouts, redirect policy, TLS options, etc.
+#[cfg(feature = "http")]
+pub async fn parse_url_with(
+  url: &str,
+  client: &reqwest::Client,
+) -> Result<model::SubtitleFile, error::ParseError> {
+  let response = client.get(url).send().await?;
   let bytes = response.bytes().await?;
   parse_bytes(&bytes)
 }

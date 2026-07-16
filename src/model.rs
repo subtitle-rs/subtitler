@@ -82,6 +82,11 @@ impl Subtitle {
     self
   }
 
+  /// Shift both start and end by `offset_ms` milliseconds.
+  ///
+  /// A positive offset delays the subtitle; a negative offset advances it.
+  /// Values are clamped to 0 — a large negative shift can produce `end < start`,
+  /// which downstream `validate()` will report as negative or zero duration.
   pub fn shift(&mut self, offset_ms: i64) {
     let start = self.start as i64 + offset_ms;
     let end = self.end as i64 + offset_ms;

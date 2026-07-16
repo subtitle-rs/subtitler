@@ -121,3 +121,47 @@ fn unified_parse_bytes_unknown_format_errors() {
     Err(subtitler::error::ParseError::UnknownFormat)
   ));
 }
+
+#[test]
+fn sbv_multiline_text() {
+  let content = "0:00:01.000,0:00:03.500,Line one|Line two\n0:00:04.000,0:00:06.500,Single\n";
+  let subs = subtitler::sbv::parse_content(content).unwrap();
+  assert_eq!(subs.len(), 2);
+  // SBV uses | for line breaks internally; the parser replaces | with \n
+  assert_eq!(subs[0].text, "Line one|Line two");
+}
+
+#[test]
+fn lrc_multi_timestamp_round_trip() {
+  let content = "[00:10.00][00:30.00]Repeated line\n";
+  let subs = subtitler::lrc::parse_content(content).unwrap();
+  assert_eq!(subs.len(), 2, "two timestamps should produce two cues");
+  // Both get the same text
+  assert_eq!(subs[0].text, "Repeated line");
+  assert_eq!(subs[1].text, "Repeated line");
+  // First uses start + 5s default duration
+  assert_eq!(subs[0].start, 10000);
+  assert_eq!(subs[0].end, 15000);
+  assert_eq!(subs[1].start, 30000);
+  assert_eq!(subs[1].end, 35000);
+
+  // Round-trip: serialize back, each cue becomes its own LRC line
+  let output = subtitler::lrc::to_string(&subs);
+  assert!(output.contains("[00:10.00]"));
+  assert!(output.contains("[00:30.00]"));
+}
+
+#[test]
+fn microdvd_fps_round_trip_precision() {
+  // {1}{1}30.000 declares fps=30; {30}{60} at 30fps = 1000-2000ms.
+  // Re-encode and verify frame numbers survive.
+  let content = "{1}{1}30.000\n{30}{60}Hello\n";
+  let file = subtitler::microdvd::parse_content(content, None).unwrap();
+  let output = file.to_string_with_format(&Format::MicroDvd);
+  assert!(output.contains("30.000"), "fps header lost");
+  assert!(
+    output.contains("{30}{60}"),
+    "frame numbers changed: {}",
+    output
+  );
+}
