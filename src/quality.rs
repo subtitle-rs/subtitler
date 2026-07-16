@@ -8,8 +8,35 @@
 //! The `Translator` trait defines an interface for machine translation
 //! of subtitle content. Implementations can wrap any API.
 
-use crate::model::{Subtitle, SubtitleFormat, ValidationIssue};
+use crate::model::{Subtitle, ValidationIssue};
 use serde::{Deserialize, Serialize};
+
+/// Validate a single subtitle for CPS and text-length issues (standalone,
+/// does not require the SubtitleFormat trait or any specific format variant).
+fn validate_single_subtitle(
+  sub: &Subtitle,
+  max_chars: usize,
+  max_cps: f64,
+) -> Vec<ValidationIssue> {
+  let mut issues = Vec::new();
+  let char_count = sub.plaintext().chars().count();
+  if char_count > max_chars {
+    issues.push(ValidationIssue::TextTooLong {
+      index: 0,
+      chars: char_count,
+      max_chars,
+    });
+  }
+  let cps = sub.chars_per_second();
+  if cps > max_cps {
+    issues.push(ValidationIssue::CpsTooHigh {
+      index: 0,
+      cps,
+      max_cps,
+    });
+  }
+  issues
+}
 
 // ── Quality Report ──
 
@@ -45,12 +72,11 @@ pub fn generate_report(
   max_gap_ms: u64,
   max_cps: f64,
 ) -> QualityReport {
-  let sub_qualities: Vec<SubtitleQuality> = subtitles
+  let mut sub_qualities: Vec<SubtitleQuality> = subtitles
     .iter()
     .enumerate()
     .map(|(i, sub)| {
-      let validate = crate::model::SubtitleFile::Srt(vec![sub.clone()])
-        .validate_extended(max_chars, max_gap_ms, max_cps);
+      let issues = validate_single_subtitle(sub, max_chars, max_cps);
       let cps = sub.chars_per_second();
       let wpm = sub.reading_speed_wpm();
       let char_count = sub.plaintext().chars().count();
@@ -65,11 +91,26 @@ pub fn generate_report(
         words_per_minute: wpm,
         char_count,
         word_count,
-        issues: validate,
+        issues,
         has_poor_line_break: has_poor_break,
       }
     })
     .collect();
+
+  // Check inter-subtitle gaps
+  if sub_qualities.len() > 1 {
+    for i in 1..subtitles.len() {
+      let gap = subtitles[i].start.saturating_sub(subtitles[i - 1].end);
+      if gap > max_gap_ms {
+        sub_qualities[i].issues.push(ValidationIssue::TooLongGap {
+          index: i,
+          prev_end: subtitles[i - 1].end,
+          curr_start: subtitles[i].start,
+          gap_ms: gap,
+        });
+      }
+    }
+  }
 
   let total_subtitles = subtitles.len();
   let total_issues: usize = sub_qualities.iter().map(|q| q.issues.len()).sum();

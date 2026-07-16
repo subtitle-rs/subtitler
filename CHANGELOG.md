@@ -6,32 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added (post-1.0)
-
-- TTML/IMSC subtitle format (`ttml` feature, `quick-xml` based).
-- SBV (YouTube) subtitle format (`sbv` feature).
-- LRC (Lyrics) subtitle format (`lrc` feature).
-- `quality` module: `QualityReport` generator (JSON-serializable),
-  `Translator` trait for machine translation, `DummyTranslator`.
-- `normalize::optimize_line_breaks` — smart line splitting at natural
-  boundaries for readability.
-- `srt::parse_stream` / `SrtStream` — streaming iterator for incremental SRT
-  parsing without allocating a `Vec`.
-- Manual byte-scanning timestamp parser (replaces regex on the hot path).
-
-### Fixed (post-1.0)
-
-- `microdvd::parse_bytes`: replaced `unreachable!()` with proper `Err`.
-- `sbv::detect_format`: tightened detection to require `H:MM:SS.mmm` time
-  format, preventing false positives on SRT files.
-- `vtt::parse_bytes` / unified `parse_bytes_as`: now preserves the WEBVTT
-  header block via new `parse_bytes_full`.
-- LRC parser: subtitles now have a 5-second default display duration instead
-  of zero duration.
-
-## [1.0.0] - 2026-07-15
+## [1.0.0] - 2026-07-16
 
 ### Added
+- **9 subtitle formats**: SRT, WebVTT, ASS/SSA, MicroDVD, SubViewer,
+  TTML/IMSC (`quick-xml` based), SBV (YouTube), LRC (Lyrics).
 - `SubtitleFormat` trait consolidating editing methods (`shift_all`, `validate`,
   `validate_extended`, `merge_adjacent`, `split_long`, `sort`, `map`, `filter`,
   `remove_overlaps`, `enforce_min_duration`, `enforce_max_duration`,
@@ -42,9 +21,43 @@ adheres to [Semantic Versioning](https://semver.org/).
 - `ParseError` typed error (`UnknownFormat` / `Unsupported` / `Decode` / `Io` /
   `Http`).
 - Per-format Cargo feature flags (`srt`, `vtt`, `ass`, `ssa`, `microdvd`,
-  `subviewer`) for compile-size trimming.
-- `AssData` shared struct for ASS/SSA, and `SubtitleFile::Ssa` variant.
-- `microdvd::parse_bytes`, `subviewer::parse_bytes` per-format entry points.
+  `subviewer`, `ttml`, `sbv`, `lrc`) for compile-size trimming.
+- `AssData` shared struct for ASS/SSA.
+- `quality` module: `QualityReport` generator (JSON-serializable),
+  `Translator` trait for machine translation, `DummyTranslator`.
+- `normalize::optimize_line_breaks` — smart line splitting at natural
+  boundaries for readability.
+- `srt::parse_stream` / `SrtStream` — streaming iterator for incremental SRT
+  parsing without allocating a `Vec`.
+- Manual byte-scanning timestamp parser (replaces regex on the hot path).
+- Text normalization: whitespace, quotes, punctuation, OCR error fixing,
+  hearing-impaired tag stripping.
+- `normalize_subtitle`, `strip_tags`, `plaintext` helpers.
+- CLI: `parse`, `convert`, `validate`, `edit`, `info`, `detect` subcommands.
+- Encoding detection via `chardetng`.
+
+### Changed
+- **[BREAKING]** `SubtitleFormat` enum renamed to `Format`.
+- **[BREAKING]** `SubtitleFile` enum expanded to 9 variants. `MicroDvd` and
+  `SubViewer` are now first-class variants (previously collapsed into `Srt`,
+  losing fps/header). `Ass`/`Ssa` wrap `AssData`. Added `Ttml`, `Sbv`, `Lrc`.
+- **[BREAKING]** `srt::parse_content`, `parse_bytes` and the `vtt::` equivalents
+  are now sync (not `async`). `parse_file`/`parse_url` remain async.
+- MicroDVD round-trip now preserves fps; SubViewer round-trip preserves the
+  `[INFORMATION]` header block.
+
+### Fixed
+- `microdvd::parse_bytes`: replaced `unreachable!()` with proper `Err`.
+- `sbv::detect_format`: tightened to require `H:MM:SS.mmm` time format.
+- `vtt::parse_bytes` / unified `parse_bytes_as`: preserves the WEBVTT header.
+- VTT NOTE blocks: correctly skipped, subtitles after them no longer lost.
+- VTT voice tags: speaker name now extracted (was hardcoded to `"v"`).
+- TTML: namespace-prefixed tags (`tt:p`), `<br/>` line breaks, `dur` attribute,
+  `tts:fontStyle`/`tts:fontWeight` span styling now parsed.
+- LRC parser: 5s default display duration instead of zero.
+
+### Removed
+- Implicit degradation of MicroDVD/SubViewer into the `Srt` variant.
 
 ### Changed
 - **[BREAKING]** `SubtitleFormat` enum renamed to `Format`.

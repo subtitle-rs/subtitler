@@ -822,6 +822,7 @@ fn ass_to_string_impl(file: &SubtitleFile, subs: &[Subtitle]) -> String {
     SubtitleFile::Ass(data) => (data.info.clone(), data.styles.clone()),
     #[cfg(feature = "ssa")]
     SubtitleFile::Ssa(data) => (data.info.clone(), data.styles.clone()),
+    #[allow(unreachable_patterns)]
     _ => (
       std::collections::HashMap::new(),
       vec![crate::model::AssStyle::default_style()],
