@@ -232,12 +232,10 @@ pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
   for sub in subtitles {
     let start = crate::utils::format_timestamp(sub.start, "WebVTT");
     let end = crate::utils::format_timestamp(sub.end, "WebVTT");
-    // Convert '.' separator to ',' for TTML
-    let start_ttml = start.replace('.', ",");
-    let end_ttml = end.replace('.', ",");
+    // TTML uses '.' separator (same as WebVTT), no conversion needed
 
     let p = BytesStart::new("p")
-      .with_attributes([("begin", start_ttml.as_str()), ("end", end_ttml.as_str())]);
+      .with_attributes([("begin", start.as_str()), ("end", end.as_str())]);
     let _ = writer.write_event(Event::Start(p));
 
     if sub.text_parts.is_empty() {
@@ -306,8 +304,8 @@ mod tests {
     let subs = parse_content(SAMPLE_TTML).unwrap();
     let output = to_string(&subs, None);
     assert!(output.contains("<p"));
-    assert!(output.contains("begin=\"00:00:01,000\""));
-    assert!(output.contains("end=\"00:00:03,500\""));
+    assert!(output.contains("begin=\"00:00:01.000\""));
+    assert!(output.contains("end=\"00:00:03.500\""));
     // Re-parse
     let reparsed = parse_content(&output).unwrap();
     assert_eq!(subs.len(), reparsed.len());
