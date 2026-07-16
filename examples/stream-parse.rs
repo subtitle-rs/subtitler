@@ -4,7 +4,7 @@
 
 use subtitler::srt;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> subtitler::types::AnyResult<()> {
   let content = "1\n00:00:01,000 --> 00:00:03,500\nFirst subtitle\n\n\
                  2\n00:00:04,000 --> 00:00:06,500\nSecond subtitle\n\n\

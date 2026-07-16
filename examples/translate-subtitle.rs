@@ -7,7 +7,7 @@ use std::path::Path;
 use subtitler::SubtitleFormat;
 use subtitler::model::Format;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> subtitler::types::AnyResult<()> {
   let dir = "examples";
   let mut processed = 0;

@@ -5,7 +5,7 @@
 use subtitler::SubtitleFormat;
 use subtitler::model::Format;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> subtitler::types::AnyResult<()> {
   let data = tokio::fs::read("examples/example.srt").await?;
   let file = subtitler::parse_bytes(&data)?;

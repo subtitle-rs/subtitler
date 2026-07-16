@@ -8,7 +8,7 @@ use subtitler::vtt::parse_file;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> AnyResult<()> {
   let subscriber = FmtSubscriber::builder()
     .with_max_level(Level::INFO)
