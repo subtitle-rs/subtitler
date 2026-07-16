@@ -70,14 +70,10 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile>
   })
 }
 
-/// Decode bytes to UTF-8 then parse, returning the resolved fps and subtitles.
-pub fn parse_bytes(data: &[u8], fps: Option<f64>) -> AnyResult<(f64, Vec<Subtitle>)> {
+/// Decode bytes to UTF-8 then parse, returning a `SubtitleFile`.
+pub fn parse_bytes(data: &[u8], fps: Option<f64>) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  let file = parse_content(&text, fps)?;
-  match file {
-    SubtitleFile::MicroDvd { fps, subtitles } => Ok((fps, subtitles)),
-    _ => Err(anyhow!("parse_content did not return MicroDvd variant")),
-  }
+  parse_content(&text, fps)
 }
 
 /// Parse a MicroDVD file asynchronously.

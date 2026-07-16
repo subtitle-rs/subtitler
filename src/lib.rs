@@ -78,11 +78,8 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     },
     #[cfg(feature = "microdvd")]
     Format::MicroDvd => {
-      let (fps, subs) = microdvd::parse_bytes(data, None)?;
-      Ok(model::SubtitleFile::MicroDvd {
-        fps,
-        subtitles: subs,
-      })
+      let file = microdvd::parse_bytes(data, None)?;
+      Ok(file)
     }
     #[cfg(feature = "subviewer")]
     Format::SubViewer => {

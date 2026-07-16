@@ -23,6 +23,11 @@ enum Phase {
 }
 
 fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
+  // Fast path: if no HTML-like tags exist, return the text as-is
+  if !text.contains('<') {
+    return (text.to_string(), Vec::new());
+  }
+
   let mut parts = Vec::new();
   let mut plain = String::new();
   let mut bold = false;

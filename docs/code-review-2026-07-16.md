@@ -529,3 +529,185 @@ tokio = { version = "1", features = ["fs", "io-util", "rt-multi-thread", "macros
 - 未执行 `cargo build` / `cargo test` —— 本报告是静态分析；建议补一轮 `cargo clippy -- -D warnings` 与 `cargo test --all-targets --all-features` 作为后续动作的输入。
 
 > 本报告**未修改任何代码**；如需对其中某项建议落实，可另起任务。
+
+---
+
+## 13. 修复验证（2026-07-16 follow-up）
+
+> 提交：`4eda5e3 fix: 8 code review bugs`
+> 验证方法：`git show 4eda5e3` 静态对照 + `cargo test --all-targets --all-features` + `cargo clippy -- -D warnings` + `cargo fmt -- --check` + 端到端调用 `optimize_line_breaks` 验证顺序
+
+### 13.1 验证结果总览
+
+| 项目 | 报告条目 | 状态 | 备注 |
+|---|---|---|---|
+| ASS `is_comment` group 错位 | §2.1 | ✅ 修复正确 | `caps.get(14)` + 新增 `test_is_comment_uses_effect` |
+| SRT `parse_stream` 静默吞错 | §2.2 | ✅ 修复正确 | 改 `match` 模式返回 `Some(Err(e))` |
+| SubViewer 多位小数 ×10 错位 | §2.11 | ✅ 修复正确 | 加 `len() > 2` 校验并 `return Err` |
+| VTT phase 三分支冗余 | §2.4 | ✅ 修复正确 | 合并为 `phase = Phase::Cue;` |
+| TTML `_header` 未实现 | §5.2 | ✅ 仅文档化 | 加了 `/// Note: ...not yet implemented`，实现仍未做 |
+| `RE_TIMESTAMP` 无上限 | §10.4 | ✅ 修复正确 | `\d{1,}` → `\d{1,4}` |
+| `optimize_line_breaks` 深递归 | §4.6 | 🔴 **引入了行序反转 bug** | 见 §13.3 |
+| `encoding` 模块死代码 | §3.1 | 🟡 **部分修复** | 见 §13.4 |
+
+测试状态：`cargo test --all-targets --all-features` 全部通过（lib 109 + doc 9 + integration 6 + arch 6 + cleanup 66 = 196 passed, 0 failed），`cargo clippy -- -D warnings` 干净，`cargo fmt -- --check` 干净。
+
+### 13.2 修复覆盖度（27 项建议中已修 8 项）
+
+- 🔴 高优先级（6 项） → 已修 4（ASS / SRT stream / SubViewer / RE_TIMESTAMP），**未修 2**（encoding 真正解码、parse_url 客户端）
+- 🟡 中优先级（10 项） → 已修 3（VTT phase / TTML docs / normalize recursion *），未修 7
+- 🟢 低优先级（11 项） → 已修 1（TTML header doc），未修 10
+
+\* "已修" 但引入了新 bug。
+
+### 13.3 🐛 新发现的回归 bug：`optimize_line_breaks` 行序反转
+
+[normalize.rs:106-138](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/normalize.rs#L106-L138) 的修改用 LIFO `Vec::pop()` + 末尾 `result_parts.reverse()`。
+
+**问题**：`reverse()` 同时反转了外层行序和内层分片序，对"单行被切分成多个子行"的常见情况会**整体倒置**。
+
+**端到端实测**（独立 cargo project 调 `optimize_line_breaks("abc def ghijklmnop", 5)`）：
+```
+Input:  "abc def ghijklmnop"
+Output: "lmnop\nghijk\ndef\nabc"
+```
+- 期望（递归版原本行为）：`"abc\ndef\nghijk\nlmnop"`
+- 实际（迭代版）：**完全倒置**
+
+**原因分析**：
+- 原始递归：`"abc def ghijklmnop"` → push `"abc def"`，recurse → push `"abc"`、`"def"`、`"ghijk"`、`"lmnop"`（按递归调用的顺序）
+- 迭代 LIFO：`text.lines().collect()` 顺序入队，`pop()` 从尾部取 → 顺序被反转；`result_parts.reverse()` 又反转一次
+- 最终结果：所有行（包括同一行被切分出的子行）**逆序输出**
+
+**正确改法**（任选其一，**不**修改其他逻辑）：
+
+```rust
+// 方案 A：VecDeque + pop_front（FIFO，无需 reverse）
+use std::collections::VecDeque;
+let mut queue: VecDeque<String> = text.lines().map(|l| l.trim().to_string()).collect();
+while let Some(line) = queue.pop_front() {
+    if line.chars().count() <= max_chars {
+        result_parts.push(line);
+        continue;
+    }
+    // ... split 时把剩余部分 push_back 到 queue
+}
+// 删除 result_parts.reverse() 一行
+```
+
+```rust
+// 方案 B：保留 Vec<output>，按行序遍历（不依赖 LIFO 顺序）
+let mut pending: Vec<String> = text.lines().map(|l| l.trim().to_string()).collect();
+let mut result_parts: Vec<String> = Vec::new();
+while let Some(line) = pending.remove(0) { // O(n) 但语义正确；或 VecDeque
+    ...
+}
+```
+
+**回归保护**：补 1 个 round-trip 测试，覆盖：
+1. 单行长于 `max_chars` 被多切片的输入（如 `"abc def ghijklmnop"`，max=5）
+2. 多行输入中部分行被切分（如 `"short\nlong line that needs splitting here\nshort"`，max=10）
+3. 输入按词/按字符两种切分路径
+
+### 13.4 🟡 `encoding` 模块接入但**未真正解码**
+
+[encoding.rs:45-53](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/encoding.rs#L45-L53) 的非 UTF-8/UTF-16 分支：
+
+```rust
+_ => {
+    let text = String::from_utf8(data.to_vec()).map_err(|_| {
+        anyhow!("Cannot decode encoding '{}'. Try converting to UTF-8 first.", encoding)
+    })?;
+    Ok(text)
+}
+```
+
+`chardetng` 报告出 `"GBK"` / `"SHIFT_JIS"` / `"Big5"` / `"EUC-KR"` 等名字，但这里仍然尝试 `String::from_utf8` —— **会失败**，因为数据是 GBK 等编码的字节序列。
+
+净效果：
+- ASS/SSA 的 `parse_bytes` 在接收 GBK 编码的实际文件时，错误信息从原来的 `"Invalid UTF-8"` 变成 `"Cannot decode encoding 'GBK'. Try converting to UTF-8 first."`
+- **功能上没修复**，只是 UX 略好
+
+**正确改法**（最少改动）：
+1. 在 `Cargo.toml` 加 `encoding_rs = "0.8"`（de-facto standard Rust 编码库，mozilla 支持）
+2. 把 `_ =>` 分支改为：
+   ```rust
+   _ => {
+       let enc = encoding_rs::Encoding::for_label(encoding.as_bytes())
+           .ok_or_else(|| anyhow!("Unsupported encoding: {}", encoding))?;
+       let (cow, _, had_errors) = enc.decode(data);
+       if had_errors {
+           return Err(anyhow!("Decoding {} had errors", encoding));
+       }
+       Ok(cow.into_owned())
+   }
+   ```
+3. 补一个 fixture：拿 `iconv -f GBK -t UTF-8` 之前的 GBK .ass 文件跑 `ass::parse_bytes` → 应成功解析
+
+### 13.5 仍未修复的重要项
+
+按修复优先级（**与原报告 §11 同号**）：
+
+#### 🔴 高优先级（仍开放）
+- **§3.1 真正解码非 UTF-8**（§13.4 详述）
+- **§3.7 `parse_url` 暴露 `reqwest::Client` 配置入口**（SSRF/超时/headers）
+- **§10.4 给 `RE_TIMESTAMP` 数字加上限**（已修 ✓）
+
+#### 🟡 中优先级（仍开放）
+- **§4.1 `parse_bytes` 避免 `data.to_vec()`**（`encoding::decode_to_string` 仍 `to_vec`；`String::from_utf8(data)` 是 O(1) borrow，可以省 copy）
+- **§4.2 `detect_format` 共享 pre-parsed lines**
+- **§5.1 统一各 format 的 `parse_*` 返回类型**（`SubtitleFile` vs `Vec<Subtitle>` vs tuple 三种并存）
+- **§5.3 `generate` 添加 `WritePolicy`**
+- **§6.2.4 `transform-fps` 长度校验**
+- **§9.1 reqwest `default-features = false` + `rustls-tls`**
+
+#### 🟢 低优先级（仍开放）
+- §1.2.1 `Subtitle` 字段瘦身
+- §2.10 LRC 多时间戳行 round-trip 模型
+- §4.3 `extract_text_parts` 提前 `contains('<')` 跳过
+- §4.4 为大 format 提供 streaming parser
+- §5.6 `Subtitle` builder 构造
+- §7.2 补齐 SBV / LRC / SubViewer / MicroDVD round-trip
+- §7.2.2 引入 proptest
+- §8 README 补齐 TTML / SBV / LRC + editing API + QualityReport
+- §8.2 给 `SubtitleFile` 各变体加 `///` 文档
+- §9.2 tracing 在 lib 代码中加 `#[instrument]`，否则移除 deps
+- §9.4 tokio 减 feature
+
+### 13.6 文档声明仍需更新
+
+`docs/promotion/04-english-reddit-hn.md` 中"Zero unsafe, zero panic!/unreachable! in production code"声明：
+- [main.rs:22](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/main.rs#L22) `expect("setting default subscriber failed")` 仍在
+- [ttml.rs:263](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/ttml.rs#L263) `expect("TTML writer always produces valid UTF-8")` 仍在
+
+commit 4eda5e3 未涉及这两处。需要在后续 PR 中显式更新推广文档或消除 `expect`。
+
+### 13.7 验证脚手架
+
+报告中所有断言均可由以下命令复现：
+```bash
+# 全量测试 + lint
+cargo test --all-targets --all-features
+cargo clippy --all-targets --all-features -- -D warnings
+cargo fmt --all -- --check
+
+# §13.3 行序反转实测（独立 crate 调 subtitler 库）
+mkdir -p /tmp/lb_test/src
+cat > /tmp/lb_test/Cargo.toml << 'EOF'
+[package]
+name = "lb_test"
+version = "0.1.0"
+edition = "2024"
+[dependencies]
+subtitler = { path = "/Users/mankong/volumes/code/subtitle-rs/subtitler" }
+EOF
+cat > /tmp/lb_test/src/main.rs << 'EOF'
+use subtitler::normalize::optimize_line_breaks;
+fn main() {
+    let r = optimize_line_breaks("abc def ghijklmnop", 5);
+    println!("{r}");
+}
+EOF
+cd /tmp/lb_test && cargo run --release
+# 期望 "abc\ndef\nghijk\nlmnop"，实际 "lmnop\nghijk\ndef\nabc" → 确认 bug
+```

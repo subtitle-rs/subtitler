@@ -58,6 +58,30 @@ impl Subtitle {
     }
   }
 
+  /// Builder-style: set the subtitle index (cue number).
+  pub fn with_index(mut self, index: usize) -> Self {
+    self.index = Some(index);
+    self
+  }
+
+  /// Builder-style: set the style name (ASS/SSA).
+  pub fn with_style(mut self, style: impl Into<String>) -> Self {
+    self.style = Some(style.into());
+    self
+  }
+
+  /// Builder-style: set the settings string (VTT).
+  pub fn with_settings(mut self, settings: impl Into<String>) -> Self {
+    self.settings = Some(settings.into());
+    self
+  }
+
+  /// Builder-style: set the layer (ASS/SSA).
+  pub fn with_layer(mut self, layer: i32) -> Self {
+    self.layer = Some(layer);
+    self
+  }
+
   pub fn shift(&mut self, offset_ms: i64) {
     let start = self.start as i64 + offset_ms;
     let end = self.end as i64 + offset_ms;
@@ -272,36 +296,65 @@ pub struct AssData {
   pub subtitles: Vec<Subtitle>,
 }
 
+/// Parsed subtitle file. Each variant holds format-specific data plus a
+/// common `Vec<Subtitle>`. Use `subtitles()` / `subtitles_mut()` to access
+/// the shared subtitle list regardless of the source format.
+///
+/// Methods like `validate()`, `shift_all()`, `merge_adjacent()` etc. are
+/// available through the `SubtitleFormat` trait (auto-derived for all
+/// variants via default implementations).
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum SubtitleFile {
+  /// SubRip Text format (`.srt`). The most widely-supported subtitle format.
   #[cfg(feature = "srt")]
   Srt(Vec<Subtitle>),
+
+  /// WebVTT format (`.vtt`). Used by HTML5 video players.
+  /// `header` stores optional metadata (`WEBVTT` header + Kind/Language lines).
   #[cfg(feature = "vtt")]
   Vtt {
     #[serde(skip_serializing_if = "Option::is_none")]
     header: Option<String>,
     subtitles: Vec<Subtitle>,
   },
+
+  /// Advanced SubStation Alpha v4+ format (`.ass`). Supports rich styling,
+  /// positioning, and karaoke effects.
   #[cfg(feature = "ass")]
   Ass(AssData),
+
+  /// SubStation Alpha v4 format (`.ssa`). Older ASS variant; shares the same
+  /// data structure (`AssData`) as `Ass`, differing only in the `format()` tag.
   #[cfg(feature = "ssa")]
   Ssa(AssData),
+
+  /// MicroDVD format (`.sub`). Frame-based timestamps. `fps` records the
+  /// frame rate used for frame↔ms conversion.
   #[cfg(feature = "microdvd")]
   MicroDvd { fps: f64, subtitles: Vec<Subtitle> },
+
+  /// SubViewer format. `header` stores the original `[INFORMATION]` block.
   #[cfg(feature = "subviewer")]
   SubViewer {
     #[serde(skip_serializing_if = "Option::is_none")]
     header: Option<String>,
     subtitles: Vec<Subtitle>,
   },
+
+  /// TTML / IMSC 1.0/1.1 format (`.ttml`). XML-based, used in streaming
+  /// (Netflix, Amazon, Hulu). `header` is reserved for future metadata support.
   #[cfg(feature = "ttml")]
   Ttml {
     #[serde(skip_serializing_if = "Option::is_none")]
     header: Option<String>,
     subtitles: Vec<Subtitle>,
   },
+
+  /// YouTube SBV format (`.sbv`). Simple comma-separated timestamps.
   #[cfg(feature = "sbv")]
   Sbv(Vec<Subtitle>),
+
+  /// LRC lyrics format (`.lrc`). Used for song lyric synchronization.
   #[cfg(feature = "lrc")]
   Lrc(Vec<Subtitle>),
 }

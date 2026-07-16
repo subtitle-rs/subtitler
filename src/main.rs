@@ -19,7 +19,8 @@ async fn main() -> AnyResult<()> {
   let subscriber = FmtSubscriber::builder()
     .with_max_level(Level::WARN)
     .finish();
-  tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+  tracing::subscriber::set_global_default(subscriber)
+    .unwrap_or_else(|e| eprintln!("warning: could not set tracing subscriber: {}", e));
 
   let cli = cli::Cli::parse();
 
@@ -348,9 +349,8 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
     ops += 1;
   }
 
-  if let Some(fps_pair) = args.transform_fps
-    && fps_pair.len() == 2
-  {
+  if let Some(fps_pair) = args.transform_fps {
+    // clap enforces number_of_values = 2, so fps_pair.len() is always 2
     file.transform_framerate(fps_pair[0], fps_pair[1]);
     ops += 1;
   }

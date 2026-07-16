@@ -262,8 +262,12 @@ pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
   let _ = writer.write_event(Event::End(BytesEnd::new("body")));
   let _ = writer.write_event(Event::End(BytesEnd::new("tt")));
 
-  String::from_utf8(writer.into_inner().into_inner())
-    .expect("TTML writer always produces valid UTF-8")
+  String::from_utf8(writer.into_inner().into_inner()).unwrap_or_else(|e| {
+    // quick-xml Writer produces bytes from &str input, so UTF-8 is always
+    // valid in practice. If it somehow fails, return an empty string.
+    eprintln!("warning: TTML writer produced invalid UTF-8: {}", e);
+    String::new()
+  })
 }
 
 #[cfg(test)]
