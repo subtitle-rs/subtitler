@@ -111,6 +111,11 @@ impl Subtitle {
     }
   }
 
+  /// Returns true if the subtitle text is empty or contains only whitespace.
+  pub fn is_empty(&self) -> bool {
+    self.text.trim().is_empty()
+  }
+
   pub fn strip_tags(&mut self) {
     self.text = RE_HTML_TAG.replace_all(&self.text, "").to_string();
     self.text = RE_ASS_TAG.replace_all(&self.text, "").to_string();
@@ -590,7 +595,8 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
     while i + 1 < subs.len() {
       let gap = subs[i + 1].start.saturating_sub(subs[i].end);
       if gap <= max_gap_ms {
-        let next_text = subs[i + 1].text.clone();
+        // Use move semantics instead of clone to avoid allocation
+        let next_text = std::mem::take(&mut subs[i + 1].text);
         subs[i].end = subs[i + 1].end;
         subs[i].text.push('\n');
         subs[i].text.push_str(&next_text);

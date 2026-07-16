@@ -28,8 +28,9 @@ fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
     return (text.to_string(), Vec::new());
   }
 
-  let mut parts = Vec::new();
-  let mut plain = String::new();
+  // Pre-allocate capacity based on text length to avoid reallocations
+  let mut parts = Vec::with_capacity(4); // Most subtitles have <4 styled parts
+  let mut plain = String::with_capacity(text.len());
   let mut bold = false;
   let mut italic = false;
   let mut underline = false;
