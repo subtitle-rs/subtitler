@@ -130,7 +130,7 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
         }
       }
       Ok(Event::Text(ref e)) => {
-        let text = e.unescape()?;
+        let text = e.decode().map_err(|e| anyhow::anyhow!("TTML decode error: {}", e))?;
         if in_p && !text.trim().is_empty() {
           let segment = text.to_string();
           current_text.push_str(&segment);
