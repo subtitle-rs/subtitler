@@ -14,7 +14,7 @@ static RE_FPS_HEADER: LazyLock<Regex> = LazyLock::new(|| {
 pub const DEFAULT_FPS: f64 = 23.976;
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
-  if let Ok(text) = String::from_utf8(data.to_vec())
+  if let Some(text) = crate::encoding::try_decode_for_detection(data)
     && text.contains('{')
     && text.contains('}')
     && RE_MICRODVD.is_match(&text)

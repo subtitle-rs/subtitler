@@ -13,7 +13,7 @@ static RE_SUBVIEWER_BRACKET: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
-  if let Ok(text) = String::from_utf8(data.to_vec()) {
+  if let Some(text) = crate::encoding::try_decode_for_detection(data) {
     for line in text.lines() {
       let trimmed = line.trim();
       if trimmed.is_empty() || RE_SUBVIEWER_BRACKET.is_match(trimmed) {

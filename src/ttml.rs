@@ -130,7 +130,9 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
         }
       }
       Ok(Event::Text(ref e)) => {
-        let text = e.decode().map_err(|e| anyhow::anyhow!("TTML decode error: {}", e))?;
+        let text = e
+          .decode()
+          .map_err(|e| anyhow::anyhow!("TTML decode error: {}", e))?;
         if in_p && !text.trim().is_empty() {
           let segment = text.to_string();
           current_text.push_str(&segment);
@@ -200,7 +202,7 @@ pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
 
 /// Detect if data looks like TTML (contains `<tt` root element).
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
-  let text = std::str::from_utf8(data).ok()?;
+  let text = crate::encoding::try_decode_for_detection(data)?;
   if text.contains("<tt")
     && (text.contains("http://www.w3.org/ns/ttml")
       || text.contains("http://www.w3.org/2006/10/ttaf1"))

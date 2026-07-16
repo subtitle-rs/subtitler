@@ -84,6 +84,29 @@ let file = subtitler::parse_url("https://example.com/sub.vtt").await?;
 
 These return `Result<SubtitleFile, subtitler::error::ParseError>`.
 
+## Removed Subtitle fields
+
+The `Subtitle` struct no longer has `layer`, `margin_l`, `margin_r`, `margin_v`, or `effect`
+fields. These were ASS/SSA-only fields that every subtitle carried as `Option`, wasting
+~80 bytes per subtitle for SRT/VTT files.
+
+If you accessed these fields directly, remove the accesses — they always returned `None`
+for non-ASS formats, and the ASS `to_string` output now defaults to `0` for margins
+and empty string for effect.
+
+```rust
+// Before
+let layer = sub.layer.unwrap_or(0);
+let margin = sub.margin_l.unwrap_or(10);
+
+// After — use defaults directly
+let layer = 0;
+let margin = 10;
+```
+
+Builder method `Subtitle::with_layer` has been removed. If you need ASS-specific fields,
+construct them at the ASS output level.
+
 ## Per-format feature flags
 
 If you use `default-features = false`, enable the formats you need:

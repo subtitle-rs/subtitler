@@ -343,7 +343,7 @@ impl<'a> Iterator for SrtStream<'a> {
 }
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
-  if let Ok(text) = String::from_utf8(data.to_vec()) {
+  if let Some(text) = crate::encoding::try_decode_for_detection(data) {
     let trimmed = text.trim();
     if !trimmed.is_empty() {
       #[cfg(feature = "vtt")]
@@ -351,9 +351,6 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
         return Some(crate::model::Format::Vtt);
       }
       if RE_SRT_DETECT.is_match(trimmed) {
-        return Some(crate::model::Format::Srt);
-      }
-      if trimmed.contains("-->") {
         return Some(crate::model::Format::Srt);
       }
     }

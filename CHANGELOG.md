@@ -43,12 +43,19 @@ adheres to [Semantic Versioning](https://semver.org/).
 - `RE_TIMESTAMP` regex bounded (`\d{1,}`→`\d{1,4}`) to prevent ReDoS.
 - `main.rs`: tracing subscriber no longer panics on double-init.
 - `optimize_line_breaks` line ordering (LIFO→FIFO queue).
+- `detect_format` across all modules: now decodes GBK/Shift_JIS/Big5 (was limited to UTF-8).
 
 ### Performance
 - Byte-scanning timestamp parser (replaces regex on hot path).
 - `LazyLock`-cached regexes (zero compile-time overhead).
-- `SrtStream` streaming iterator (no Vec allocation).
+- SRT/VTT/SBV/LRC/MicroDVD/SubViewer streaming parsers (`*Stream` types).
 - Quick skip in `extract_text_parts` when no tags present.
+
+### Changed
+- **[BREAKING]** Subtitle struct: removed `layer`, `margin_l`, `margin_r`, `margin_v`, `effect` fields (ASS-only). These fields are no longer tracked per-subtitle; ASS output uses 0 defaults.
+
+### Added
+- Streaming iterators: `VttStream`, `SbVStream`, `LrcStream`, `MicroDvdStream`, `SubViewerStream`.
 
 ### Removed
 - Example `utility-ops` (superseded by `edit-operations` + `validate-subtitle`).

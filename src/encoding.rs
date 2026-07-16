@@ -61,6 +61,21 @@ pub fn decode_to_string(data: &[u8]) -> AnyResult<String> {
   }
 }
 
+/// Try to decode bytes for format detection (returns None on failure).
+/// Unlike `decode_to_string`, this never returns an Err — useful in
+/// `detect_format` functions where a failed decode just means "not this format".
+pub fn try_decode_for_detection(data: &[u8]) -> Option<String> {
+  if let Ok(s) = std::str::from_utf8(data) {
+    return Some(s.to_string());
+  }
+  let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
+  detector.feed(data, true);
+  let enc = detector.guess(None, chardetng::Utf8Detection::Allow);
+  let enc = encoding_rs::Encoding::for_label_no_replacement(enc.name().as_bytes())?;
+  let (cow, _, _) = enc.decode(data);
+  Some(cow.into_owned())
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

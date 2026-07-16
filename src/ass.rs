@@ -18,7 +18,7 @@ static RE_INFO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([^:]+):\s*(.*)
 static RE_ASS_TAG_INLINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{([^}]*)\}").unwrap());
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
-  if let Ok(text) = String::from_utf8(data.to_vec())
+  if let Some(text) = crate::encoding::try_decode_for_detection(data)
     && text.contains("[Script Info]")
   {
     if text.contains("V4+ Styles") || text.contains("V4 Styles") {

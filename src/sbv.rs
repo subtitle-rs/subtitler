@@ -64,7 +64,7 @@ pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
 /// Detect if data looks like SBV (YouTube subtitle format).
 /// SBV lines have the pattern: `H:MM:SS.mmm,H:MM:SS.mmm,text`
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
-  let text = std::str::from_utf8(data).ok()?;
+  let text = crate::encoding::try_decode_for_detection(data)?;
   let has_sbv = text.lines().any(|l| {
     let t = l.trim();
     if t.is_empty() || !t.starts_with(|c: char| c.is_ascii_digit()) {

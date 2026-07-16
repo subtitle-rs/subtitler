@@ -7,6 +7,7 @@ use crate::model::Subtitle;
 use crate::types::AnyResult;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::LazyLock;
 
 static RE_LRC_LINE: LazyLock<Regex> =
@@ -147,7 +148,7 @@ pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
 
 /// Detect if data looks like LRC.
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
-  let text = std::str::from_utf8(data).ok()?;
+  let text = crate::encoding::try_decode_for_detection(data)?;
   let line_count = text.lines().count();
   // LRC files have bracket timestamps and are typically <500 lines
   let has_lrc = text.lines().any(|l| RE_LRC_LINE.is_match(l.trim()));
@@ -175,17 +176,23 @@ pub fn to_string(subtitles: &[Subtitle]) -> String {
 
 pub struct LrcStream<'a> {
   lines: std::str::Lines<'a>,
+  pending_subs: VecDeque<AnyResult<Subtitle>>,
 }
 impl<'a> LrcStream<'a> {
   pub fn new(content: &'a str) -> Self {
     LrcStream {
       lines: content.lines(),
+      pending_subs: VecDeque::new(),
     }
   }
 }
 impl<'a> Iterator for LrcStream<'a> {
   type Item = AnyResult<Subtitle>;
   fn next(&mut self) -> Option<Self::Item> {
+    // Drain pending subs from multi-timestamp lines first
+    if let Some(sub) = self.pending_subs.pop_front() {
+      return Some(sub);
+    }
     for line in self.lines.by_ref() {
       let trimmed = line.trim();
       if trimmed.is_empty() {
@@ -205,8 +212,13 @@ impl<'a> Iterator for LrcStream<'a> {
       if text.is_empty() {
         continue;
       }
-      let t = times[0];
-      return Some(Ok(Subtitle::new(t, t + 5000, &text)));
+      // Queue all timestamps as separate subtitles
+      for &t in &times {
+        self
+          .pending_subs
+          .push_back(Ok(Subtitle::new(t, t + 5000, &text)));
+      }
+      return self.pending_subs.pop_front();
     }
     None
   }
