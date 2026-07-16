@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d2a61699b8e7af84189f7eddb74e6e47eeca533a777d187ec389f9cc39e6c7b3 # shrinks to sub = Subtitle { index: None, start: 0, end: 0, text: " ", settings: None, text_parts: [], style: None, actor: None, layer: None, margin_l: None, margin_r: None, margin_v: None, effect: None, is_comment: false }
+cc b81c9efc6a8a36dd3926d7f01426922d40f5f4a98563406fe2132aa83bad74cc # shrinks to sub = Subtitle { index: None, start: 0, end: 0, text: "a ", settings: None, text_parts: [], style: None, actor: None, layer: None, margin_l: None, margin_r: None, margin_v: None, effect: None, is_comment: false }

@@ -59,6 +59,7 @@ tracing-subscriber = "0.3"
 
 [dev-dependencies]
 criterion = "0.8"
+proptest = "1.5"
 
 [features]
 default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "http"]
