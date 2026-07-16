@@ -106,6 +106,7 @@ fn resolve_output_format(output: &str, hint: Option<CliFormat>) -> AnyResult<Cli
   })
 }
 
+#[allow(deprecated)]
 async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
   let text = String::from_utf8(data.to_vec())?;
   match format {
@@ -156,6 +157,7 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
 
 // ── Commands ──
 
+#[allow(deprecated)]
 async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
   let (data, ext) = read_input(&args.input).await?;
   let format = resolve_format(&data, args.format.or(ext))

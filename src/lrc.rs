@@ -6,6 +6,7 @@
 use crate::model::Subtitle;
 use crate::types::AnyResult;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 
 static RE_LRC_LINE: LazyLock<Regex> =
@@ -18,58 +19,103 @@ fn lrc_time_to_ms(m: &str, s: &str, cs: &str) -> u64 {
   minutes * 60000 + seconds * 1000 + centiseconds * 10
 }
 
-/// Parse LRC content into a vector of subtitles.
-pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
-  let mut subtitles = Vec::new();
+/// LRC lyrics data, preserving multi-timestamp lines.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct LrcData {
+  /// One entry per lyric line; each line may have multiple timestamps.
+  pub lines: Vec<LrcLine>,
+}
 
-  for line in content.lines() {
-    let trimmed = line.trim();
-    if trimmed.is_empty() {
-      continue;
+/// A single LRC lyric line with all its timestamps and text.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct LrcLine {
+  /// All timestamps (ms) at which this text is sung.
+  pub times_ms: Vec<u64>,
+  /// The lyric text.
+  pub text: String,
+}
+
+impl LrcData {
+  /// Parse LRC content into structured data, preserving multi-timestamp lines.
+  pub fn parse(content: &str) -> AnyResult<Self> {
+    let mut lines: Vec<LrcLine> = Vec::new();
+
+    for line in content.lines() {
+      let trimmed = line.trim();
+      if trimmed.is_empty() {
+        continue;
+      }
+
+      let mut times = Vec::new();
+      let mut last_end = 0usize;
+      for caps in RE_LRC_LINE.captures_iter(trimmed) {
+        let m = caps.get(0).unwrap();
+        times.push(lrc_time_to_ms(&caps[1], &caps[2], &caps[3]));
+        last_end = m.end();
+      }
+
+      if times.is_empty() {
+        continue; // metadata line
+      }
+
+      let text = trimmed[last_end..].trim();
+      if text.is_empty() {
+        continue;
+      }
+
+      lines.push(LrcLine {
+        times_ms: times,
+        text: text.to_string(),
+      });
     }
 
-    // Collect all timestamps and text
-    let mut last_end = 0usize;
-    let mut times = Vec::new();
-    for caps in RE_LRC_LINE.captures_iter(trimmed) {
-      let m = caps.get(0).unwrap();
-      times.push((
-        lrc_time_to_ms(&caps[1], &caps[2], &caps[3]),
-        m.start(),
-        m.end(),
-      ));
-      last_end = m.end();
-    }
-
-    if times.is_empty() {
-      continue; // metadata line: [ti:Title] etc.
-    }
-
-    let text = trimmed[last_end..].trim();
-    if text.is_empty() {
-      continue;
-    }
-
-    for (time, _, _) in times {
-      // LRC cues have no explicit end; use a default display duration of 5s
-      subtitles.push(Subtitle::new(time, time + 5000, text));
-    }
+    Ok(LrcData { lines })
   }
 
-  // Sort by start time
-  subtitles.sort_by_key(|s| s.start);
-  Ok(subtitles)
+  /// Serialize back to LRC string format.
+  pub fn to_string(&self) -> String {
+    let mut buf = String::new();
+    for line in &self.lines {
+      for &t in &line.times_ms {
+        let total_seconds = t / 1000;
+        let minutes = total_seconds / 60;
+        let seconds = total_seconds % 60;
+        let cs = (t % 1000) / 10;
+        buf.push_str(&format!("[{:02}:{:02}.{:02}]", minutes, seconds, cs));
+      }
+      buf.push_str(&line.text);
+      buf.push('\n');
+    }
+    buf
+  }
+}
+
+/// Parse LRC content into a vector of subtitles (each timestamp becomes a
+/// separate subtitle with a 5-second default duration).
+#[deprecated(since = "0.10.0", note = "use LrcData::parse to preserve multi-timestamp lines")]
+pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
+  let data = LrcData::parse(content)?;
+  let mut subs = Vec::new();
+  for line in &data.lines {
+    for &t in &line.times_ms {
+      subs.push(Subtitle::new(t, t + 5000, &line.text));
+    }
+  }
+  subs.sort_by_key(|s| s.start);
+  Ok(subs)
 }
 
 /// Parse LRC from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
   let text = crate::encoding::decode_to_string(data)?;
+  #[allow(deprecated)]
   parse_content(&text)
 }
 
 /// Parse an LRC file asynchronously.
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
   let text = tokio::fs::read_to_string(path).await?;
+  #[allow(deprecated)]
   parse_content(&text)
 }
 
@@ -78,6 +124,7 @@ pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subt
 pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
+  #[allow(deprecated)]
   parse_content(&content)
 }
 
@@ -113,6 +160,7 @@ pub fn to_string(subtitles: &[Subtitle]) -> String {
 mod tests {
   use super::*;
 
+  #[allow(deprecated)]
   #[test]
   fn test_parse_basic() {
     let content = "[00:01.50]Hello\n[00:03.20]World\n";
@@ -124,16 +172,17 @@ mod tests {
     assert_eq!(subs[1].start, 3200);
   }
 
+  #[allow(deprecated)]
   #[test]
   fn test_parse_multi_timestamp() {
     let content = "[00:10.00][00:30.00]Repeated\n";
     let subs = parse_content(content).unwrap();
-    // Should produce two subtitles (two timestamps, one text)
     assert_eq!(subs.len(), 2);
     assert_eq!(subs[0].start, 10000);
     assert_eq!(subs[1].start, 30000);
   }
 
+  #[allow(deprecated)]
   #[test]
   fn test_round_trip() {
     let content = "[00:01.50]Hello\n[00:03.20]World\n";
@@ -142,6 +191,20 @@ mod tests {
     assert!(output.contains("Hello"));
     let reparsed = parse_content(&output).unwrap();
     assert_eq!(subs.len(), reparsed.len());
+  }
+
+  #[test]
+  fn test_lrc_data_preserves_multi_timestamp() {
+    let content = "[00:10.00][00:30.00]Repeated line\n";
+    let data = LrcData::parse(content).unwrap();
+    assert_eq!(data.lines.len(), 1);
+    assert_eq!(data.lines[0].times_ms.len(), 2);
+    assert_eq!(data.lines[0].times_ms[0], 10000);
+    assert_eq!(data.lines[0].times_ms[1], 30000);
+    // Round-trip
+    let output = data.to_string();
+    assert!(output.contains("[00:10.00]"), "missing first timestamp in:\n{output}");
+    assert!(output.contains("[00:30.00]"), "missing second timestamp:\n{output}");
   }
 
   #[test]
