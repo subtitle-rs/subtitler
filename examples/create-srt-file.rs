@@ -58,6 +58,6 @@ Great! Looking forward to it.
   info!("subtitle {:#?}", subtitle);
   info!("subtitle json {}", serde_json::to_string_pretty(&subtitle)?);
 
-  generate(&subtitle, "test.srt").await?;
+  generate(&subtitle, "test.srt", None).await?;
   Ok(())
 }

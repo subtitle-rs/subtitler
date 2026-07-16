@@ -399,14 +399,20 @@ pub fn to_string(subtitles: &[Subtitle]) -> String {
 pub async fn generate(
   subtitles: &[Subtitle],
   file_path: impl AsRef<std::path::Path>,
+  policy: Option<crate::model::WritePolicy>,
 ) -> AnyResult<String> {
   let path = file_path.as_ref();
-  let mut dest = fs::OpenOptions::new()
-    .create(true)
-    .write(true)
-    .truncate(true)
-    .open(path)
-    .await?;
+  let policy = policy.unwrap_or_default();
+
+  if policy == crate::model::WritePolicy::RefuseIfExists && path.exists() {
+    anyhow::bail!("Refusing to overwrite existing file: {}", path.display());
+  }
+
+  let mut open_opts = fs::OpenOptions::new();
+  let mut dest = match policy {
+    crate::model::WritePolicy::Append => open_opts.create(true).append(true).open(path).await,
+    _ => open_opts.create(true).write(true).truncate(true).open(path).await,
+  }?;
   let content = to_string(subtitles);
   dest.write_all(content.as_bytes()).await?;
   dest.flush().await?;
@@ -488,7 +494,7 @@ mod tests {
       "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n2\n00:00:04,000 --> 00:00:06,500\nWorld\n\n";
     let subtitles = parse_content(original).unwrap();
     let path = "test_round_trip_srt.srt";
-    generate(&subtitles, path).await.unwrap();
+    generate(&subtitles, path, None).await.unwrap();
     let parsed_back = parse_file(path).await.unwrap();
     let _ = std::fs::remove_file(path);
     assert_eq!(subtitles, parsed_back);

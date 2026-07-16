@@ -60,7 +60,7 @@ Thanks! I'm looking forward to your feedback.
   info!("subtitle {:#?}", subtitle);
   info!("subtitle json {}", serde_json::to_string_pretty(&subtitle)?);
 
-  generate(&subtitle, "test.vtt").await?;
+  generate(&subtitle, "test.vtt", None).await?;
 
   Ok(())
 }

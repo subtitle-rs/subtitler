@@ -2,6 +2,21 @@ use serde::{Deserialize, Serialize};
 
 use std::sync::LazyLock;
 
+/// Policy for writing subtitle output files.
+///
+/// Passed to `generate()` functions in each format module.
+/// `None` defaults to `Overwrite`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum WritePolicy {
+  /// Overwrite the destination file if it exists (current default).
+  #[default]
+  Overwrite,
+  /// Return an error if the destination file already exists.
+  RefuseIfExists,
+  /// Append to the destination file; create if missing.
+  Append,
+}
+
 static RE_HTML_TAG: LazyLock<regex::Regex> =
   LazyLock::new(|| regex::Regex::new(r"</?(?:b|i|u|s|font|v|c)(?:\.[^>]*)?(?:\s[^>]*)?>").unwrap());
 

@@ -35,7 +35,7 @@ async fn test_srt_round_trip_full() {
   let original = srt::parse_file(&path).await.unwrap();
 
   let out_path = fixture_dir().join("_test_round_trip.srt");
-  srt::generate(&original, &out_path).await.unwrap();
+  srt::generate(&original, &out_path, None).await.unwrap();
   let round_tripped = srt::parse_file(&out_path).await.unwrap();
   std::fs::remove_file(&out_path).ok();
 
@@ -93,7 +93,7 @@ async fn test_srt_missing_index() {
 #[tokio::test]
 async fn test_srt_generate_empty() {
   let path = fixture_dir().join("_test_empty.srt");
-  srt::generate(&[], &path).await.unwrap();
+  srt::generate(&[], &path, None).await.unwrap();
   let content = std::fs::read_to_string(&path).unwrap();
   std::fs::remove_file(&path).ok();
   assert_eq!(content, "");
@@ -127,7 +127,7 @@ async fn test_vtt_round_trip_full() {
   let original = vtt::parse_file(&path).await.unwrap();
 
   let out_path = fixture_dir().join("_test_round_trip.vtt");
-  vtt::generate(&original, &out_path).await.unwrap();
+  vtt::generate(&original, &out_path, None).await.unwrap();
   let round_tripped = vtt::parse_file(&out_path).await.unwrap();
   std::fs::remove_file(&out_path).ok();
 
@@ -169,7 +169,7 @@ async fn test_vtt_cue_id_is_string() {
 #[tokio::test]
 async fn test_vtt_generate_empty() {
   let path = fixture_dir().join("_test_empty.vtt");
-  vtt::generate(&[], &path).await.unwrap();
+  vtt::generate(&[], &path, None).await.unwrap();
   let content = std::fs::read_to_string(&path).unwrap();
   std::fs::remove_file(&path).ok();
   assert_eq!(content, "WEBVTT\n\n");
