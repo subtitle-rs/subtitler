@@ -16,11 +16,9 @@ pub enum ParseError {
   UnknownFormat,
   #[error("format {0:?} is not enabled (enable its cargo feature)")]
   Unsupported(Format),
-  #[error("decode/parse error: {0}")]
-  // `anyhow::Error` covers all the per-format parser errors returned via
-  // `AnyResult`; `SubtitleError` is kept for the typed-error migration path.
+  #[error("internal error: {0}")]
   Anyhow(#[from] anyhow::Error),
-  #[error("decode/parse error: {0}")]
+  #[error("parse error: {0}")]
   Decode(#[from] SubtitleError),
   #[error("I/O error: {0}")]
   Io(#[from] std::io::Error),

@@ -271,7 +271,6 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
   let mut bold = false;
   let mut italic = false;
   let mut underline = false;
-  let _strikeout = false;
   let mut color: Option<String> = None;
   let mut current = String::new();
 

@@ -115,7 +115,6 @@ pub fn to_string_with_fps_header(subtitles: &[Subtitle], fps: f64) -> String {
 
 pub struct MicroDvdStream<'a> {
   lines: std::str::Lines<'a>,
-  _fps: f64,
   saved_fps: f64,
 }
 impl<'a> MicroDvdStream<'a> {
@@ -123,7 +122,6 @@ impl<'a> MicroDvdStream<'a> {
     let f = fps.unwrap_or(DEFAULT_FPS);
     MicroDvdStream {
       lines: content.lines(),
-      _fps: f,
       saved_fps: f,
     }
   }
