@@ -90,7 +90,7 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
     }
   });
   let text = caps.get(16).map_or("", |m| m.as_str());
-  
+
   // Check if this is a comment line:
   // 1. Line starts with "Comment:" (case-insensitive)
   // 2. OR Effect field (capture group 14) contains "Comment"
@@ -262,7 +262,11 @@ pub fn to_string(
     let margin_v = 0;
     let effect = "";
     let layer = 0;
-    let line_type = if sub.is_comment { "Comment" } else { "Dialogue" };
+    let line_type = if sub.is_comment {
+      "Comment"
+    } else {
+      "Dialogue"
+    };
     buf.push_str(&format!(
       "{}: {},{},{},{},{},{},{},{},{},{}\n",
       line_type, layer, start, end, style, actor, margin_l, margin_r, margin_v, effect, sub.text

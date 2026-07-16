@@ -234,8 +234,8 @@ pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
     let end = crate::utils::format_timestamp(sub.end, "WebVTT");
     // TTML uses '.' separator (same as WebVTT), no conversion needed
 
-    let p = BytesStart::new("p")
-      .with_attributes([("begin", start.as_str()), ("end", end.as_str())]);
+    let p =
+      BytesStart::new("p").with_attributes([("begin", start.as_str()), ("end", end.as_str())]);
     let _ = writer.write_event(Event::Start(p));
 
     if sub.text_parts.is_empty() {
