@@ -7,7 +7,7 @@ categories = [
   "multimedia",
   "parser-implementations",
 ] 
-description = "Parse, convert, validate, edit, and generate subtitles in 9 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC). Full CLI included." 
+description = "Parse, convert, validate, edit, and generate subtitles in 11 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2). Full CLI included." 
 documentation = "https://docs.rs/subtitler" 
 edition = "2024" 
 keywords = [
@@ -59,7 +59,7 @@ criterion = "0.8"
 proptest = "1.5"
 
 [features]
-default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "http"]
+default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "http"]
 
 srt = []
 vtt = []
@@ -70,6 +70,8 @@ subviewer = []
 ttml = ["quick-xml"]
 sbv = []
 lrc = []
+sami = []
+mpl2 = []
 http = ["reqwest"]
 
 [profile.release]
@@ -161,6 +163,22 @@ path = "examples/validate-subtitle.rs"
 [[example]]
 name = "batch-process"
 path = "examples/translate-subtitle.rs"
+
+[[example]]
+name = "parse-sami-content"
+path = "examples/parse-sami-content.rs"
+
+[[example]]
+name = "parse-mpl2-content"
+path = "examples/parse-mpl2-content.rs"
+
+[[example]]
+name = "create-sami-file"
+path = "examples/create-sami-file.rs"
+
+[[example]]
+name = "create-mpl2-file"
+path = "examples/create-mpl2-file.rs"
 
 [[bench]]
 name = "subtitler_benchmark"

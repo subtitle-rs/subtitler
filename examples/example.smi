@@ -1,0 +1,22 @@
+<SAMI>
+<Head>
+<Title>SAMI Example Subtitle</Title>
+<Style Type="text/css">
+<!--
+  .ENCC {Name: English; lang: en-US; SAMIType: CC;}
+  .KRCC {Name: Korean; lang: ko-KR; SAMIType: CC;}
+-->
+</Style>
+</Head>
+<Body>
+
+<Sync Start=1000><P Class=ENCC>Welcome to SAMI subtitle example</P></Sync>
+<Sync Start=3500><P Class=ENCC>This format is widely used in Asia</P></Sync>
+<Sync Start=6000><P Class=ENCC>Especially in Korean and Chinese markets</P></Sync>
+<Sync Start=9000><P Class=KRCC>안녕하세요</P></Sync>
+<Sync Start=11000><P Class=ENCC>SAMI supports multi-language subtitles</P></Sync>
+<Sync Start=14000><P Class=ENCC>And HTML-like styling</P></Sync>
+<Sync Start=16500><P Class=ENCC>Thank you for watching!</P></Sync>
+
+</Body>
+</SAMI>

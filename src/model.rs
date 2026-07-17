@@ -249,6 +249,10 @@ pub enum Format {
   Sbv,
   #[cfg(feature = "lrc")]
   Lrc,
+  #[cfg(feature = "sami")]
+  Sami,
+  #[cfg(feature = "mpl2")]
+  Mpl2,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -417,6 +421,15 @@ pub enum SubtitleFile {
   /// LRC lyrics format (`.lrc`). Used for song lyric synchronization.
   #[cfg(feature = "lrc")]
   Lrc(Vec<Subtitle>),
+
+  /// SAMI (Synchronized Accessible Media Interchange) format (`.smi`).
+  /// Microsoft-developed format used in Windows Media Player.
+  #[cfg(feature = "sami")]
+  Sami(crate::sami::SamiData),
+
+  /// MPL2 format (`.mpl`). Frame-based format popular in Eastern Europe.
+  #[cfg(feature = "mpl2")]
+  Mpl2(Vec<Subtitle>),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -813,6 +826,10 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Sbv(subs) => subs,
       #[cfg(feature = "lrc")]
       SubtitleFile::Lrc(subs) => subs,
+      #[cfg(feature = "sami")]
+      SubtitleFile::Sami(data) => &data.subtitles,
+      #[cfg(feature = "mpl2")]
+      SubtitleFile::Mpl2(subs) => subs,
     }
   }
 
@@ -844,6 +861,10 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Sbv(subs) => subs,
       #[cfg(feature = "lrc")]
       SubtitleFile::Lrc(subs) => subs,
+      #[cfg(feature = "sami")]
+      SubtitleFile::Sami(data) => &mut data.subtitles,
+      #[cfg(feature = "mpl2")]
+      SubtitleFile::Mpl2(subs) => subs,
     }
   }
 
@@ -867,6 +888,10 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Sbv(_) => Format::Sbv,
       #[cfg(feature = "lrc")]
       SubtitleFile::Lrc(_) => Format::Lrc,
+      #[cfg(feature = "sami")]
+      SubtitleFile::Sami(_) => Format::Sami,
+      #[cfg(feature = "mpl2")]
+      SubtitleFile::Mpl2(_) => Format::Mpl2,
     }
   }
 
@@ -917,6 +942,16 @@ impl SubtitleFormat for SubtitleFile {
       Format::Sbv => crate::sbv::to_string(subs),
       #[cfg(feature = "lrc")]
       Format::Lrc => crate::lrc::to_string(subs),
+      #[cfg(feature = "sami")]
+      Format::Sami => {
+        let header = match self {
+          SubtitleFile::Sami(data) => data.header.as_deref(),
+          _ => None,
+        };
+        crate::sami::to_string(subs, header)
+      }
+      #[cfg(feature = "mpl2")]
+      Format::Mpl2 => crate::mpl2::to_string(subs, None),
     }
   }
 }
@@ -1125,6 +1160,16 @@ impl SubtitleFileBuilder {
 
       #[cfg(feature = "lrc")]
       Format::Lrc => Some(SubtitleFile::Lrc(self.subtitles)),
+
+      #[cfg(feature = "sami")]
+      Format::Sami => Some(SubtitleFile::Sami(crate::sami::SamiData {
+        header: self.header,
+        styles: std::collections::HashMap::new(),
+        subtitles: self.subtitles,
+      })),
+
+      #[cfg(feature = "mpl2")]
+      Format::Mpl2 => Some(SubtitleFile::Mpl2(self.subtitles)),
     }
   }
 }

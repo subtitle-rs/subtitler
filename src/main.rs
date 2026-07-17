@@ -90,6 +90,10 @@ fn resolve_format(data: &[u8], hint: Option<CliFormat>) -> Option<CliFormat> {
     Some(Format::Sbv) => Some(CliFormat::Sbv),
     #[cfg(feature = "lrc")]
     Some(Format::Lrc) => Some(CliFormat::Lrc),
+    #[cfg(feature = "sami")]
+    Some(Format::Sami) => Some(CliFormat::Sami),
+    #[cfg(feature = "mpl2")]
+    Some(Format::Mpl2) => Some(CliFormat::Mpl2),
     None => None,
   }
 }
@@ -146,6 +150,10 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     CliFormat::Sbv => Ok(SubtitleFile::Sbv(subtitler::sbv::parse_content(&text)?)),
     #[cfg(feature = "lrc")]
     CliFormat::Lrc => Ok(SubtitleFile::Lrc(subtitler::lrc::parse_content(&text)?)),
+    #[cfg(feature = "sami")]
+    CliFormat::Sami => subtitler::sami::parse_content(&text),
+    #[cfg(feature = "mpl2")]
+    CliFormat::Mpl2 => Ok(SubtitleFile::Mpl2(subtitler::mpl2::parse_content(&text)?.subtitles().to_vec())),
   }
 }
 
@@ -181,6 +189,10 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     CliFormat::Sbv => subtitler::sbv::parse_content(&content)?,
     #[cfg(feature = "lrc")]
     CliFormat::Lrc => subtitler::lrc::parse_content(&content)?,
+    #[cfg(feature = "sami")]
+    CliFormat::Sami => subtitler::sami::parse_content(&content)?.subtitles().to_vec(),
+    #[cfg(feature = "mpl2")]
+    CliFormat::Mpl2 => subtitler::mpl2::parse_content(&content)?.subtitles().to_vec(),
   };
 
   if args.json {
@@ -313,6 +325,10 @@ fn format_to_subtitle_format(f: &CliFormat) -> Format {
     CliFormat::Sbv => Format::Sbv,
     #[cfg(feature = "lrc")]
     CliFormat::Lrc => Format::Lrc,
+    #[cfg(feature = "sami")]
+    CliFormat::Sami => Format::Sami,
+    #[cfg(feature = "mpl2")]
+    CliFormat::Mpl2 => Format::Mpl2,
   }
 }
 
@@ -440,6 +456,10 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
     Some(Format::Sbv) => println!("sbv"),
     #[cfg(feature = "lrc")]
     Some(Format::Lrc) => println!("lrc"),
+    #[cfg(feature = "sami")]
+    Some(Format::Sami) => println!("sami"),
+    #[cfg(feature = "mpl2")]
+    Some(Format::Mpl2) => println!("mpl2"),
     None => {
       eprintln!("Unknown format");
       std::process::exit(1);

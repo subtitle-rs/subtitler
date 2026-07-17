@@ -8,8 +8,12 @@ pub mod lrc;
 #[cfg(feature = "microdvd")]
 pub mod microdvd;
 pub mod model;
+#[cfg(feature = "mpl2")]
+pub mod mpl2;
 pub mod normalize;
 pub mod quality;
+#[cfg(feature = "sami")]
+pub mod sami;
 #[cfg(feature = "sbv")]
 pub mod sbv;
 #[cfg(feature = "srt")]
@@ -51,6 +55,10 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| sbv::detect_format(data));
   #[cfg(feature = "lrc")]
   let f = f.or_else(|| lrc::detect_format(data));
+  #[cfg(feature = "sami")]
+  let f = f.or_else(|| sami::detect_format(data));
+  #[cfg(feature = "mpl2")]
+  let f = f.or_else(|| mpl2::detect_format(data));
   f
 }
 
@@ -99,6 +107,10 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     Format::Sbv => Ok(model::SubtitleFile::Sbv(sbv::parse_bytes(data)?)),
     #[cfg(feature = "lrc")]
     Format::Lrc => Ok(model::SubtitleFile::Lrc(lrc::parse_bytes(data)?)),
+    #[cfg(feature = "sami")]
+    Format::Sami => Ok(sami::parse_bytes(data)?),
+    #[cfg(feature = "mpl2")]
+    Format::Mpl2 => Ok(model::SubtitleFile::Mpl2(mpl2::parse_bytes(data)?)),
     #[allow(unreachable_patterns)]
     _ => Err(error::ParseError::Unsupported(fmt)),
   }

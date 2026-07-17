@@ -655,7 +655,7 @@ fn test_ass_to_plaintext() {
 fn test_parse_ass_tags_bold() {
   let parts = subtitler::ass::parse_ass_tags("{\\b1}Bold text{\\b0}");
   assert_eq!(parts.len(), 1);
-  assert!(parts[0].bold);
+  assert!(parts[0].bold());
   assert_eq!(parts[0].text, "Bold text");
 }
 
@@ -663,7 +663,7 @@ fn test_parse_ass_tags_bold() {
 fn test_parse_ass_tags_italic() {
   let parts = subtitler::ass::parse_ass_tags("{\\i1}Italic{\\i0}");
   assert_eq!(parts.len(), 1);
-  assert!(parts[0].italic);
+  assert!(parts[0].italic());
 }
 
 // ── Normalize tests ──

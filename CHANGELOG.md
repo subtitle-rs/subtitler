@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+#### New Format Support
+- **SAMI format (.smi)**: Microsoft-developed subtitle format
+  - HTML-like syntax with `<Sync>` and `<P>` tags
+  - Multi-language subtitle support
+  - CSS styling extraction
+  - Streaming parser (SamiStream)
+  - Widely used in Asian markets (Korea, China)
+
+- **MPL2 format (.mpl)**: Frame-based subtitle format
+  - Frame-accurate timing with configurable fps
+  - Default 23.976 fps support
+  - Frame ↔ millisecond conversion utilities
+  - Streaming parser (Mpl2Stream)
+  - Popular in Eastern Europe
+
+#### Examples
+- `parse-sami-content.rs`: SAMI parsing demonstration
+- `parse-mpl2-content.rs`: MPL2 parsing with frame conversion
+- `create-sami-file.rs`: SAMI generation with multi-language support
+- `create-mpl2-content.rs`: MPL2 generation with custom fps
+- `example.smi`: Sample SAMI subtitle file
+- `example.mpl`: Sample MPL2 subtitle file
+
+### Changed
+- Format support expanded from 9 to 11 formats
+- Examples expanded from 19 to 23
+
 ## [1.2.0] - 2026-07-17
 
 Performance optimizations and streaming write support.
