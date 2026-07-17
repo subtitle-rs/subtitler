@@ -218,6 +218,9 @@ pub enum Commands {
   /// Edit subtitles: sort, shift, merge, split
   Edit(EditArgs),
 
+  /// Process subtitles through a pipeline of operations (JSON config)
+  Pipeline(PipelineArgs),
+
   /// Show subtitle file statistics
   Info(InfoArgs),
 
@@ -430,4 +433,42 @@ pub struct ShiftArgs {
   /// Force input format (auto-detected by default)
   #[arg(short, long)]
   pub format: Option<Format>,
+}
+
+/// Process subtitles through a pipeline of operations defined in a JSON config file.
+///
+/// Example pipeline.json:
+/// ```json
+/// {
+///   "operations": [
+///     {"op": "Sort"},
+///     {"op": "Shift", "offset_ms": 500},
+///     {"op": "SplitLong", "max_chars": 42},
+///     {"op": "FilterEmpty"}
+///   ]
+/// }
+/// ```
+///
+/// Usage:
+///   subtitler pipeline input.srt output.vtt --config pipeline.json
+///   subtitler pipeline input.srt output.srt --config pipeline.json --to srt
+#[derive(clap::Args)]
+pub struct PipelineArgs {
+  /// Input file path or URL
+  pub input: String,
+
+  /// Output file path (use "-" for stdout)
+  pub output: String,
+
+  /// JSON config file defining pipeline operations
+  #[arg(short, long)]
+  pub config: String,
+
+  /// Target format (inferred from output extension if not specified)
+  #[arg(short, long)]
+  pub to: Option<Format>,
+
+  /// Force input format (auto-detect if not specified)
+  #[arg(short, long)]
+  pub from: Option<Format>,
 }

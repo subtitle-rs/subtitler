@@ -9,6 +9,7 @@ use subtitler::ass;
 #[cfg(feature = "ebu_stl")]
 use subtitler::ebu_stl;
 use subtitler::model::{Format, SubtitleFile, SubtitleFormat};
+use subtitler::pipeline::{Pipeline, SubtitleBuilder};
 #[cfg(feature = "scc")]
 use subtitler::scc;
 #[cfg(feature = "srt")]
@@ -33,6 +34,7 @@ async fn main() -> AnyResult<()> {
     Commands::Convert(args) => cmd_convert(args).await?,
     Commands::Validate(args) => cmd_validate(args).await?,
     Commands::Edit(args) => cmd_edit(args).await?,
+    Commands::Pipeline(args) => cmd_pipeline(args).await?,
     Commands::Info(args) => cmd_info(args).await?,
     Commands::Detect(args) => cmd_detect(args).await?,
     Commands::Quality(args) => cmd_quality(args).await?,
@@ -283,33 +285,29 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
   let to = resolve_output_format(&args.output, args.to).unwrap_or(from.clone());
   let target_fmt = format_to_subtitle_format(&to);
 
-  let mut file = parse_to_file(&data, from).await?;
+  let file = parse_to_file(&data, from).await?;
 
+  let mut builder = SubtitleBuilder::from(file);
   let mut ops = 0;
 
   if args.sort {
-    file.sort();
+    builder = builder.sort();
     ops += 1;
   }
-
   if let Some(ms) = args.shift {
-    file.shift_all(ms);
+    builder = builder.shift(ms);
     ops += 1;
   }
-
   if let Some(gap) = args.merge {
-    file.merge_adjacent(gap);
+    builder = builder.merge_adjacent(gap);
     ops += 1;
   }
-
   if let Some(max_chars) = args.split {
-    file.split_long(max_chars);
+    builder = builder.split_long(max_chars);
     ops += 1;
   }
-
   if let Some(fps_pair) = args.transform_fps {
-    // clap enforces number_of_values = 2, so fps_pair.len() is always 2
-    file.transform_framerate(fps_pair[0], fps_pair[1]);
+    builder = builder.transform_fps(fps_pair[0], fps_pair[1]);
     ops += 1;
   }
 
@@ -318,6 +316,8 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
       "No edit operations specified. Use --sort, --shift, --merge, --split, or --transform-fps."
     );
   }
+
+  let file = builder.build();
   let output = file.to_string_with_format(&target_fmt);
 
   if args.output == "-" {
@@ -327,6 +327,40 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
     eprintln!(
       "Applied {} operation(s): {} -> {} ({})",
       ops, args.input, args.output, to
+    );
+  }
+  Ok(())
+}
+
+async fn cmd_pipeline(args: cli::PipelineArgs) -> AnyResult<()> {
+  let (data, ext) = read_input(&args.input).await?;
+  let from = resolve_format(&data, args.from.or(ext))
+    .ok_or_else(|| anyhow::anyhow!("Cannot detect source format. Use --from to specify."))?;
+  let to = resolve_output_format(&args.output, args.to).unwrap_or(from.clone());
+  let target_fmt = format_to_subtitle_format(&to);
+
+  let config = tokio::fs::read_to_string(&args.config).await?;
+  let pipeline: Pipeline = serde_json::from_str(&config)
+    .map_err(|e| anyhow::anyhow!("Invalid pipeline config '{}': {}", args.config, e))?;
+
+  if pipeline.operations.is_empty() {
+    anyhow::bail!("Pipeline config '{}' contains no operations.", args.config);
+  }
+
+  let file = parse_to_file(&data, from).await?;
+  let file = pipeline.apply(file);
+  let output = file.to_string_with_format(&target_fmt);
+
+  if args.output == "-" {
+    print!("{output}");
+  } else {
+    tokio::fs::write(&args.output, &output).await?;
+    eprintln!(
+      "Pipeline applied: {} ops, {} -> {} ({})",
+      pipeline.operations.len(),
+      args.input,
+      args.output,
+      to,
     );
   }
   Ok(())
