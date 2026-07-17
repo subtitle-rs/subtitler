@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use regex::Regex;
 #[cfg(feature = "http")]
 use reqwest;
+use smallvec::SmallVec;
 use std::sync::LazyLock;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -22,14 +23,14 @@ enum Phase {
   Text,
 }
 
-fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
+fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
   // Fast path: if no HTML-like tags exist, return the text as-is
   if !text.contains('<') {
-    return (text.to_string(), Vec::new());
+    return (text.to_string(), SmallVec::new());
   }
 
   // Pre-allocate capacity based on text length to avoid reallocations
-  let mut parts = Vec::with_capacity(4); // Most subtitles have <4 styled parts
+  let mut parts = SmallVec::with_capacity(4); // Most subtitles have <4 styled parts
   let mut plain = String::with_capacity(text.len());
   let mut bold = false;
   let mut italic = false;
@@ -147,7 +148,7 @@ fn parse(content: &str) -> AnyResult<Vec<Subtitle>> {
             end: 0,
             text: String::new(),
             settings: None,
-            text_parts: Vec::new(),
+            text_parts: SmallVec::new(),
             style: None,
             actor: None,
             is_comment: false,
@@ -292,7 +293,7 @@ impl<'a> Iterator for SrtStream<'a> {
               end: 0,
               text: String::new(),
               settings: None,
-              text_parts: Vec::new(),
+              text_parts: SmallVec::new(),
               style: None,
               actor: None,
               is_comment: false,
@@ -427,7 +428,7 @@ mod tests {
       end,
       text: text.to_string(),
       settings: None,
-      text_parts: Vec::new(),
+      text_parts: SmallVec::new(),
       style: None,
       actor: None,
       is_comment: false,

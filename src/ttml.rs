@@ -11,6 +11,7 @@ use crate::utils::parse_timestamp;
 use anyhow::anyhow;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
+use smallvec::SmallVec;
 use std::io::Cursor;
 
 /// Parse a TTML time value to milliseconds.
@@ -48,7 +49,7 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
   let mut current_start: Option<u64> = None;
   let mut current_end: Option<u64> = None;
   let mut current_text = String::new();
-  let mut parts: Vec<TextPart> = Vec::new();
+  let mut parts: SmallVec<[TextPart; 4]> = SmallVec::new();
   let mut in_span = false;
   let mut span_bold = false;
   let mut span_italic = false;

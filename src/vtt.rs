@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use regex::Regex;
 #[cfg(feature = "http")]
 use reqwest;
+use smallvec::SmallVec;
 use std::sync::LazyLock;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -26,9 +27,9 @@ enum Phase {
   VttComment,
 }
 
-fn extract_text_parts(text: &str) -> (String, Vec<TextPart>) {
+fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
   // Pre-allocate capacity to avoid reallocations
-  let mut parts = Vec::with_capacity(4); // Most subtitles have <4 styled parts
+  let mut parts = SmallVec::with_capacity(4); // Most subtitles have <4 styled parts
   let mut plain = String::with_capacity(text.len());
   let mut bold = false;
   let mut italic = false;
@@ -402,7 +403,7 @@ mod tests {
       end,
       text: text.to_string(),
       settings: None,
-      text_parts: Vec::new(),
+      text_parts: SmallVec::new(),
       style: None,
       actor: None,
       is_comment: false,

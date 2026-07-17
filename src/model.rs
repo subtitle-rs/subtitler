@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use smallvec::SmallVec;
+
 use std::sync::LazyLock;
 
 /// Policy for writing subtitle output files.
@@ -32,8 +34,8 @@ pub struct Subtitle {
   pub text: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub settings: Option<String>,
-  #[serde(skip_serializing_if = "Vec::is_empty", default)]
-  pub text_parts: Vec<TextPart>,
+  #[serde(skip_serializing_if = "SmallVec::is_empty", default)]
+  pub text_parts: SmallVec<[TextPart; 4]>,
   // ASS/SSA fields
   #[serde(skip_serializing_if = "Option::is_none")]
   pub style: Option<String>,
@@ -51,7 +53,7 @@ impl Subtitle {
       end,
       settings: None,
       text: text.to_string(),
-      text_parts: Vec::new(),
+      text_parts: SmallVec::new(),
       style: None,
       actor: None,
       is_comment: false,

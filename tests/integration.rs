@@ -5,6 +5,7 @@ use subtitler::model::{
 };
 use subtitler::srt;
 use subtitler::vtt;
+use smallvec::SmallVec;
 
 fn fixture_dir() -> PathBuf {
   let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -494,7 +495,7 @@ fn test_subtitle_serde_round_trip() {
     end: 3500,
     text: "Hello".to_string(),
     settings: None,
-    text_parts: Vec::new(),
+    text_parts: SmallVec::new(),
     style: None,
     actor: None,
     is_comment: false,
