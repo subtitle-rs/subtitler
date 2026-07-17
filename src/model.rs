@@ -938,6 +938,143 @@ pub fn frames_to_ms(frames: u64, fps: f64) -> u64 {
   ((frames as f64) * 1000.0 / fps).round() as u64
 }
 
+/// Builder for constructing `SubtitleFile` with a fluent API.
+///
+/// # Example
+///
+/// ```no_run
+/// use subtitler::model::{SubtitleFileBuilder, Subtitle, Format};
+///
+/// let file = SubtitleFileBuilder::new(Format::Srt)
+///   .add_subtitle(Subtitle::new(0, 5000, "Hello"))
+///   .add_subtitle(Subtitle::new(6000, 10000, "World"))
+///   .build()
+///   .unwrap();
+/// ```
+#[derive(Debug, Clone)]
+pub struct SubtitleFileBuilder {
+  format: Format,
+  subtitles: Vec<Subtitle>,
+  fps: Option<f64>,
+  header: Option<String>,
+  styles: Vec<AssStyle>,
+}
+
+impl SubtitleFileBuilder {
+  /// Create a new builder for the specified format.
+  pub fn new(format: Format) -> Self {
+    Self {
+      format,
+      subtitles: Vec::new(),
+      fps: None,
+      header: None,
+      styles: Vec::new(),
+    }
+  }
+
+  /// Add a subtitle to the file.
+  pub fn add_subtitle(mut self, subtitle: Subtitle) -> Self {
+    self.subtitles.push(subtitle);
+    self
+  }
+
+  /// Add multiple subtitles to the file.
+  pub fn add_subtitles(mut self, subtitles: impl IntoIterator<Item = Subtitle>) -> Self {
+    self.subtitles.extend(subtitles);
+    self
+  }
+
+  /// Set the frame rate (required for MicroDVD format).
+  pub fn with_fps(mut self, fps: f64) -> Self {
+    self.fps = Some(fps);
+    self
+  }
+
+  /// Set the header (optional for VTT, SubViewer, TTML formats).
+  pub fn with_header(mut self, header: impl Into<String>) -> Self {
+    self.header = Some(header.into());
+    self
+  }
+
+  /// Add an ASS style (for ASS/SSA formats).
+  pub fn add_style(mut self, style: AssStyle) -> Self {
+    self.styles.push(style);
+    self
+  }
+
+  /// Add multiple ASS styles.
+  pub fn add_styles(mut self, styles: impl IntoIterator<Item = AssStyle>) -> Self {
+    self.styles.extend(styles);
+    self
+  }
+
+  /// Build the `SubtitleFile`.
+  ///
+  /// Returns `None` if required fields are missing:
+  /// - MicroDVD requires `fps`
+  pub fn build(self) -> Option<SubtitleFile> {
+    match self.format {
+      #[cfg(feature = "srt")]
+      Format::Srt => Some(SubtitleFile::Srt(self.subtitles)),
+
+      #[cfg(feature = "vtt")]
+      Format::Vtt => Some(SubtitleFile::Vtt {
+        header: self.header,
+        subtitles: self.subtitles,
+      }),
+
+      #[cfg(feature = "ass")]
+      Format::Ass => Some(SubtitleFile::Ass(AssData {
+        info: std::collections::HashMap::new(),
+        styles: if self.styles.is_empty() {
+          vec![AssStyle::default_style()]
+        } else {
+          self.styles
+        },
+        subtitles: self.subtitles,
+      })),
+
+      #[cfg(feature = "ssa")]
+      Format::Ssa => Some(SubtitleFile::Ssa(AssData {
+        info: std::collections::HashMap::new(),
+        styles: if self.styles.is_empty() {
+          vec![AssStyle::default_style()]
+        } else {
+          self.styles
+        },
+        subtitles: self.subtitles,
+      })),
+
+      #[cfg(feature = "microdvd")]
+      Format::MicroDvd => {
+        let fps = self.fps?;
+        Some(SubtitleFile::MicroDvd {
+          fps,
+          subtitles: self.subtitles,
+        })
+      }
+
+      #[cfg(feature = "subviewer")]
+      Format::SubViewer => Some(SubtitleFile::SubViewer {
+        header: self.header,
+        subtitles: self.subtitles,
+      }),
+
+      #[cfg(feature = "ttml")]
+      Format::Ttml => Some(SubtitleFile::Ttml {
+        header: self.header,
+        subtitles: self.subtitles,
+      }),
+
+      #[cfg(feature = "sbv")]
+      Format::Sbv => Some(SubtitleFile::Sbv(self.subtitles)),
+
+      #[cfg(feature = "lrc")]
+      Format::Lrc => Some(SubtitleFile::Lrc(self.subtitles)),
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
