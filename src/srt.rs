@@ -301,10 +301,10 @@ impl<'a> Iterator for SrtStream<'a> {
   fn next(&mut self) -> Option<Self::Item> {
     for line in self.lines.by_ref() {
       self.row += 1;
-      let mut trimmed = line.trim().to_string();
-      // Strip BOM (only on first content line)
+      let mut trimmed = line.trim();
+
       if self.row == 1 && !trimmed.is_empty() && trimmed.starts_with('\u{FEFF}') {
-        trimmed = trimmed.trim_start_matches('\u{FEFF}').to_string();
+        trimmed = trimmed.trim_start_matches('\u{FEFF}');
       }
 
       if trimmed.is_empty() {
@@ -367,13 +367,12 @@ impl<'a> Iterator for SrtStream<'a> {
             if !sub.text.is_empty() {
               sub.text.push('\n');
             }
-            sub.text.push_str(&trimmed);
+            sub.text.push_str(trimmed);
           }
         }
       }
     }
 
-    // Flush trailing subtitle
     if let Some(mut sub) = self.current_subtitle.take() {
       let (plain, parts) = extract_text_parts(&sub.text);
       sub.text = plain;

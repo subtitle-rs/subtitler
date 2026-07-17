@@ -18,7 +18,7 @@ static RE_VTT_TAG: LazyLock<Regex> = LazyLock::new(|| {
   .unwrap()
 });
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum Phase {
   Header,
   Cue,
@@ -334,80 +334,133 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   Ok(())
 }
 
+/// Streaming VTT parser. Processes content incrementally, yielding subtitles
+/// one at a time without allocating a Vec.
+pub fn parse_stream<'a>(content: &'a str) -> VttStream<'a> {
+  VttStream::new(content)
+}
+
+#[derive(Debug)]
 pub struct VttStream<'a> {
   lines: std::str::Lines<'a>,
-  phase: u8,
+  phase: Phase,
   current_subtitle: Option<Subtitle>,
+  row: usize,
+  header_lines: Vec<&'a str>,
   in_note: bool,
 }
 
 impl<'a> VttStream<'a> {
-  pub fn new(content: &'a str) -> Self {
+  fn new(content: &'a str) -> Self {
     VttStream {
       lines: content.lines(),
-      phase: 0,
+      phase: Phase::Header,
       current_subtitle: None,
+      row: 0,
+      header_lines: Vec::new(),
       in_note: false,
+    }
+  }
+
+  pub fn header(&self) -> Option<String> {
+    if self.header_lines.is_empty() {
+      None
+    } else {
+      Some(self.header_lines.join("\n"))
     }
   }
 }
 
 impl<'a> Iterator for VttStream<'a> {
   type Item = AnyResult<Subtitle>;
+
   fn next(&mut self) -> Option<Self::Item> {
     for line in self.lines.by_ref() {
-      let trimmed = line.trim().to_string();
+      self.row += 1;
+      let trimmed = line.trim();
+
+      if self.row == 1 && !trimmed.is_empty() && trimmed.starts_with('\u{FEFF}') {
+        continue;
+      }
+
       if trimmed.is_empty() {
         if let Some(mut sub) = self.current_subtitle.take() {
-          let (plain, _) = extract_text_parts(&sub.text);
+          let (plain, parts) = extract_text_parts(&sub.text);
           sub.text = plain;
-          self.phase = 0;
+          sub.text_parts = parts;
+          self.phase = Phase::Cue;
           return Some(Ok(sub));
         }
-        self.phase = 0;
+        if self.phase == Phase::Header && !self.header_lines.is_empty() {
+          self.phase = Phase::Cue;
+        }
+        self.phase = Phase::Cue;
         self.in_note = false;
         continue;
       }
-      if self.phase == 0 && trimmed.starts_with("WEBVTT") {
-        self.phase = 1;
-        continue;
-      }
-      if self.phase == 0 {
-        continue;
-      }
-      if trimmed.starts_with("NOTE") {
-        self.in_note = true;
-        continue;
-      }
-      if self.in_note {
-        continue;
-      }
-      if trimmed.contains("-->") {
-        if let Some(mut sub) = self.current_subtitle.take() {
-          let (plain, _) = extract_text_parts(&sub.text);
-          sub.text = plain;
-          self.phase = 1;
-          if let Ok(ts) = parse_timestamps(&trimmed, Format::Vtt) {
-            self.current_subtitle = Some(Subtitle::new(ts.start, ts.end, ""));
+
+      match self.phase {
+        Phase::Header => {
+          self.header_lines.push(trimmed);
+        }
+        Phase::VttComment => {}
+        Phase::Cue => {
+          if trimmed.starts_with("WEBVTT") {
+            self.phase = Phase::Cue;
+          } else if trimmed.starts_with("NOTE") {
+            self.phase = Phase::VttComment;
+            self.in_note = true;
+          } else if trimmed.contains("-->") {
+            match parse_timestamps(trimmed, Format::Vtt) {
+              Ok(timestamp) => {
+                let mut subtitle = Subtitle::new(timestamp.start, timestamp.end, "");
+                subtitle.settings = timestamp.settings;
+                self.current_subtitle = Some(subtitle);
+                self.phase = Phase::Text;
+              }
+              Err(e) => return Some(Err(e.into())),
+            }
+          } else {
+            let index = trimmed.parse::<usize>().ok();
+            let mut subtitle = Subtitle::new(0, 0, "");
+            subtitle.index = index;
+            self.current_subtitle = Some(subtitle);
+            self.phase = Phase::Timestamp;
           }
-          return Some(Ok(sub));
         }
-        if let Ok(ts) = parse_timestamps(&trimmed, Format::Vtt) {
-          self.current_subtitle = Some(Subtitle::new(ts.start, ts.end, ""));
+        Phase::Timestamp => {
+          if let Some(sub) = &mut self.current_subtitle {
+            if trimmed.contains("-->") {
+              match parse_timestamps(trimmed, Format::Vtt) {
+                Ok(timestamp) => {
+                  sub.start = timestamp.start;
+                  sub.end = timestamp.end;
+                  sub.settings = timestamp.settings;
+                  self.phase = Phase::Text;
+                }
+                Err(e) => return Some(Err(e.into())),
+              }
+            }
+          }
         }
-        self.phase = 1;
-      } else if let Some(sub) = &mut self.current_subtitle {
-        if !sub.text.is_empty() {
-          sub.text.push('\n');
+        Phase::Text => {
+          if let Some(sub) = &mut self.current_subtitle {
+            if !sub.text.is_empty() {
+              sub.text.push('\n');
+            }
+            sub.text.push_str(trimmed);
+          }
         }
-        sub.text.push_str(&trimmed);
       }
     }
+
     if let Some(mut sub) = self.current_subtitle.take() {
-      let (plain, _) = extract_text_parts(&sub.text);
+      let (plain, parts) = extract_text_parts(&sub.text);
       sub.text = plain;
+      sub.text_parts = parts;
       return Some(Ok(sub));
     }
+
     None
   }
 }

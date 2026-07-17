@@ -13,6 +13,7 @@ pub mod model;
 #[cfg(feature = "mpl2")]
 pub mod mpl2;
 pub mod normalize;
+pub mod pipeline;
 pub mod quality;
 #[cfg(feature = "sami")]
 pub mod sami;
