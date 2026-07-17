@@ -1268,6 +1268,7 @@ impl ParseConfig {
 /// ```no_run
 /// use subtitler::model::StreamingParser;
 ///
+/// # fn main() -> anyhow::Result<()> {
 /// let content = "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
 /// let mut parser = subtitler::srt::parse_stream(content);
 ///
@@ -1275,6 +1276,8 @@ impl ParseConfig {
 ///   let subtitle = result?;
 ///   println!("{:?}", subtitle);
 /// }
+/// # Ok(())
+/// # }
 /// ```
 pub trait StreamingParser: Iterator<Item = AnyResult<Subtitle>> {
   /// Parse all remaining subtitles and return as a vector.
