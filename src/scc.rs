@@ -50,7 +50,7 @@ impl SccData {
 
   /// Parse SCC content into structured data.
   pub fn parse(content: &str) -> Result<Self, SubtitleError> {
-    let mut subtitles = Vec::new();
+    let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 100).max(16));
     let mut drop_frame = true;
     let mut current_text = String::new();
     let mut current_start: Option<u64> = None;

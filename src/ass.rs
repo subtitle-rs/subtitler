@@ -117,8 +117,9 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
 
 pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
   let mut info = HashMap::new();
+  let estimated_subs = (content.len() / 300).max(32);
   let mut styles = Vec::new();
-  let mut subtitles = Vec::new();
+  let mut subtitles: Vec<Subtitle> = Vec::with_capacity(estimated_subs);
   let mut section = Section::None;
 
   for line in content.lines() {

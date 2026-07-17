@@ -27,7 +27,7 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
 
 pub fn parse_content(content: &str, fps: Option<f64>) -> Result<SubtitleFile, SubtitleError> {
   let fps = fps.unwrap_or(DEFAULT_FPS);
-  let mut subtitles = Vec::new();
+  let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 30).max(16));
   let mut saved_fps = fps;
 
   for line in content.lines() {

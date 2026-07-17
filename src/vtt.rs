@@ -95,23 +95,18 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
 }
 
 fn parse(content: &str) -> Result<(Option<String>, Vec<Subtitle>), SubtitleError> {
-  let mut subtitles = Vec::new();
+  let estimated_subs = (content.len() / 200).max(16);
+  let mut subtitles: Vec<Subtitle> = Vec::with_capacity(estimated_subs);
   let mut current_subtitle: Option<Subtitle> = None;
   let mut phase = Phase::Header;
-  let mut is_first_content_line = true;
-  let mut header_lines: Vec<String> = Vec::new();
+  let mut header_lines: Vec<&str> = Vec::new();
   let mut header: Option<String> = None;
 
   for (row_idx, line) in content.lines().enumerate() {
     let row = row_idx + 1;
-    let mut trimmed = line.trim().to_string();
-
-    // Strip BOM from first content line (matching JS strip-bom behavior)
-    if is_first_content_line && !trimmed.is_empty() {
-      is_first_content_line = false;
-      if trimmed.starts_with('\u{FEFF}') {
-        trimmed = trimmed.trim_start_matches('\u{FEFF}').to_string();
-      }
+    let mut trimmed = line.trim();
+    if row == 1 && trimmed.starts_with('\u{FEFF}') {
+      trimmed = trimmed.trim_start_matches('\u{FEFF}');
     }
 
     if trimmed.is_empty() {
@@ -141,7 +136,7 @@ fn parse(content: &str) -> Result<(Option<String>, Vec<Subtitle>), SubtitleError
         } else if trimmed.starts_with("NOTE") {
           phase = Phase::VttComment;
         } else if trimmed.contains("-->") {
-          let timestamp = parse_timestamps(&trimmed, Format::Vtt)?;
+          let timestamp = parse_timestamps(trimmed, Format::Vtt)?;
           let mut subtitle = Subtitle::new(timestamp.start, timestamp.end, "");
           subtitle.settings = timestamp.settings;
           current_subtitle = Some(subtitle);
@@ -157,7 +152,7 @@ fn parse(content: &str) -> Result<(Option<String>, Vec<Subtitle>), SubtitleError
       Phase::Timestamp => {
         if let Some(sub) = &mut current_subtitle {
           if trimmed.contains("-->") {
-            let timestamp = parse_timestamps(&trimmed, Format::Vtt)?;
+            let timestamp = parse_timestamps(trimmed, Format::Vtt)?;
             sub.start = timestamp.start;
             sub.end = timestamp.end;
             sub.settings = timestamp.settings;
@@ -177,7 +172,7 @@ fn parse(content: &str) -> Result<(Option<String>, Vec<Subtitle>), SubtitleError
           if !sub.text.is_empty() {
             sub.text.push('\n');
           }
-          sub.text.push_str(&trimmed);
+          sub.text.push_str(trimmed);
         }
       }
     }

@@ -10,7 +10,7 @@ use tokio::io::AsyncWriteExt;
 
 /// Parse SBV content into a SubtitleFile.
 pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
-  let mut subtitles = Vec::new();
+  let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 40).max(16));
 
   for line in content.lines() {
     let trimmed = line.trim();

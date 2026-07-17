@@ -41,7 +41,7 @@ pub struct LrcLine {
 impl LrcData {
   /// Parse LRC content into structured data, preserving multi-timestamp lines.
   pub fn parse(content: &str) -> Result<Self, SubtitleError> {
-    let mut lines: Vec<LrcLine> = Vec::new();
+    let mut lines: Vec<LrcLine> = Vec::with_capacity((content.len() / 40).max(16));
 
     for line in content.lines() {
       let trimmed = line.trim();
@@ -95,7 +95,7 @@ impl LrcData {
   /// Convert to `Vec<Subtitle>` (compatibility with the deprecated `parse_content`).
   /// Each timestamp becomes a separate subtitle with a 5-second default display duration.
   pub fn to_subtitles(&self) -> Vec<Subtitle> {
-    let mut subs = Vec::new();
+    let mut subs: Vec<Subtitle> = Vec::with_capacity(self.lines.len());
     for line in &self.lines {
       for &t in &line.times_ms {
         subs.push(Subtitle::new(t, t + 5000, &line.text));

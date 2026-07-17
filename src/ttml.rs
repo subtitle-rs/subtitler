@@ -44,7 +44,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   reader.config_mut().trim_text(false);
   let mut buf = Vec::new();
 
-  let mut subtitles = Vec::new();
+  let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 300).max(16));
   let mut in_p = false;
   let mut current_start: Option<u64> = None;
   let mut current_end: Option<u64> = None;

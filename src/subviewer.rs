@@ -80,7 +80,7 @@ fn parse_subviewer_time(ts: &str) -> Result<u64, SubtitleError> {
 }
 
 pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
-  let mut subtitles = Vec::new();
+  let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 60).max(16));
   let mut pending_timestamp: Option<(u64, u64)> = None;
   let mut header_lines: Vec<String> = Vec::new();
   let mut saw_timestamp = false;

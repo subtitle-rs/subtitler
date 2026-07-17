@@ -39,7 +39,7 @@ impl Mpl2Data {
   /// Parse MPL2 content into structured data.
   pub fn parse(content: &str, fps: Option<f64>) -> Result<Self, SubtitleError> {
     let fps = fps.unwrap_or(DEFAULT_FPS);
-    let mut subtitles = Vec::new();
+    let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 30).max(16));
 
     for line in content.lines() {
       let trimmed = line.trim();

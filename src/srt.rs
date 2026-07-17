@@ -100,21 +100,36 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
 }
 
 fn parse(content: &str) -> Result<Vec<Subtitle>, SubtitleError> {
-  let mut subtitles = Vec::new();
+  let estimated_subs = (content.len() / 200).max(16);
+  let mut subtitles: Vec<Subtitle> = Vec::with_capacity(estimated_subs);
   let mut current_subtitle: Option<Subtitle> = None;
   let mut phase = Phase::Index;
-  let mut is_first_content_line = true;
 
   for (row_idx, line) in content.lines().enumerate() {
     let row = row_idx + 1;
-    let mut trimmed = line.trim().to_string();
-
-    // Strip BOM from first content line (matching JS strip-bom behavior)
-    if is_first_content_line && !trimmed.is_empty() {
-      is_first_content_line = false;
-      if trimmed.starts_with('\u{FEFF}') {
-        trimmed = trimmed.trim_start_matches('\u{FEFF}').to_string();
+    let trimmed = line.trim();
+    if row == 1 && trimmed.starts_with('\u{FEFF}') {
+      let trimmed = trimmed.trim_start_matches('\u{FEFF}');
+      if trimmed.is_empty() {
+        continue;
       }
+      match phase {
+        Phase::Index => {
+          handle_index_or_ts(trimmed, row, &mut current_subtitle, &mut phase)?;
+        }
+        Phase::Timestamp => {
+          handle_ts(trimmed, row, &mut current_subtitle, &mut phase)?;
+        }
+        Phase::Text => {
+          if let Some(ref mut sub) = current_subtitle {
+            if !sub.text.is_empty() {
+              sub.text.push('\n');
+            }
+            sub.text.push_str(trimmed);
+          }
+        }
+      }
+      continue;
     }
 
     if trimmed.is_empty() {
@@ -130,60 +145,17 @@ fn parse(content: &str) -> Result<Vec<Subtitle>, SubtitleError> {
 
     match phase {
       Phase::Index => {
-        if let Ok(index) = trimmed.parse::<usize>() {
-          current_subtitle = Some(Subtitle {
-            index: Some(index),
-            start: 0,
-            end: 0,
-            text: String::new(),
-            settings: None,
-            text_parts: SmallVec::new(),
-            style: None,
-            actor: None,
-            is_comment: false,
-          });
-          phase = Phase::Timestamp;
-        } else if trimmed.contains("-->") {
-          if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
-            let subtitle = Subtitle::new(
-              parse_timestamp(start_str, Format::Srt)?,
-              parse_timestamp(end_str, Format::Srt)?,
-              "",
-            );
-            phase = Phase::Text;
-            current_subtitle = Some(subtitle);
-          } else {
-            return Err(SubtitleError::UnexpectedLine {
-              format: Format::Srt,
-              row,
-              expected: "index or timestamp",
-              got: trimmed.to_string(),
-            });
-          }
-        }
+        handle_index_or_ts(trimmed, row, &mut current_subtitle, &mut phase)?;
       }
       Phase::Timestamp => {
-        if let Some(sub) = &mut current_subtitle {
-          if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
-            sub.start = parse_timestamp(start_str, Format::Srt)?;
-            sub.end = parse_timestamp(end_str, Format::Srt)?;
-            phase = Phase::Text;
-          } else {
-            return Err(SubtitleError::UnexpectedLine {
-              format: Format::Srt,
-              row,
-              expected: "timestamp",
-              got: trimmed.to_string(),
-            });
-          }
-        }
+        handle_ts(trimmed, row, &mut current_subtitle, &mut phase)?;
       }
       Phase::Text => {
-        if let Some(sub) = &mut current_subtitle {
+        if let Some(ref mut sub) = current_subtitle {
           if !sub.text.is_empty() {
             sub.text.push('\n');
           }
-          sub.text.push_str(&trimmed);
+          sub.text.push_str(trimmed);
         }
       }
     }
@@ -197,6 +169,69 @@ fn parse(content: &str) -> Result<Vec<Subtitle>, SubtitleError> {
   }
 
   Ok(subtitles)
+}
+
+fn handle_index_or_ts(
+  trimmed: &str,
+  row: usize,
+  current_subtitle: &mut Option<Subtitle>,
+  phase: &mut Phase,
+) -> Result<(), SubtitleError> {
+  if let Ok(index) = trimmed.parse::<usize>() {
+    *current_subtitle = Some(Subtitle {
+      index: Some(index),
+      start: 0,
+      end: 0,
+      text: String::new(),
+      settings: None,
+      text_parts: SmallVec::new(),
+      style: None,
+      actor: None,
+      is_comment: false,
+    });
+    *phase = Phase::Timestamp;
+  } else if trimmed.contains("-->") {
+    if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
+      let subtitle = Subtitle::new(
+        parse_timestamp(start_str, Format::Srt)?,
+        parse_timestamp(end_str, Format::Srt)?,
+        "",
+      );
+      *phase = Phase::Text;
+      *current_subtitle = Some(subtitle);
+    } else {
+      return Err(SubtitleError::UnexpectedLine {
+        format: Format::Srt,
+        row,
+        expected: "index or timestamp",
+        got: trimmed.to_string(),
+      });
+    }
+  }
+  Ok(())
+}
+
+fn handle_ts(
+  trimmed: &str,
+  row: usize,
+  current_subtitle: &mut Option<Subtitle>,
+  phase: &mut Phase,
+) -> Result<(), SubtitleError> {
+  if let Some(sub) = current_subtitle {
+    if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
+      sub.start = parse_timestamp(start_str, Format::Srt)?;
+      sub.end = parse_timestamp(end_str, Format::Srt)?;
+      *phase = Phase::Text;
+    } else {
+      return Err(SubtitleError::UnexpectedLine {
+        format: Format::Srt,
+        row,
+        expected: "timestamp",
+        got: trimmed.to_string(),
+      });
+    }
+  }
+  Ok(())
 }
 
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {

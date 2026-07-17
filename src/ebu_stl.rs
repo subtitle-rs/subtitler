@@ -131,8 +131,9 @@ impl EbuStlData {
     let gsi = GsiBlock::parse(&data[0..1024])?;
 
     // Parse TTI blocks
-    let mut tti_blocks = Vec::new();
-    let mut subtitles = Vec::new();
+    let tti_count = ((data.len() - 1024) / 128).min(1000); // STL max 1000 subtitles
+    let mut tti_blocks = Vec::with_capacity(tti_count);
+    let mut subtitles: Vec<Subtitle> = Vec::with_capacity(tti_count);
     let mut offset = 1024;
 
     while offset + 128 <= data.len() {

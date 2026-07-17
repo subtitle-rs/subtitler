@@ -588,6 +588,39 @@ fn bench_regex_hotspots(c: &mut Criterion) {
   group.finish();
 }
 
+// ── Zero-Copy / Throughput Benchmarks ──
+
+fn bench_throughput_srt_10k(c: &mut Criterion) {
+  let content = large_srt(10_000);
+  c.bench_function("throughput_srt_parse_10k", |b| {
+    b.iter(|| black_box(srt::parse_content(&content).unwrap()))
+  });
+}
+
+fn bench_throughput_vtt_10k(c: &mut Criterion) {
+  let content = large_vtt(10_000);
+  c.bench_function("throughput_vtt_parse_10k", |b| {
+    b.iter(|| black_box(vtt::parse_content(&content).unwrap()))
+  });
+}
+
+fn bench_throughput_ass_10k(c: &mut Criterion) {
+  let content = large_ass(10_000);
+  c.bench_function("throughput_ass_parse_10k", |b| {
+    b.iter(|| black_box(ass::parse_content(&content).unwrap()))
+  });
+}
+
+fn bench_parse_roundtrip_srt(c: &mut Criterion) {
+  let content = large_srt(1000);
+  c.bench_function("roundtrip_srt_parse_stringify_1k", |b| {
+    b.iter(|| {
+      let f = srt::parse_content(&content).unwrap();
+      black_box(srt::to_string(f.subtitles()))
+    })
+  });
+}
+
 criterion_group!(
   benches,
   // utility
@@ -634,5 +667,10 @@ criterion_group!(
   bench_srt_to_ass_convert,
   // regex hotspots (perf regression tracking)
   bench_regex_hotspots,
+  // throughput / zero-copy
+  bench_throughput_srt_10k,
+  bench_throughput_vtt_10k,
+  bench_throughput_ass_10k,
+  bench_parse_roundtrip_srt,
 );
 criterion_main!(benches);

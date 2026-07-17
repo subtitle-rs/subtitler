@@ -95,7 +95,7 @@ impl SamiData {
     // 第二遍：解析每个 Sync 块，用「下一个更晚的 Sync start」作为 end。
     // 默认兜底 3 秒，保证最后一条字幕仍有合理时长。
     const DEFAULT_TAIL_MS: u64 = 3000;
-    let mut subtitles = Vec::new();
+    let mut subtitles: Vec<Subtitle> = Vec::with_capacity(64);
     let mut pos = 0;
     while let Some(sync_match) = RE_SYNC_TAG.captures(&content[pos..]) {
       let full_match = sync_match.get(0).unwrap();
