@@ -178,6 +178,8 @@ impl<'a> Iterator for SubViewerStream<'a> {
   }
 }
 
+impl<'a> crate::model::StreamingParser for SubViewerStream<'a> {}
+
 #[cfg(test)]
 mod tests {
   use super::*;

@@ -360,6 +360,8 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   None
 }
 
+impl<'a> crate::model::StreamingParser for SrtStream<'a> {}
+
 pub fn to_string(subtitles: &[Subtitle]) -> String {
   let mut content = String::new();
   for (i, subtitle) in subtitles.iter().enumerate() {

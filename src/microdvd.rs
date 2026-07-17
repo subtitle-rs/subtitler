@@ -160,6 +160,8 @@ impl<'a> Iterator for MicroDvdStream<'a> {
   }
 }
 
+impl<'a> crate::model::StreamingParser for MicroDvdStream<'a> {}
+
 #[cfg(test)]
 mod tests {
   use super::*;

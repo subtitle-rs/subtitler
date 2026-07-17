@@ -27,7 +27,8 @@ pub use model::SubtitleFormat;
 
 // Re-export commonly used types for convenience
 pub use model::{
-  Format, ParseConfig, Subtitle, SubtitleFile, SubtitleFileBuilder, TextPart, WritePolicy,
+  Format, ParseConfig, StreamingParser, Subtitle, SubtitleFile, SubtitleFileBuilder, TextPart,
+  WritePolicy,
 };
 
 pub fn detect_format(data: &[u8]) -> Option<Format> {

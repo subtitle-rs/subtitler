@@ -133,7 +133,9 @@ impl<'a> Iterator for SbVStream<'a> {
   }
 }
 
-fn parse_sbv_line(line: &str) -> Result<Subtitle, anyhow::Error> {
+impl<'a> crate::model::StreamingParser for SbVStream<'a> {}
+
+#[cfg(test)]fn parse_sbv_line(line: &str) -> Result<Subtitle, anyhow::Error> {
   let parts: Vec<&str> = line.splitn(3, ',').collect();
   if parts.len() < 3 {
     return Err(anyhow::anyhow!("Invalid SBV line: {}", line));

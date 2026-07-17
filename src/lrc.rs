@@ -224,6 +224,8 @@ impl<'a> Iterator for LrcStream<'a> {
   }
 }
 
+impl<'a> crate::model::StreamingParser for LrcStream<'a> {}
+
 #[cfg(test)]
 mod tests {
   use super::*;

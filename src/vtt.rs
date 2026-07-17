@@ -391,6 +391,9 @@ impl<'a> Iterator for VttStream<'a> {
     None
   }
 }
+
+impl<'a> crate::model::StreamingParser for VttStream<'a> {}
+
 #[cfg(test)]
 mod tests {
   use super::*;
