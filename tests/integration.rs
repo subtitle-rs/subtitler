@@ -1,3 +1,4 @@
+use smallvec::SmallVec;
 use std::path::PathBuf;
 use subtitler::ass;
 use subtitler::model::{
@@ -5,7 +6,6 @@ use subtitler::model::{
 };
 use subtitler::srt;
 use subtitler::vtt;
-use smallvec::SmallVec;
 
 fn fixture_dir() -> PathBuf {
   let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
