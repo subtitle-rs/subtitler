@@ -267,7 +267,7 @@ fn decode_cea608_char(code: u16) -> char {
     0xAA => 'ª',
     0xAB => '«',
     0xAC => '¬',
-    0xAD => '­',
+    0xAD => '\u{AD}', // Soft hyphen
     0xAE => '®',
     0xAF => '¯',
 
@@ -364,7 +364,7 @@ impl<'a> Iterator for SccStream<'a> {
   type Item = AnyResult<Subtitle>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    while let Some(line) = self.lines.next() {
+    for line in self.lines.by_ref() {
       let trimmed = line.trim();
       if trimmed.is_empty() || RE_SCC_HEADER.is_match(trimmed) {
         continue;
@@ -443,13 +443,7 @@ mod tests {
 
     let file = parse_content(content).unwrap();
     if let SubtitleFile::Scc(data) = file {
-      // Should parse at least one subtitle
-      // Even if decoding is incomplete, the structure should be valid
-      assert!(
-        data.subtitles.len() >= 0,
-        "Parsed {} subtitles",
-        data.subtitles.len()
-      );
+      // Check that structure is valid
       assert!(data.drop_frame);
       assert_eq!(data.fps, DEFAULT_FPS);
     } else {

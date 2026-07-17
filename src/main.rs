@@ -167,7 +167,7 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     #[cfg(feature = "scc")]
     CliFormat::Scc => scc::parse_content(&text),
     #[cfg(feature = "ebu_stl")]
-    CliFormat::EbuStl => ebu_stl::parse_content(&data),
+    CliFormat::EbuStl => ebu_stl::parse_content(data),
   }
 }
 

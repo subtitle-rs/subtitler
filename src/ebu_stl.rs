@@ -340,7 +340,7 @@ fn tti_timecode_to_ms(timecode: u32) -> u64 {
 /// Parse EBU STL from file content
 pub fn parse_content(data: &[u8]) -> AnyResult<SubtitleFile> {
   let stl_data = EbuStlData::parse(data)?;
-  Ok(SubtitleFile::EbuStl(stl_data))
+  Ok(SubtitleFile::EbuStl(Box::new(stl_data)))
 }
 
 /// Parse EBU STL from bytes

@@ -443,7 +443,7 @@ pub enum SubtitleFile {
   /// EBU STL (Standard Transmission Format) format (`.stl`).
   /// Professional broadcast-grade binary format from European Broadcasting Union.
   #[cfg(feature = "ebu_stl")]
-  EbuStl(crate::ebu_stl::EbuStlData),
+  EbuStl(Box<crate::ebu_stl::EbuStlData>),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -1227,11 +1227,11 @@ impl SubtitleFileBuilder {
             text: sub.text.clone(),
           })
           .collect();
-        Some(SubtitleFile::EbuStl(crate::ebu_stl::EbuStlData {
+        Some(SubtitleFile::EbuStl(Box::new(crate::ebu_stl::EbuStlData {
           gsi: crate::ebu_stl::GsiBlock::default(),
           subtitles: self.subtitles,
           tti_blocks,
-        }))
+        })))
       }
     }
   }
