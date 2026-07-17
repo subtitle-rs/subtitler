@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-07-17
+
+Performance optimizations and streaming write support.
+
+### Added
+
+#### Streaming Write Support
+- **write_stream() methods**: Async streaming write for all 9 formats
+  - SRT/VTT/ASS/SBV/LRC/MicroDVD/SubViewer: `write_stream<W: AsyncWrite>`
+  - TTML: `write_stream<W: std::io::Write>` (sync, quick-xml limitation)
+  - Memory-efficient processing of large subtitle files
+  - No full-string allocation needed
+
+### Changed
+
+#### Memory Optimizations
+- **TextPart bitflags optimization**: Replace 3 bool fields with single bitflags
+  - Memory reduction: 3 bytes + padding → 1 byte
+  - New `TextFormat` bitflags with BOLD/ITALIC/UNDERLINE flags
+  - Add accessor methods: `bold()`, `italic()`, `underline()`
+  - Add setter methods: `set_bold()`, `set_italic()`, `set_underline()`
+  - Maintain backward compatibility through method-based access
+
+### Dependencies
+- Add `bitflags` 2.x with serde feature
+
 ## [1.1.0] - 2026-07-17
 
 Performance optimizations, API improvements, and enhanced flexibility.
