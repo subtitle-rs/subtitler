@@ -37,9 +37,9 @@ proptest! {
   fn vtt_round_trip_preserves_text_and_times(sub in arb_subtitle()) {
     let s = subtitler::vtt::to_string(std::slice::from_ref(&sub), None);
     let parsed = subtitler::vtt::parse_content(&s).unwrap();
-    prop_assert_eq!(parsed.len(), 1);
-    prop_assert_eq!(parsed[0].start, sub.start);
-    prop_assert_eq!(parsed[0].end, sub.end);
-    prop_assert_eq!(parsed[0].text.trim(), sub.text.trim(), "text mismatch");
+    prop_assert_eq!(parsed.subtitles().len(), 1);
+    prop_assert_eq!(parsed.subtitles()[0].start, sub.start);
+    prop_assert_eq!(parsed.subtitles()[0].end, sub.end);
+    prop_assert_eq!(parsed.subtitles()[0].text.trim(), sub.text.trim(), "text mismatch");
   }
 }

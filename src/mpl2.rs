@@ -103,26 +103,21 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 }
 
 /// Parse MPL2 from a byte slice.
-pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
+pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  let data = Mpl2Data::parse(&text, None)?;
-  Ok(data.subtitles)
+  parse_content(&text)
 }
 
-/// Parse an MPL2 file asynchronously.
-pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  let data = Mpl2Data::parse(&text, None)?;
-  Ok(data.subtitles)
+  parse_content(&text)
 }
 
-/// Parse an MPL2 file from a URL (requires `http` feature).
 #[cfg(feature = "http")]
-pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  let data = Mpl2Data::parse(&content, None)?;
-  Ok(data.subtitles)
+  parse_content(&content)
 }
 
 /// Detect if data looks like MPL2.
@@ -199,14 +194,15 @@ impl<'a> crate::model::StreamingParser for Mpl2Stream<'a> {}
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::model::SubtitleFormat;
 
   #[test]
   fn test_parse_basic() {
     let content = "[100][200]First subtitle\n[300][400]Second subtitle\n";
     let subs = parse_bytes(content.as_bytes()).unwrap();
-    assert_eq!(subs.len(), 2);
-    assert_eq!(subs[0].text, "First subtitle");
-    assert_eq!(subs[1].text, "Second subtitle");
+    assert_eq!(subs.subtitles().len(), 2);
+    assert_eq!(subs.subtitles()[0].text, "First subtitle");
+    assert_eq!(subs.subtitles()[1].text, "Second subtitle");
   }
 
   #[test]
@@ -223,7 +219,7 @@ mod tests {
   fn test_round_trip() {
     let content = "[100][200]Hello\n";
     let subs = parse_bytes(content.as_bytes()).unwrap();
-    let output = to_string(&subs, None);
+    let output = to_string(subs.subtitles(), None);
     assert!(output.contains("Hello"));
   }
 

@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate tracing;
 
+use subtitler::SubtitleFormat;
 use subtitler::types::AnyResult;
 use subtitler::vtt::{generate, parse_content};
 use tracing::Level;
@@ -60,7 +61,7 @@ Thanks! I'm looking forward to your feedback.
   info!("subtitle {:#?}", subtitle);
   info!("subtitle json {}", serde_json::to_string_pretty(&subtitle)?);
 
-  generate(&subtitle, "test.vtt", None).await?;
+  generate(subtitle.subtitles(), "test.vtt", None).await?;
 
   Ok(())
 }

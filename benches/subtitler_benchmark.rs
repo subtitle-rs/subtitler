@@ -238,7 +238,7 @@ fn bench_vtt_stringify_small(c: &mut Criterion) {
   let content = small_vtt();
   let subs = vtt::parse_content(&content).unwrap();
   c.bench_function("vtt_stringify_small", |b| {
-    b.iter(|| black_box(vtt::to_string(&subs, None)))
+    b.iter(|| black_box(vtt::to_string(subs.subtitles(), None)))
   });
 }
 
@@ -246,7 +246,7 @@ fn bench_vtt_stringify_large(c: &mut Criterion) {
   let content = large_vtt(1000);
   let subs = vtt::parse_content(&content).unwrap();
   c.bench_function("vtt_stringify_large", |b| {
-    b.iter(|| black_box(vtt::to_string(&subs, None)))
+    b.iter(|| black_box(vtt::to_string(subs.subtitles(), None)))
   });
 }
 

@@ -125,11 +125,14 @@ async fn test_vtt_parse_example_file() {
   let mut path = fixture_dir();
   path.push("example.vtt");
   let subtitles = vtt::parse_file(&path).await.unwrap();
-  assert_eq!(subtitles.len(), 10);
-  assert_eq!(subtitles[0].start, 1000);
-  assert_eq!(subtitles[0].end, 3500);
-  assert_eq!(subtitles[0].text, "Hi there! How have you been?");
-  assert!(subtitles.iter().all(|s| s.end >= s.start));
+  assert_eq!(subtitles.subtitles().len(), 10);
+  assert_eq!(subtitles.subtitles()[0].start, 1000);
+  assert_eq!(subtitles.subtitles()[0].end, 3500);
+  assert_eq!(
+    subtitles.subtitles()[0].text,
+    "Hi there! How have you been?"
+  );
+  assert!(subtitles.subtitles().iter().all(|s| s.end >= s.start));
 }
 
 #[tokio::test]
@@ -139,12 +142,18 @@ async fn test_vtt_round_trip_full() {
   let original = vtt::parse_file(&path).await.unwrap();
 
   let out_path = fixture_dir().join("_test_round_trip.vtt");
-  vtt::generate(&original, &out_path, None).await.unwrap();
+  vtt::generate(original.subtitles(), &out_path, None)
+    .await
+    .unwrap();
   let round_tripped = vtt::parse_file(&out_path).await.unwrap();
   std::fs::remove_file(&out_path).ok();
 
-  assert_eq!(original.len(), round_tripped.len());
-  for (a, b) in original.iter().zip(round_tripped.iter()) {
+  assert_eq!(original.subtitles().len(), round_tripped.subtitles().len());
+  for (a, b) in original
+    .subtitles()
+    .iter()
+    .zip(round_tripped.subtitles().iter())
+  {
     assert_eq!(a.start, b.start);
     assert_eq!(a.end, b.end);
     assert_eq!(a.text, b.text);
@@ -154,28 +163,28 @@ async fn test_vtt_round_trip_full() {
 #[tokio::test]
 async fn test_vtt_parse_content_empty() {
   let result = vtt::parse_content("WEBVTT\n\n").unwrap();
-  assert!(result.is_empty());
+  assert!(result.subtitles().is_empty());
 }
 
 #[tokio::test]
 async fn test_vtt_consecutive_blank_lines() {
   let content = "WEBVTT\n\n\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld\n\n";
   let result = vtt::parse_content(content).unwrap();
-  assert_eq!(result.len(), 2);
+  assert_eq!(result.subtitles().len(), 2);
 }
 
 #[tokio::test]
 async fn test_vtt_leading_newline() {
   let content = "\nWEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
   let result = vtt::parse_content(content).unwrap();
-  assert_eq!(result[0].text, "Hello");
+  assert_eq!(result.subtitles()[0].text, "Hello");
 }
 
 #[tokio::test]
 async fn test_vtt_cue_id_is_string() {
   let content = "WEBVTT\n\nchapter1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
   let result = vtt::parse_content(content).unwrap();
-  assert_eq!(result[0].index, None);
+  assert_eq!(result.subtitles()[0].index, None);
 }
 
 #[tokio::test]
@@ -198,16 +207,16 @@ async fn test_vtt_timestamp_error_message() {
 async fn test_vtt_parse_with_bom() {
   let content = "\u{FEFF}WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
   let result = vtt::parse_content(content).unwrap();
-  assert_eq!(result.len(), 1);
-  assert_eq!(result[0].text, "Hello");
+  assert_eq!(result.subtitles().len(), 1);
+  assert_eq!(result.subtitles()[0].text, "Hello");
 }
 
 #[tokio::test]
 async fn test_vtt_parse_with_note() {
   let content = "WEBVTT\n\nNOTE This is a comment\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
   let result = vtt::parse_content(content).unwrap();
-  assert_eq!(result.len(), 1);
-  assert_eq!(result[0].text, "Hello");
+  assert_eq!(result.subtitles().len(), 1);
+  assert_eq!(result.subtitles()[0].text, "Hello");
 }
 
 #[tokio::test]

@@ -92,28 +92,18 @@ fn resolve_output_format(output: &str, hint: Option<CliFormat>) -> AnyResult<Cli
 }
 
 async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
-  // 走库的编码检测路径，正确处理 UTF-16 / GBK / BOM 等
   let text = subtitler::encoding::decode_to_string(data)?;
   match format {
     #[cfg(feature = "srt")]
     CliFormat::Srt => srt::parse_content(&text),
     #[cfg(feature = "vtt")]
-    CliFormat::Vtt => {
-      let (header, subs) = vtt::parse_content_full(&text)?;
-      Ok(SubtitleFile::Vtt {
-        header,
-        subtitles: subs,
-      })
-    }
+    CliFormat::Vtt => vtt::parse_content(&text),
     #[cfg(feature = "ass")]
     CliFormat::Ass => ass::parse_content(&text),
     #[cfg(feature = "ssa")]
     CliFormat::Ssa => ass::parse_content(&text),
     #[cfg(feature = "microdvd")]
-    CliFormat::MicroDvd => {
-      let file = subtitler::microdvd::parse_content(&text, None)?;
-      Ok(file)
-    }
+    CliFormat::MicroDvd => subtitler::microdvd::parse_content(&text, None),
     #[cfg(feature = "subviewer")]
     CliFormat::SubViewer => subtitler::subviewer::parse_content(&text),
     #[cfg(feature = "ttml")]
@@ -125,9 +115,7 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     #[cfg(feature = "sami")]
     CliFormat::Sami => subtitler::sami::parse_content(&text),
     #[cfg(feature = "mpl2")]
-    CliFormat::Mpl2 => Ok(SubtitleFile::Mpl2(
-      subtitler::mpl2::parse_content(&text)?.subtitles().to_vec(),
-    )),
+    CliFormat::Mpl2 => subtitler::mpl2::parse_content(&text),
     #[cfg(feature = "scc")]
     CliFormat::Scc => scc::parse_content(&text),
     #[cfg(feature = "ebu_stl")]
@@ -147,13 +135,7 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     #[cfg(feature = "srt")]
     CliFormat::Srt => srt::parse_content(&content)?,
     #[cfg(feature = "vtt")]
-    CliFormat::Vtt => {
-      let (header, subs) = vtt::parse_content_full(&content)?;
-      SubtitleFile::Vtt {
-        header,
-        subtitles: subs,
-      }
-    }
+    CliFormat::Vtt => vtt::parse_content(&content)?,
     #[cfg(feature = "ass")]
     CliFormat::Ass => ass::parse_content(&content)?,
     #[cfg(feature = "ssa")]

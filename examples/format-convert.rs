@@ -46,7 +46,7 @@ What are your plans for the weekend?
 
   // Round-trip: SRT -> VTT -> parse -> SRT
   let reparsed = vtt::parse_content(&vtt_output)?;
-  let srt_roundtrip = srt::to_string(&reparsed);
+  let srt_roundtrip = srt::to_string(reparsed.subtitles());
   info!("Round-trip SRT:\n{}", srt_roundtrip);
 
   Ok(())

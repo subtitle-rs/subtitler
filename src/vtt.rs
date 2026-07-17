@@ -1,4 +1,4 @@
-use crate::model::{Subtitle, TextPart};
+use crate::model::{Subtitle, SubtitleFile, TextPart};
 use crate::types::AnyResult;
 use crate::utils::{format_timestamp, parse_timestamps};
 use anyhow::anyhow;
@@ -197,35 +197,31 @@ fn parse(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
   Ok((header, subtitles))
 }
 
-pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  let (_, subtitles) = parse(&text)?;
-  Ok(subtitles)
+  parse_content(&text)
 }
 
-pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
+pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  let (_, subtitles) = parse(&text)?;
-  Ok(subtitles)
+  parse_content(&text)
 }
 
-/// Parse VTT bytes, preserving the header block.
 pub fn parse_bytes_full(data: &[u8]) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
   let text = crate::encoding::decode_to_string(data)?;
   parse(&text)
 }
 
 #[cfg(feature = "http")]
-pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  let (_, subtitles) = parse(&content)?;
-  Ok(subtitles)
+  parse_content(&content)
 }
 
-pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
-  let (_, subtitles) = parse(content)?;
-  Ok(subtitles)
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
+  let (header, subtitles) = parse(content)?;
+  Ok(SubtitleFile::Vtt { header, subtitles })
 }
 
 pub fn parse_content_full(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
@@ -420,7 +416,7 @@ impl<'a> crate::model::StreamingParser for VttStream<'a> {}
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::model::Subtitle;
+  use crate::model::{Subtitle, SubtitleFormat};
 
   fn make_subtitle(index: Option<usize>, start: u64, end: u64, text: &str) -> Subtitle {
     Subtitle {
@@ -440,42 +436,51 @@ mod tests {
   fn test_parse_basic_vtt() {
     let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello!\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld!\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 2);
-    assert_eq!(result[0], make_subtitle(Some(1), 1000, 3500, "Hello!"));
-    assert_eq!(result[1], make_subtitle(Some(2), 4000, 6500, "World!"));
+    assert_eq!(result.subtitles().len(), 2);
+    assert_eq!(
+      result.subtitles()[0],
+      make_subtitle(Some(1), 1000, 3500, "Hello!")
+    );
+    assert_eq!(
+      result.subtitles()[1],
+      make_subtitle(Some(2), 4000, 6500, "World!")
+    );
   }
 
   #[test]
   fn test_parse_multiline_text() {
     let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nLine one\nLine two\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].text, "Line one\nLine two");
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].text, "Line one\nLine two");
   }
 
   #[test]
   fn test_parse_with_settings() {
     let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500 align:start\nHello!\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].settings, Some("align:start".to_string()));
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(
+      result.subtitles()[0].settings,
+      Some("align:start".to_string())
+    );
   }
 
   #[test]
   fn test_parse_no_cue_id() {
     let content = "WEBVTT\n\n00:00:01.000 --> 00:00:03.500\nNo cue id\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].text, "No cue id");
-    assert_eq!(result[0].index, None);
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].text, "No cue id");
+    assert_eq!(result.subtitles()[0].index, None);
   }
 
   #[test]
   fn test_parse_start_at_zero() {
     let content = "WEBVTT\n\n1\n00:00:00.000 --> 00:00:03.500\nFrom zero\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].start, 0);
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].start, 0);
   }
 
   #[tokio::test]
@@ -483,10 +488,10 @@ mod tests {
     let original = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld\n\n";
     let subtitles = parse_content(original).unwrap();
     let path = "test_round_trip_vtt.vtt";
-    generate(&subtitles, path, None).await.unwrap();
+    generate(subtitles.subtitles(), path, None).await.unwrap();
     let parsed_back = parse_file(path).await.unwrap();
     let _ = std::fs::remove_file(path);
-    assert_eq!(subtitles, parsed_back);
+    assert_eq!(subtitles.subtitles(), parsed_back.subtitles());
   }
 
   #[test]
@@ -494,8 +499,8 @@ mod tests {
     let content =
       "WEBVTT\nKind: captions\nLanguage: en\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].text, "Hello");
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].text, "Hello");
   }
 
   #[test]
@@ -509,24 +514,24 @@ mod tests {
   fn test_parse_bold_tag() {
     let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\n<b>bold</b>\n\n";
     let result = parse_content(content).unwrap();
-    assert!(result[0].text_parts[0].bold());
+    assert!(result.subtitles()[0].text_parts[0].bold());
   }
 
   #[test]
   fn test_parse_voice_tag() {
     let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\n<v Alice>Hello</v>\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result[0].text, "Hello");
-    assert_eq!(result[0].text_parts.len(), 1);
-    assert!(result[0].text_parts[0].voice.is_some());
+    assert_eq!(result.subtitles()[0].text, "Hello");
+    assert_eq!(result.subtitles()[0].text_parts.len(), 1);
+    assert!(result.subtitles()[0].text_parts[0].voice.is_some());
   }
 
   #[test]
   fn test_parse_bytes() {
     let data = b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
     let result = parse_bytes(data.as_ref()).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].text, "Hello");
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].text, "Hello");
   }
 
   #[test]
@@ -540,15 +545,22 @@ mod tests {
     // NOTE blocks must be skipped, and subtitles after them must still parse
     let content = "WEBVTT\n\nNOTE\nThis is a comment\nspanning multiple lines\n\n1\n00:00:01.000 --> 00:00:03.500\nAfter note\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1, "subtitle after NOTE block was lost");
-    assert_eq!(result[0].text, "After note");
+    assert_eq!(
+      result.subtitles().len(),
+      1,
+      "subtitle after NOTE block was lost"
+    );
+    assert_eq!(result.subtitles()[0].text, "After note");
   }
 
   #[test]
   fn test_parse_voice_speaker_name() {
     let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\n<v Alice>Hello</v>\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result[0].text_parts[0].voice, Some("Alice".to_string()));
+    assert_eq!(
+      result.subtitles()[0].text_parts[0].voice,
+      Some("Alice".to_string())
+    );
   }
 
   #[test]
