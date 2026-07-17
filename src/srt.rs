@@ -390,6 +390,7 @@ pub async fn generate(
   }
 
   let mut open_opts = fs::OpenOptions::new();
+  let is_append = policy == crate::model::WritePolicy::Append;
   let mut dest = match policy {
     crate::model::WritePolicy::Append => open_opts.create(true).append(true).open(path).await,
     _ => {
@@ -401,6 +402,17 @@ pub async fn generate(
         .await
     }
   }?;
+  // Append 模式下若目标已有内容，先补一个空行做 cue 分隔，
+  // 否则追加的 cue 会与原末尾 cue 粘连导致再解析时丢字幕。
+  if is_append {
+    let existing_len = tokio::fs::metadata(path)
+      .await
+      .map(|m| m.len())
+      .unwrap_or(0);
+    if existing_len > 0 {
+      dest.write_all(b"\n").await?;
+    }
+  }
   let content = to_string(subtitles);
   dest.write_all(content.as_bytes()).await?;
   dest.flush().await?;
@@ -622,5 +634,52 @@ mod tests {
     assert!(output.contains("Hello!"));
     assert!(output.contains("2\n"));
     assert!(output.contains("World!"));
+  }
+
+  #[tokio::test]
+  async fn test_generate_refuse_if_exists() {
+    // 目标文件已存在时，RefuseIfExists 必须报错而非覆写
+    let path = "test_refuse_if_exists.srt";
+    let subs = vec![make_subtitle(1, 1000, 2000, "original")];
+    generate(&subs, path, None).await.unwrap();
+
+    let result = generate(
+      &[make_subtitle(1, 3000, 4000, "new")],
+      path,
+      Some(crate::model::WritePolicy::RefuseIfExists),
+    )
+    .await;
+    assert!(
+      result.is_err(),
+      "RefuseIfExists on existing file should error"
+    );
+
+    // 原内容应保持不变
+    let parsed = parse_file(path).await.unwrap();
+    assert_eq!(parsed[0].text, "original");
+    let _ = std::fs::remove_file(path);
+  }
+
+  #[tokio::test]
+  async fn test_generate_append() {
+    // Append 策略应把新字幕追加到既有文件末尾
+    let path = "test_append.srt";
+    let _ = std::fs::remove_file(path);
+
+    let first = vec![make_subtitle(1, 1000, 2000, "first")];
+    generate(&first, path, Some(crate::model::WritePolicy::Append))
+      .await
+      .unwrap();
+
+    let second = vec![make_subtitle(2, 3000, 4000, "second")];
+    generate(&second, path, Some(crate::model::WritePolicy::Append))
+      .await
+      .unwrap();
+
+    let parsed = parse_file(path).await.unwrap();
+    assert_eq!(parsed.len(), 2, "Append 应保留前一次写入的字幕");
+    assert_eq!(parsed[0].text, "first");
+    assert_eq!(parsed[1].text, "second");
+    let _ = std::fs::remove_file(path);
   }
 }

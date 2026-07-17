@@ -90,6 +90,75 @@ impl Format {
   }
 }
 
+/// 集中维护的 CLI ↔ 库格式枚举转换，避免 main.rs 出现两份冗余的 match。
+impl From<&subtitler::model::Format> for Format {
+  fn from(f: &subtitler::model::Format) -> Self {
+    use subtitler::model::Format as M;
+    match f {
+      #[cfg(feature = "srt")]
+      M::Srt => Format::Srt,
+      #[cfg(feature = "vtt")]
+      M::Vtt => Format::Vtt,
+      #[cfg(feature = "ass")]
+      M::Ass => Format::Ass,
+      #[cfg(feature = "ssa")]
+      M::Ssa => Format::Ssa,
+      #[cfg(feature = "microdvd")]
+      M::MicroDvd => Format::MicroDvd,
+      #[cfg(feature = "subviewer")]
+      M::SubViewer => Format::SubViewer,
+      #[cfg(feature = "ttml")]
+      M::Ttml => Format::Ttml,
+      #[cfg(feature = "sbv")]
+      M::Sbv => Format::Sbv,
+      #[cfg(feature = "lrc")]
+      M::Lrc => Format::Lrc,
+      #[cfg(feature = "sami")]
+      M::Sami => Format::Sami,
+      #[cfg(feature = "mpl2")]
+      M::Mpl2 => Format::Mpl2,
+      #[cfg(feature = "scc")]
+      M::Scc => Format::Scc,
+      #[cfg(feature = "ebu_stl")]
+      M::EbuStl => Format::EbuStl,
+    }
+  }
+}
+
+impl From<&Format> for subtitler::model::Format {
+  fn from(f: &Format) -> Self {
+    use subtitler::model::Format as M;
+    match f {
+      #[cfg(feature = "srt")]
+      Format::Srt => M::Srt,
+      #[cfg(feature = "vtt")]
+      Format::Vtt => M::Vtt,
+      #[cfg(feature = "ass")]
+      Format::Ass => M::Ass,
+      #[cfg(feature = "ssa")]
+      Format::Ssa => M::Ssa,
+      #[cfg(feature = "microdvd")]
+      Format::MicroDvd => M::MicroDvd,
+      #[cfg(feature = "subviewer")]
+      Format::SubViewer => M::SubViewer,
+      #[cfg(feature = "ttml")]
+      Format::Ttml => M::Ttml,
+      #[cfg(feature = "sbv")]
+      Format::Sbv => M::Sbv,
+      #[cfg(feature = "lrc")]
+      Format::Lrc => M::Lrc,
+      #[cfg(feature = "sami")]
+      Format::Sami => M::Sami,
+      #[cfg(feature = "mpl2")]
+      Format::Mpl2 => M::Mpl2,
+      #[cfg(feature = "scc")]
+      Format::Scc => M::Scc,
+      #[cfg(feature = "ebu_stl")]
+      Format::EbuStl => M::EbuStl,
+    }
+  }
+}
+
 impl std::fmt::Display for Format {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {

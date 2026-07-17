@@ -75,35 +75,8 @@ fn resolve_format(data: &[u8], hint: Option<CliFormat>) -> Option<CliFormat> {
   if let Some(f) = hint {
     return Some(f);
   }
-  match subtitler::detect_format(data) {
-    #[cfg(feature = "srt")]
-    Some(Format::Srt) => Some(CliFormat::Srt),
-    #[cfg(feature = "vtt")]
-    Some(Format::Vtt) => Some(CliFormat::Vtt),
-    #[cfg(feature = "ass")]
-    Some(Format::Ass) => Some(CliFormat::Ass),
-    #[cfg(feature = "ssa")]
-    Some(Format::Ssa) => Some(CliFormat::Ssa),
-    #[cfg(feature = "microdvd")]
-    Some(Format::MicroDvd) => Some(CliFormat::MicroDvd),
-    #[cfg(feature = "subviewer")]
-    Some(Format::SubViewer) => Some(CliFormat::SubViewer),
-    #[cfg(feature = "ttml")]
-    Some(Format::Ttml) => Some(CliFormat::Ttml),
-    #[cfg(feature = "sbv")]
-    Some(Format::Sbv) => Some(CliFormat::Sbv),
-    #[cfg(feature = "lrc")]
-    Some(Format::Lrc) => Some(CliFormat::Lrc),
-    #[cfg(feature = "sami")]
-    Some(Format::Sami) => Some(CliFormat::Sami),
-    #[cfg(feature = "mpl2")]
-    Some(Format::Mpl2) => Some(CliFormat::Mpl2),
-    #[cfg(feature = "scc")]
-    Some(Format::Scc) => Some(CliFormat::Scc),
-    #[cfg(feature = "ebu_stl")]
-    Some(Format::EbuStl) => Some(CliFormat::EbuStl),
-    None => None,
-  }
+  // 通过 cli::Format 的 From<&model::Format> 实现转换，避免在 main.rs 重复维护 match
+  subtitler::detect_format(data).map(|f| CliFormat::from(&f))
 }
 
 fn resolve_output_format(output: &str, hint: Option<CliFormat>) -> AnyResult<CliFormat> {
@@ -331,34 +304,8 @@ fn issue_kind(issue: &subtitler::model::ValidationIssue) -> &'static str {
 }
 
 fn format_to_subtitle_format(f: &CliFormat) -> Format {
-  match f {
-    #[cfg(feature = "srt")]
-    CliFormat::Srt => Format::Srt,
-    #[cfg(feature = "vtt")]
-    CliFormat::Vtt => Format::Vtt,
-    #[cfg(feature = "ass")]
-    CliFormat::Ass => Format::Ass,
-    #[cfg(feature = "ssa")]
-    CliFormat::Ssa => Format::Ssa,
-    #[cfg(feature = "microdvd")]
-    CliFormat::MicroDvd => Format::MicroDvd,
-    #[cfg(feature = "subviewer")]
-    CliFormat::SubViewer => Format::SubViewer,
-    #[cfg(feature = "ttml")]
-    CliFormat::Ttml => Format::Ttml,
-    #[cfg(feature = "sbv")]
-    CliFormat::Sbv => Format::Sbv,
-    #[cfg(feature = "lrc")]
-    CliFormat::Lrc => Format::Lrc,
-    #[cfg(feature = "sami")]
-    CliFormat::Sami => Format::Sami,
-    #[cfg(feature = "mpl2")]
-    CliFormat::Mpl2 => Format::Mpl2,
-    #[cfg(feature = "scc")]
-    CliFormat::Scc => Format::Scc,
-    #[cfg(feature = "ebu_stl")]
-    CliFormat::EbuStl => Format::EbuStl,
-  }
+  // 通过 cli::Format 上实现的 Into<model::Format> 转换
+  f.into()
 }
 
 async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {

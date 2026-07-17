@@ -13,11 +13,27 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 static RE_SYNC_TAG: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"<Sync[^>]*Start\s*=\s*(\d+)[^>]*>").unwrap());
+  LazyLock::new(|| Regex::new(r"(?i)<Sync[^>]*Start\s*=\s*(\d+)[^>]*>").unwrap());
 
-static RE_P_TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<P[^>]*>(.*?)</P>").unwrap());
+static RE_P_TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)<P[^>]*>(.*?)</P>").unwrap());
 
 static RE_STRIP_TAGS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<[^>]+>").unwrap());
+
+/// Case-insensitive search for a literal needle, returns the byte index of the
+/// match start. Used for HTML tag lookups where `<Head>`, `<HEAD>`, `<head>`
+/// must all be recognized.
+fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
+  haystack.to_lowercase().find(&needle.to_lowercase())
+}
+
+/// Case-insensitive search returning both start and end offset of the match,
+/// so callers can slice the original (case-preserved) text.
+fn find_ci_range(haystack: &str, needle: &str) -> Option<(usize, usize)> {
+  let lower = haystack.to_lowercase();
+  let needle = needle.to_lowercase();
+  let start = lower.find(&needle)?;
+  Some((start, start + needle.len()))
+}
 
 /// SAMI subtitle data including header and styles.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -36,16 +52,16 @@ impl SamiData {
     let mut header = None;
     let mut styles = HashMap::new();
 
-    // Extract header (Head section)
-    if let Some(head_start) = content.find("<Head>") {
-      if let Some(head_end) = content.find("</Head>") {
+    // Extract header (Head section) — 大小写不敏感，兼容 <HEAD>/<head>
+    if let Some((head_start, _)) = find_ci_range(content, "<Head>") {
+      if let Some(head_end) = find_ci(content, "</Head>") {
         header = Some(content[head_start..head_end + 7].to_string());
       }
     }
 
-    // Extract styles (Style section)
-    if let Some(style_start) = content.find("<Style") {
-      if let Some(style_end) = content.find("</Style>") {
+    // Extract styles (Style section) — 大小写不敏感
+    if let Some(style_start) = find_ci(content, "<Style") {
+      if let Some(style_end) = find_ci(content, "</Style>") {
         let style_content = &content[style_start..style_end + 8];
         // Simple CSS parsing - extract class definitions
         if let Some(css_start) = style_content.find('>') {
@@ -84,8 +100,8 @@ impl SamiData {
       let full_match = sync_match.get(0).unwrap();
       let start_ms: u64 = sync_match[1].parse().unwrap_or(0);
 
-      // Find the end of this Sync block
-      let sync_end = match content[pos..].find("</Sync>") {
+      // Find the end of this Sync block — 大小写不敏感
+      let sync_end = match find_ci(&content[pos..], "</Sync>") {
         Some(offset) => offset,
         None => break,
       };
@@ -242,7 +258,7 @@ impl<'a> Iterator for SamiStream<'a> {
       };
 
       // 找到本 Sync 块的闭合标签
-      let sync_end_rel = match self.content[self.pos..].find("</Sync>") {
+      let sync_end_rel = match find_ci(&self.content[self.pos..], "</Sync>") {
         Some(off) => off,
         None => break,
       };
@@ -339,6 +355,32 @@ mod tests {
       );
       // 最后一条无后续，应使用默认尾段 3000ms
       assert_eq!(data.subtitles[2].end, 23000, "最后一条 end = start + 3000");
+    } else {
+      panic!("Expected Sami variant");
+    }
+  }
+
+  #[test]
+  fn test_parse_case_insensitive_tags() {
+    // 真实 SAMI 文件常见大写/混合大小写标签
+    let content = r#"<SAMI>
+<HEAD><Title>Test</Title></HEAD>
+<BODY>
+<SYNC START=1000><P>First</P></SYNC>
+<SYNC START=4000><P>Second</P></SYNC>
+</BODY>
+</SAMI>"#;
+    let file = parse_content(content).unwrap();
+    if let SubtitleFile::Sami(data) = file {
+      assert_eq!(
+        data.subtitles.len(),
+        2,
+        "大小写变体的 Sync/P 标签必须被识别"
+      );
+      assert_eq!(data.subtitles[0].start, 1000);
+      assert_eq!(data.subtitles[0].text, "First");
+      assert_eq!(data.subtitles[1].start, 4000);
+      assert!(data.header.is_some(), "大小写变体的 <HEAD> 必须被识别");
     } else {
       panic!("Expected Sami variant");
     }
