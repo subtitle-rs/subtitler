@@ -35,7 +35,6 @@ impl SamiData {
   pub fn parse(content: &str) -> AnyResult<Self> {
     let mut header = None;
     let mut styles = HashMap::new();
-    let mut subtitles = Vec::new();
 
     // Extract header (Head section)
     if let Some(head_start) = content.find("<Head>") {
@@ -66,19 +65,39 @@ impl SamiData {
       }
     }
 
-    // Parse Sync tags
+    // 两遍扫描：第一遍收集所有 Sync 的起始时间，用于第二遍推导结束时间。
+    // 旧的实现把每条字幕的 end 硬编码为 start + 3000ms，丢失了真实时长信息。
+    let mut sync_starts: Vec<u64> = Vec::new();
+    for caps in RE_SYNC_TAG.captures_iter(content) {
+      let start_ms: u64 = caps[1].parse().unwrap_or(0);
+      sync_starts.push(start_ms);
+    }
+    sync_starts.sort_unstable();
+    sync_starts.dedup();
+
+    // 第二遍：解析每个 Sync 块，用「下一个更晚的 Sync start」作为 end。
+    // 默认兜底 3 秒，保证最后一条字幕仍有合理时长。
+    const DEFAULT_TAIL_MS: u64 = 3000;
+    let mut subtitles = Vec::new();
     let mut pos = 0;
     while let Some(sync_match) = RE_SYNC_TAG.captures(&content[pos..]) {
       let full_match = sync_match.get(0).unwrap();
       let start_ms: u64 = sync_match[1].parse().unwrap_or(0);
 
       // Find the end of this Sync block
-      let sync_end = content[pos..].find("</Sync>");
-      if sync_end.is_none() {
-        break;
-      }
+      let sync_end = match content[pos..].find("</Sync>") {
+        Some(offset) => offset,
+        None => break,
+      };
 
-      let sync_block = &content[pos + full_match.start()..pos + sync_end.unwrap() + 7];
+      let sync_block = &content[pos + full_match.start()..pos + sync_end + 7];
+
+      // 推导 end：取首个严格大于当前 start 的 Sync 时间；找不到则加默认尾段。
+      let end_ms = sync_starts
+        .iter()
+        .copied()
+        .find(|&t| t > start_ms)
+        .unwrap_or(start_ms + DEFAULT_TAIL_MS);
 
       // Extract P tag content
       for p_match in RE_P_TAG.captures_iter(sync_block) {
@@ -87,15 +106,12 @@ impl SamiData {
         let text = text.trim().to_string();
 
         if !text.is_empty() {
-          // Calculate end time (use next Sync's start time or add 3s default)
-          let end_ms = start_ms + 3000; // Default 3s duration
-
           subtitles.push(Subtitle::new(start_ms, end_ms, &text));
           break; // Only take first P tag per Sync
         }
       }
 
-      pos += sync_end.unwrap() + 7;
+      pos += sync_end + 7;
     }
 
     Ok(SamiData {
@@ -207,41 +223,47 @@ impl<'a> Iterator for SamiStream<'a> {
   type Item = AnyResult<Subtitle>;
 
   fn next(&mut self) -> Option<Self::Item> {
+    // 流式场景下无法预知后续 Sync 的 start，故 end 取默认尾段。
+    // 语义上与 SamiData::parse 的「最后一条/无后续」兜底一致。
+    const DEFAULT_TAIL_MS: u64 = 3000;
     while self.pos < self.content.len() {
-      if let Some(sync_match) = RE_SYNC_TAG.captures(&self.content[self.pos..]) {
-        let full_match = sync_match.get(0).unwrap();
-        let start_ms: u64 = match sync_match[1].parse() {
-          Ok(v) => v,
-          Err(e) => {
-            self.pos += full_match.end();
-            return Some(Err(anyhow::anyhow!("Invalid start time: {}", e)));
-          }
-        };
-
-        // Find Sync block end
-        if let Some(sync_end_rel) = self.content[self.pos..].find("</Sync>") {
-          let sync_block =
-            &self.content[self.pos + full_match.start()..self.pos + sync_end_rel + 7];
-
-          // Extract P content
-          if let Some(p_match) = RE_P_TAG.captures(sync_block) {
-            let p_content = &p_match[1];
-            let text = RE_STRIP_TAGS.replace_all(p_content, "").to_string();
-            let text = text.trim().to_string();
-
-            if !text.is_empty() {
-              self.pos += sync_end_rel + 7;
-              let end_ms = start_ms + 3000;
-              return Some(Ok(Subtitle::new(start_ms, end_ms, &text)));
-            }
-          }
-
-          self.pos += sync_end_rel + 7;
-        } else {
-          break;
+      let sync_match = match RE_SYNC_TAG.captures(&self.content[self.pos..]) {
+        Some(m) => m,
+        None => break,
+      };
+      let full_match = sync_match.get(0).unwrap();
+      let start_ms: u64 = match sync_match[1].parse() {
+        Ok(v) => v,
+        Err(e) => {
+          // 解析失败时跳过本 Sync 标签，避免死循环
+          self.pos += full_match.end();
+          return Some(Err(anyhow::anyhow!("Invalid start time: {}", e)));
         }
-      } else {
-        break;
+      };
+
+      // 找到本 Sync 块的闭合标签
+      let sync_end_rel = match self.content[self.pos..].find("</Sync>") {
+        Some(off) => off,
+        None => break,
+      };
+      let sync_block = &self.content[self.pos + full_match.start()..self.pos + sync_end_rel + 7];
+
+      // 无论是否产出字幕，都推进到闭合标签之后，避免重复处理
+      self.pos += sync_end_rel + 7;
+
+      // 提取 P 内容
+      if let Some(p_match) = RE_P_TAG.captures(sync_block) {
+        let p_content = &p_match[1];
+        let text = RE_STRIP_TAGS.replace_all(p_content, "").to_string();
+        let text = text.trim().to_string();
+
+        if !text.is_empty() {
+          return Some(Ok(Subtitle::new(
+            start_ms,
+            start_ms + DEFAULT_TAIL_MS,
+            &text,
+          )));
+        }
       }
     }
     None
@@ -296,5 +318,29 @@ mod tests {
   fn test_detect() {
     assert!(detect_format(b"<SAMI><Body></Body></SAMI>").is_some());
     assert!(detect_format(b"WEBVTT").is_none());
+  }
+
+  #[test]
+  fn test_end_time_uses_next_sync() {
+    // end_ms 应取下一个 Sync 的 start，而非硬编码 start + 3000
+    let content = r#"<SAMI>
+<Body>
+<Sync Start=1000><P>First</P></Sync>
+<Sync Start=5000><P>Second</P></Sync>
+<Sync Start=20000><P>Third</P></Sync>
+</Body>
+</SAMI>"#;
+    let file = parse_content(content).unwrap();
+    if let SubtitleFile::Sami(data) = file {
+      assert_eq!(data.subtitles[0].end, 5000, "第一条 end 应为下一条的 start");
+      assert_eq!(
+        data.subtitles[1].end, 20000,
+        "第二条 end 应为第三条的 start"
+      );
+      // 最后一条无后续，应使用默认尾段 3000ms
+      assert_eq!(data.subtitles[2].end, 23000, "最后一条 end = start + 3000");
+    } else {
+      panic!("Expected Sami variant");
+    }
   }
 }

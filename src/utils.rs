@@ -141,7 +141,12 @@ pub fn format_timestamp(timestamp: u64, options: &str) -> String {
   let minutes = ((total_seconds % 3600) / 60) as i32;
   let seconds = (total_seconds % 60) as i32;
 
-  let separator = if options == "WebVTT" { '.' } else { ',' };
+  // 大小写不敏感判断，避免调用方传 "SRT"/"srt"/"WebVTT"/"vtt" 时行为不一致
+  let separator = if options.eq_ignore_ascii_case("WebVTT") {
+    '.'
+  } else {
+    ','
+  };
 
   format!(
     "{}:{}:{}{}{}",
@@ -200,6 +205,17 @@ mod tests {
   fn test_format_timestamp_vtt() {
     assert_eq!(format_timestamp(1000, "WebVTT"), "00:00:01.000");
     assert_eq!(format_timestamp(3500, "WebVTT"), "00:00:03.500");
+  }
+
+  #[test]
+  fn test_format_timestamp_case_insensitive() {
+    // "WebVTT" 的大小写变体都应走 VTT 分支（点分隔符）
+    assert_eq!(format_timestamp(1000, "WebVTT"), "00:00:01.000");
+    assert_eq!(format_timestamp(1000, "WEBVTT"), "00:00:01.000");
+    assert_eq!(format_timestamp(1000, "webvtt"), "00:00:01.000");
+    // 非 VTT 字符串（含 "SRT"/"srt"）都走 SRT 分支（逗号分隔符）
+    assert_eq!(format_timestamp(1000, "SRT"), "00:00:01,000");
+    assert_eq!(format_timestamp(1000, "srt"), "00:00:01,000");
   }
 
   #[test]

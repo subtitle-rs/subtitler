@@ -48,7 +48,7 @@ pub fn decode_to_string(data: &[u8]) -> AnyResult<String> {
       if let Some(enc) = encoding_rs::Encoding::for_label_no_replacement(label) {
         let (cow, _enc, had_errors) = enc.decode(data);
         if had_errors {
-          eprintln!("warning: encoding '{encoding}' had decoding errors");
+          tracing::warn!(encoding = %encoding, "subtitle decoding encountered byte errors");
         }
         Ok(cow.into_owned())
       } else {

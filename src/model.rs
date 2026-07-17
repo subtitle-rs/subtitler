@@ -147,10 +147,7 @@ impl Subtitle {
   /// It's optimized to avoid unnecessary allocations when the text is already plain.
   pub fn plaintext(&self) -> String {
     // Fast path: if text is already plain (no special characters), just clone
-    if !self.text.contains('<')
-      && !self.text.contains('{')
-      && !self.text.contains('\\')
-    {
+    if !self.text.contains('<') && !self.text.contains('{') && !self.text.contains('\\') {
       return self.text.clone();
     }
 
@@ -800,6 +797,10 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
   fn split_long(&mut self, max_chars: usize) {
     self.sort();
     let subs = self.subtitles_mut();
+
+    // 先把所有需要拆分的字幕展平为新的字幕列表，再用 splice 一次性替换。
+    // 旧实现用 Vec::insert 在循环中后移全部元素，整体复杂度是 O(n²)；
+    // 新实现只遍历一次 + 一次 splice，整体 O(n)。
     let mut i = 0;
     while i < subs.len() {
       let char_count = subs[i].text.chars().count();
@@ -811,29 +812,39 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
       let start = subs[i].start;
       let end = subs[i].end;
       let duration = end - start;
+      // 提前取出继承字段，避免后续 borrow 冲突
+      let style = subs[i].style.clone();
+      let actor = subs[i].actor.clone();
       let text = std::mem::take(&mut subs[i].text);
 
       let chunks = split_text_chunks(&text, max_chars);
       let num_chunks = chunks.len() as u64;
       let chunk_duration = duration / num_chunks;
 
+      // 构造替换切片：第一条复用原字幕位置（保留 index 等其他字段）
       subs[i].text = chunks[0].clone();
       subs[i].end = start + chunk_duration;
 
+      // 其余 chunks 构造为新字幕，最后一次性插入
+      let mut new_subs: Vec<Subtitle> = Vec::with_capacity(chunks.len() - 1);
       for (chunk_idx, chunk) in chunks.iter().enumerate().skip(1) {
         let new_start = start + (chunk_idx as u64) * chunk_duration;
-        let new_end = if chunk_idx + 1 == chunks.len() as usize {
+        let new_end = if chunk_idx + 1 == chunks.len() {
           end
         } else {
           start + ((chunk_idx + 1) as u64) * chunk_duration
         };
         let mut new_sub = Subtitle::new(new_start, new_end, chunk);
-        new_sub.style = subs[i].style.clone();
-        new_sub.actor = subs[i].actor.clone();
-        i += 1;
-        subs.insert(i, new_sub);
+        new_sub.style = style.clone();
+        new_sub.actor = actor.clone();
+        new_subs.push(new_sub);
       }
-      i += 1;
+
+      let insert_at = i + 1;
+      let inserted = new_subs.len();
+      // splice 一次性插入，避免逐个 insert 的 O(n²) 后移
+      subs.splice(insert_at..insert_at, new_subs);
+      i += 1 + inserted;
     }
   }
 

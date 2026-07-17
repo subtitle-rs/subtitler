@@ -120,7 +120,8 @@ fn resolve_output_format(output: &str, hint: Option<CliFormat>) -> AnyResult<Cli
 
 #[allow(deprecated)]
 async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
-  let text = String::from_utf8(data.to_vec())?;
+  // 走库的编码检测路径，正确处理 UTF-16 / GBK / BOM 等
+  let text = subtitler::encoding::decode_to_string(data)?;
   match format {
     #[cfg(feature = "srt")]
     CliFormat::Srt => {
@@ -179,7 +180,7 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
   let format = resolve_format(&data, args.format.or(ext))
     .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format. Use --format to specify."))?;
 
-  let content = String::from_utf8(data.to_vec())?;
+  let content = subtitler::encoding::decode_to_string(&data)?;
   let subs = match format {
     #[cfg(feature = "srt")]
     CliFormat::Srt => srt::parse_content(&content)?,
