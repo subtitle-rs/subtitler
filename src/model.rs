@@ -253,6 +253,8 @@ pub enum Format {
   Sami,
   #[cfg(feature = "mpl2")]
   Mpl2,
+  #[cfg(feature = "scc")]
+  Scc,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -430,6 +432,11 @@ pub enum SubtitleFile {
   /// MPL2 format (`.mpl`). Frame-based format popular in Eastern Europe.
   #[cfg(feature = "mpl2")]
   Mpl2(Vec<Subtitle>),
+
+  /// SCC (Scenarist Closed Caption) format (`.scc`).
+  /// CEA-608 closed caption format for broadcast television.
+  #[cfg(feature = "scc")]
+  Scc(crate::scc::SccData),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -830,6 +837,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Sami(data) => &data.subtitles,
       #[cfg(feature = "mpl2")]
       SubtitleFile::Mpl2(subs) => subs,
+      #[cfg(feature = "scc")]
+      SubtitleFile::Scc(data) => &data.subtitles,
     }
   }
 
@@ -865,6 +874,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Sami(data) => &mut data.subtitles,
       #[cfg(feature = "mpl2")]
       SubtitleFile::Mpl2(subs) => subs,
+      #[cfg(feature = "scc")]
+      SubtitleFile::Scc(data) => &mut data.subtitles,
     }
   }
 
@@ -892,6 +903,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Sami(_) => Format::Sami,
       #[cfg(feature = "mpl2")]
       SubtitleFile::Mpl2(_) => Format::Mpl2,
+      #[cfg(feature = "scc")]
+      SubtitleFile::Scc(_) => Format::Scc,
     }
   }
 
@@ -952,6 +965,8 @@ impl SubtitleFormat for SubtitleFile {
       }
       #[cfg(feature = "mpl2")]
       Format::Mpl2 => crate::mpl2::to_string(subs, None),
+      #[cfg(feature = "scc")]
+      Format::Scc => crate::scc::to_string(subs),
     }
   }
 }
@@ -1170,6 +1185,13 @@ impl SubtitleFileBuilder {
 
       #[cfg(feature = "mpl2")]
       Format::Mpl2 => Some(SubtitleFile::Mpl2(self.subtitles)),
+
+      #[cfg(feature = "scc")]
+      Format::Scc => Some(SubtitleFile::Scc(crate::scc::SccData {
+        fps: crate::scc::DEFAULT_FPS,
+        drop_frame: true,
+        subtitles: self.subtitles,
+      })),
     }
   }
 }

@@ -7,7 +7,7 @@ categories = [
   "multimedia",
   "parser-implementations",
 ] 
-description = "Parse, convert, validate, edit, and generate subtitles in 11 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2). Full CLI included." 
+description = "Parse, convert, validate, edit, and generate subtitles in 12 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC). Full CLI included." 
 documentation = "https://docs.rs/subtitler" 
 edition = "2024" 
 keywords = [
@@ -59,7 +59,7 @@ criterion = "0.8"
 proptest = "1.5"
 
 [features]
-default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "http"]
+default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "http"]
 
 srt = []
 vtt = []
@@ -72,6 +72,7 @@ sbv = []
 lrc = []
 sami = []
 mpl2 = []
+scc = []
 http = ["reqwest"]
 
 [profile.release]

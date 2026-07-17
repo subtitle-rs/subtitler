@@ -16,6 +16,8 @@ pub mod quality;
 pub mod sami;
 #[cfg(feature = "sbv")]
 pub mod sbv;
+#[cfg(feature = "scc")]
+pub mod scc;
 #[cfg(feature = "srt")]
 pub mod srt;
 #[cfg(feature = "subviewer")]
@@ -59,6 +61,8 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| sami::detect_format(data));
   #[cfg(feature = "mpl2")]
   let f = f.or_else(|| mpl2::detect_format(data));
+  #[cfg(feature = "scc")]
+  let f = f.or_else(|| scc::detect_format(data));
   f
 }
 
@@ -111,6 +115,8 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     Format::Sami => Ok(sami::parse_bytes(data)?),
     #[cfg(feature = "mpl2")]
     Format::Mpl2 => Ok(model::SubtitleFile::Mpl2(mpl2::parse_bytes(data)?)),
+    #[cfg(feature = "scc")]
+    Format::Scc => Ok(scc::parse_bytes(data)?),
     #[allow(unreachable_patterns)]
     _ => Err(error::ParseError::Unsupported(fmt)),
   }

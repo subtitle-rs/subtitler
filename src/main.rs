@@ -94,6 +94,8 @@ fn resolve_format(data: &[u8], hint: Option<CliFormat>) -> Option<CliFormat> {
     Some(Format::Sami) => Some(CliFormat::Sami),
     #[cfg(feature = "mpl2")]
     Some(Format::Mpl2) => Some(CliFormat::Mpl2),
+    #[cfg(feature = "scc")]
+    Some(Format::Scc) => Some(CliFormat::Scc),
     None => None,
   }
 }
@@ -156,6 +158,8 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     CliFormat::Mpl2 => Ok(SubtitleFile::Mpl2(
       subtitler::mpl2::parse_content(&text)?.subtitles().to_vec(),
     )),
+    #[cfg(feature = "scc")]
+    CliFormat::Scc => subtitler::scc::parse_content(&text),
   }
 }
 
@@ -197,6 +201,10 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
       .to_vec(),
     #[cfg(feature = "mpl2")]
     CliFormat::Mpl2 => subtitler::mpl2::parse_content(&content)?
+      .subtitles()
+      .to_vec(),
+    #[cfg(feature = "scc")]
+    CliFormat::Scc => subtitler::scc::parse_content(&content)?
       .subtitles()
       .to_vec(),
   };
@@ -335,6 +343,8 @@ fn format_to_subtitle_format(f: &CliFormat) -> Format {
     CliFormat::Sami => Format::Sami,
     #[cfg(feature = "mpl2")]
     CliFormat::Mpl2 => Format::Mpl2,
+    #[cfg(feature = "scc")]
+    CliFormat::Scc => Format::Scc,
   }
 }
 
@@ -466,6 +476,8 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
     Some(Format::Sami) => println!("sami"),
     #[cfg(feature = "mpl2")]
     Some(Format::Mpl2) => println!("mpl2"),
+    #[cfg(feature = "scc")]
+    Some(Format::Scc) => println!("scc"),
     None => {
       eprintln!("Unknown format");
       std::process::exit(1);

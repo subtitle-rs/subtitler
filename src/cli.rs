@@ -27,6 +27,9 @@ pub enum Format {
   #[cfg(feature = "mpl2")]
   #[value(name = "mpl2")]
   Mpl2,
+  #[cfg(feature = "scc")]
+  #[value(name = "scc")]
+  Scc,
 }
 
 impl Format {
@@ -72,6 +75,10 @@ impl Format {
     if lower.ends_with(".mpl") || lower.ends_with(".txt") {
       return Some(Format::Mpl2);
     }
+    #[cfg(feature = "scc")]
+    if lower.ends_with(".scc") {
+      return Some(Format::Scc);
+    }
     None
   }
 }
@@ -100,7 +107,9 @@ impl std::fmt::Display for Format {
       #[cfg(feature = "sami")]
       Format::Sami => write!(f, "sami"),
       #[cfg(feature = "mpl2")]
-      Format::Mpl2 => write!(f, "mpl2"),
+      Format::Mpl2 => write!(f, "MPL2"),
+      #[cfg(feature = "scc")]
+      Format::Scc => write!(f, "SCC"),
     }
   }
 }
@@ -109,7 +118,7 @@ impl std::fmt::Display for Format {
 #[derive(Parser)]
 #[command(name = "subtitler")]
 #[command(
-  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 11 formats."
+  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 12 formats."
 )]
 #[command(version)]
 pub struct Cli {
