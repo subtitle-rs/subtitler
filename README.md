@@ -5,11 +5,12 @@
 [![Crates.io](https://img.shields.io/crates/v/subtitler?style=flat-square)](https://crates.io/crates/subtitler)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
 
-- SRT, WebVTT, ASS/SSA, **MicroDVD**, and **SubViewer** format support
+- **11 subtitle formats**: SRT, WebVTT, ASS/SSA, MicroDVD, SubViewer, TTML/IMSC, SBV, LRC, SAMI, MPL2
 - Rich text extraction (bold, italic, underline, color, voice tags)
 - Encoding detection and auto-decoding (UTF-8, UTF-16, BOM, chardetng fallback)
 - Format detection, conversion, and validation
 - Frame-based timecode support
+- Streaming parsers for large files
 - Utility operations: sort, merge, split, validate, framerate transform
 - Async I/O powered by `tokio`
 - Serialize/Deserialize via `serde`
@@ -114,6 +115,11 @@ match detect_format(&data) {
     Some(Format::Ssa) => println!("SSA detected"),
     Some(Format::MicroDvd) => println!("MicroDVD detected"),
     Some(Format::SubViewer) => println!("SubViewer detected"),
+    Some(Format::Ttml) => println!("TTML detected"),
+    Some(Format::Sbv) => println!("SBV detected"),
+    Some(Format::Lrc) => println!("LRC detected"),
+    Some(Format::Sami) => println!("SAMI detected"),
+    Some(Format::Mpl2) => println!("MPL2 detected"),
     None => println!("Unknown format"),
 }
 ```
@@ -125,21 +131,23 @@ you don't need:
 
 ```toml
 [dependencies]
-subtitler = { version = "1.0", default-features = false, features = ["srt", "vtt"] }
+subtitler = { version = "1.3", default-features = false, features = ["srt", "vtt"] }
 ```
 
-| Flag         | Format           |
-|--------------|------------------|
-| `srt`        | SubRip (`.srt`)  |
-| `vtt`        | WebVTT (`.vtt`)  |
-| `ass`        | Advanced SubStation Alpha (`.ass`) |
-| `ssa`        | SubStation Alpha (`.ssa`) |
-| `microdvd`   | MicroDVD (`.sub`)|
-| `subviewer`  | SubViewer        |
-| `ttml`       | TTML/IMSC (`.ttml`, `.xml`) |
-| `sbv`        | YouTube SBV (`.sbv`) |
-| `lrc`        | Lyrics LRC (`.lrc`) |
-| `http`       | `parse_url()` via `reqwest` |
+| Flag         | Format           | Notes |
+|--------------|------------------|-------|
+| `srt`        | SubRip (`.srt`)  | Most common format |
+| `vtt`        | WebVTT (`.vtt`)  | HTML5 standard |
+| `ass`        | Advanced SubStation Alpha (`.ass`) | Advanced styling |
+| `ssa`        | SubStation Alpha (`.ssa`) | Legacy ASS format |
+| `microdvd`   | MicroDVD (`.sub`)| Frame-based |
+| `subviewer`  | SubViewer        | DVD format |
+| `ttml`       | TTML/IMSC (`.ttml`, `.xml`) | Broadcast standard |
+| `sbv`        | YouTube SBV (`.sbv`) | YouTube format |
+| `lrc`        | Lyrics LRC (`.lrc`) | Song lyrics |
+| `sami`       | SAMI (`.smi`)    | Microsoft format, popular in Asia |
+| `mpl2`       | MPL2 (`.mpl`)    | Frame-based, popular in Eastern Europe |
+| `http`       | `parse_url()` via `reqwest` | Network support |
 
 See `MIGRATION.md` for upgrading from 0.1.x.
 
@@ -169,9 +177,7 @@ pub struct Subtitle {
 
 pub struct TextPart {
     pub text: String,
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
+    pub format: TextFormat, // bitflags: BOLD | ITALIC | UNDERLINE
     pub color: Option<String>,
     pub voice: Option<String>,
 }
@@ -188,7 +194,15 @@ pub struct AssStyle {
 pub enum SubtitleFile {
     Srt(Vec<Subtitle>),
     Vtt { header: Option<String>, subtitles: Vec<Subtitle> },
-    Ass { info: HashMap<String, String>, styles: Vec<AssStyle>, subtitles: Vec<Subtitle> },
+    Ass(AssData),
+    Ssa(AssData),
+    MicroDvd { fps: Option<f64>, subtitles: Vec<Subtitle> },
+    SubViewer { header: Option<String>, subtitles: Vec<Subtitle> },
+    Ttml { header: Option<String>, subtitles: Vec<Subtitle> },
+    Sbv(Vec<Subtitle>),
+    Lrc(Vec<Subtitle>),
+    Sami(SamiData),
+    Mpl2(Vec<Subtitle>),
 }
 ```
 
@@ -426,8 +440,9 @@ subtitler detect unknown.sub   # prints: srt, vtt, ass, or ssa
 
 ## Examples
 
-See the [examples](https://github.com/subtitle-rs/subtitler/tree/main/examples) directory for more usage patterns:
+See the [examples](https://github.com/subtitle-rs/subtitler/tree/main/examples) directory for 23 usage examples:
 
+**SRT/WebVTT**:
 - `parse-srt-file` — Parse SRT from file
 - `parse-srt-content` — Parse SRT from inline content
 - `parse-srt-http` — Parse SRT from URL
@@ -436,10 +451,29 @@ See the [examples](https://github.com/subtitle-rs/subtitler/tree/main/examples) 
 - `parse-vtt-content` — Parse VTT from inline content
 - `parse-vtt-http` — Parse VTT from URL
 - `create-vtt-file` — Generate VTT file
+
+**ASS/SSA**:
 - `parse-ass-content` — Parse ASS from inline content
+
+**Format Conversion**:
 - `format-convert` — Convert between SRT/VTT/ASS formats
-- `utility-ops` — Sort, validate, merge, and split operations
+- `convert-all-formats` — Convert between all 11 formats
+
+**Advanced Features**:
+- `stream-parse` — Streaming parser for large files
+- `quality-report` — Generate quality report
+- `normalize-text` — Text normalization and cleanup
+- `edit-operations` — Sort, validate, merge, and split operations
 - `frame-conversion` — Frame-based timecode conversion
+- `validate-subtitle` — Detect and validate subtitles
+- `ttml-lyrics-tutorial` — TTML and LRC parsing tutorial
+- `translate-subtitle` — Batch translation workflow
+
+**SAMI/MPL2 (v1.3.0)**:
+- `parse-sami-content` — Parse SAMI format
+- `parse-mpl2-content` — Parse MPL2 with frame conversion
+- `create-sami-file` — Create multi-language SAMI
+- `create-mpl2-file` — Create MPL2 with custom fps
 
 ## License
 
