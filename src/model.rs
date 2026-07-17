@@ -1075,6 +1075,90 @@ impl SubtitleFileBuilder {
   }
 }
 
+/// Configuration options for subtitle parsing behavior.
+///
+/// # Example
+///
+/// ```no_run
+/// use subtitler::model::ParseConfig;
+///
+/// let config = ParseConfig::new()
+///   .preserve_indices(true)       // Keep original indices
+///   .lenient_mode(true)           // Tolerate format errors
+///   .auto_detect_encoding(true);  // Auto-detect encoding
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParseConfig {
+  /// Preserve original subtitle indices (cue numbers).
+  /// Default: false (re-index from 1)
+  pub preserve_indices: bool,
+
+  /// Lenient parsing mode: tolerate certain format errors.
+  /// Default: false (strict parsing)
+  pub lenient_mode: bool,
+
+  /// Auto-detect text encoding (e.g., UTF-8, Latin-1).
+  /// Default: true
+  pub auto_detect_encoding: bool,
+
+  /// Maximum allowed subtitle duration in ms (0 = no limit).
+  /// Default: 0
+  pub max_duration_ms: u64,
+
+  /// Minimum allowed subtitle duration in ms.
+  /// Default: 0
+  pub min_duration_ms: u64,
+}
+
+impl Default for ParseConfig {
+  fn default() -> Self {
+    Self {
+      preserve_indices: false,
+      lenient_mode: false,
+      auto_detect_encoding: true,
+      max_duration_ms: 0,
+      min_duration_ms: 0,
+    }
+  }
+}
+
+impl ParseConfig {
+  /// Create a new ParseConfig with default values.
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  /// Preserve original subtitle indices (cue numbers).
+  pub fn preserve_indices(mut self, preserve: bool) -> Self {
+    self.preserve_indices = preserve;
+    self
+  }
+
+  /// Enable lenient parsing mode (tolerate format errors).
+  pub fn lenient_mode(mut self, lenient: bool) -> Self {
+    self.lenient_mode = lenient;
+    self
+  }
+
+  /// Auto-detect text encoding.
+  pub fn auto_detect_encoding(mut self, detect: bool) -> Self {
+    self.auto_detect_encoding = detect;
+    self
+  }
+
+  /// Set maximum allowed subtitle duration (0 = no limit).
+  pub fn max_duration_ms(mut self, ms: u64) -> Self {
+    self.max_duration_ms = ms;
+    self
+  }
+
+  /// Set minimum allowed subtitle duration.
+  pub fn min_duration_ms(mut self, ms: u64) -> Self {
+    self.min_duration_ms = ms;
+    self
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
