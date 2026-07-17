@@ -277,6 +277,10 @@ This release marks the first stable version with unified architecture, complete 
 - **CLI `pipeline` command**: `subtitler pipeline input.srt output.vtt --config ops.json`
   supports 10 operation types via JSON config files.
 - Throughput benchmarks: 10k-subtitle SRT/VTT/ASS parse + round-trip.
+- **WASM compilation**: the library now compiles to `wasm32-unknown-unknown`.
+  `tokio`/`reqwest` gated behind `cfg(not(target_arch = "wasm32"))`. New
+  `src/wasm.rs` exposes 6 `wasm-bindgen` functions for browser use.
+  Complete browser demo in `examples/wasm/`.
 
 ### Changed
 
