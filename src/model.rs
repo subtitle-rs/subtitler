@@ -134,20 +134,55 @@ impl Subtitle {
     self.text.trim().is_empty()
   }
 
+  /// Strip all HTML and ASS tags from the subtitle text (in-place).
   pub fn strip_tags(&mut self) {
     self.text = RE_HTML_TAG.replace_all(&self.text, "").to_string();
     self.text = RE_ASS_TAG.replace_all(&self.text, "").to_string();
     self.text_parts.clear();
   }
 
+  /// Get plain text without any tags or formatting.
+  ///
+  /// This method removes all HTML/ASS tags and converts ASS escape sequences.
+  /// It's optimized to avoid unnecessary allocations when the text is already plain.
   pub fn plaintext(&self) -> String {
+    // Fast path: if text is already plain (no special characters), just clone
+    if !self.text.contains('<')
+      && !self.text.contains('{')
+      && !self.text.contains('\\')
+    {
+      return self.text.clone();
+    }
+
+    // Slow path: need to process tags and escape sequences
     let mut text = self.text.clone();
     text = RE_HTML_TAG.replace_all(&text, "").to_string();
     text = RE_ASS_TAG.replace_all(&text, "").to_string();
-    text
-      .replace("\\N", "\n")
-      .replace("\\n", "\n")
-      .replace("\\h", " ")
+
+    // Batch replace ASS escape sequences
+    // \N -> \n (forced line break)
+    // \n -> \n (soft line break)
+    // \h -> space (hard space)
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+      if c == '\\' {
+        match chars.peek() {
+          Some('N') | Some('n') => {
+            result.push('\n');
+            chars.next(); // consume the N/n
+          }
+          Some('h') => {
+            result.push(' ');
+            chars.next(); // consume the h
+          }
+          _ => result.push(c),
+        }
+      } else {
+        result.push(c);
+      }
+    }
+    result
   }
 }
 

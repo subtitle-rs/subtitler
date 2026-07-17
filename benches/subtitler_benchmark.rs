@@ -545,19 +545,30 @@ fn bench_srt_to_ass_convert(c: &mut Criterion) {
 fn bench_regex_hotspots(c: &mut Criterion) {
   let mut group = c.benchmark_group("regex_hotspots");
 
+  // Test with tags (slow path)
   let tagged =
     "<b>Bold</b> <i>italic</i> <u>under</u> <font color=\"#ff0000\">red</font> plain tail";
-  let sub = subtitler::model::Subtitle::new(0, 1000, tagged);
+  let sub_tagged = subtitler::model::Subtitle::new(0, 1000, tagged);
 
-  group.bench_function("plaintext", |b| {
+  group.bench_function("plaintext_with_tags", |b| {
     b.iter(|| {
-      black_box(sub.plaintext());
+      black_box(sub_tagged.plaintext());
+    });
+  });
+
+  // Test without tags (fast path)
+  let plain = "This is plain text without any tags or escape sequences. Just normal text.";
+  let sub_plain = subtitler::model::Subtitle::new(0, 1000, plain);
+
+  group.bench_function("plaintext_without_tags", |b| {
+    b.iter(|| {
+      black_box(sub_plain.plaintext());
     });
   });
 
   group.bench_function("strip_tags", |b| {
     b.iter(|| {
-      let mut s = sub.clone();
+      let mut s = sub_tagged.clone();
       s.strip_tags();
       black_box(s.text);
     });
