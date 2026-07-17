@@ -192,6 +192,7 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
 }
 
 /// Parse a SAMI file asynchronously.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   Ok(parse_content(&text)?)

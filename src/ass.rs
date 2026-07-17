@@ -4,6 +4,7 @@ use crate::types::AnyResult;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
 
 static RE_DIALOGUE: LazyLock<Regex> = LazyLock::new(|| {
@@ -180,6 +181,7 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   Ok(parse_content(&text)?)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   Ok(parse_content(&text)?)
@@ -387,6 +389,7 @@ fn format_ass_timestamp(ms: u64) -> String {
 }
 
 /// Write ASS/SSA subtitles to an async writer streamingly.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   info: &HashMap<String, String>,
   styles: &[AssStyle],
@@ -535,6 +538,7 @@ mod tests {
     assert_eq!(result.subtitles()[0].text, "Hello");
   }
 
+  #[cfg(not(target_arch = "wasm32"))]
   #[tokio::test]
   async fn test_parse_file() {
     let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: ...\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,FromFile\n";

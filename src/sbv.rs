@@ -6,6 +6,7 @@ use crate::error::SubtitleError;
 use crate::model::{Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use crate::utils::parse_timestamp;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
 
 /// Parse SBV content into a SubtitleFile.
@@ -53,6 +54,7 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
 }
 
 /// Parse an SBV file asynchronously.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   parse_content(&text)
@@ -165,6 +167,7 @@ fn parse_sbv_line(line: &str) -> Result<Subtitle, SubtitleError> {
 }
 
 /// Write SBV subtitles to an async writer streamingly.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   subtitles: &[Subtitle],
   writer: &mut W,

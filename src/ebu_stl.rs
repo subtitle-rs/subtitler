@@ -349,6 +349,7 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
 }
 
 /// Parse EBU STL file asynchronously
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let data = tokio::fs::read(path).await?;
   parse_content(&data)

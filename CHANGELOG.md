@@ -264,6 +264,19 @@ This release marks the first stable version with unified architecture, complete 
 - `LrcData` strong type with `LrcLine` structs preserving multi-timestamp fidelity.
 - EBU STL `detect_format` strengthened: validates TTI block count matches
   header metadata in addition to size/structure checks.
+- **Streaming parsers**: SRT `parse_stream` and VTT `parse_stream` yield
+  subtitles one at a time without allocating a full `Vec`. VttStream upgraded
+  from raw `u8` phases to proper enum with header tracking.
+- **`SubtitleBuilder`**: chainable builder API wrapping `SubtitleFile`.
+  Methods: `sort()`, `shift()`, `merge_adjacent()`, `split_long()`,
+  `transform_fps()`, `remove_overlaps()`, `enforce_min/max_duration()`,
+  `auto_extend_cps()`, `map()`, `filter()`.
+- **`Pipeline` DSL** (`subtitler::pipeline`): declarative transformation
+  pipeline with JSON serialization support. `Pipeline::new().sort().shift(500)`
+  `.apply(file)`; or deserialize from JSON config.
+- **CLI `pipeline` command**: `subtitler pipeline input.srt output.vtt --config ops.json`
+  supports 10 operation types via JSON config files.
+- Throughput benchmarks: 10k-subtitle SRT/VTT/ASS parse + round-trip.
 
 ### Changed
 
@@ -274,6 +287,17 @@ This release marks the first stable version with unified architecture, complete 
   `format::parse_content`, removing duplicate `SubtitleFile` construction.
 - `split_text_chunks` optimized: avoids O(n²) intermediate `format!()`
   allocations by pre-allocating `String::with_capacity` and byte-counting.
+- `cmd_edit` refactored to use `SubtitleBuilder` internally (was direct
+  `SubtitleFormat` method calls).
+
+### Performance
+
+- **Zero-copy parsing**: SRT/VTT parsers work directly on `&str` slices;
+  removed per-line `.to_string()` calls in both main and streaming paths.
+- All 12 format modules pre-allocate `Vec::with_capacity` based on content
+  size estimates; EBU STL uses exact TTI count from header.
+- VTT `header_lines` changed from `Vec<String>` to `Vec<&str>` with deferred
+  `.join("\n")`.
 
 ### Fixed
 

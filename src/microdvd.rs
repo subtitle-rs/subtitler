@@ -3,6 +3,7 @@ use crate::model::{Format, Subtitle, SubtitleFile, frames_to_ms, ms_to_frames};
 use crate::types::AnyResult;
 use regex::Regex;
 use std::sync::LazyLock;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
 
 static RE_MICRODVD: LazyLock<Regex> =
@@ -84,6 +85,7 @@ pub fn parse_bytes(data: &[u8], fps: Option<f64>) -> AnyResult<SubtitleFile> {
 }
 
 /// Parse a MicroDVD file asynchronously.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(
   path: impl AsRef<std::path::Path>,
   fps: Option<f64>,
@@ -170,6 +172,7 @@ impl<'a> Iterator for MicroDvdStream<'a> {
 impl<'a> crate::model::StreamingParser for MicroDvdStream<'a> {}
 
 /// Write MicroDVD subtitles to an async writer streamingly.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   subtitles: &[Subtitle],
   fps: Option<f64>,

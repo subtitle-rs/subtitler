@@ -118,6 +118,7 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
 }
 
 /// Parse a file into a `SubtitleFile`, auto-detecting the format.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(
   path: impl AsRef<std::path::Path>,
 ) -> Result<model::SubtitleFile, error::ParseError> {
@@ -144,3 +145,6 @@ pub async fn parse_url_with(
   let bytes = response.bytes().await?;
   parse_bytes(&bytes)
 }
+
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;

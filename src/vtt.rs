@@ -7,7 +7,9 @@ use regex::Regex;
 use reqwest;
 use smallvec::SmallVec;
 use std::sync::LazyLock;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::fs;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
 
 static RE_VTT_TAG: LazyLock<Regex> = LazyLock::new(|| {
@@ -193,6 +195,7 @@ fn parse(content: &str) -> Result<(Option<String>, Vec<Subtitle>), SubtitleError
   Ok((header, subtitles))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   parse_content(&text)
@@ -265,6 +268,7 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   content
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn generate(
   subtitles: &[Subtitle],
   file_path: impl AsRef<std::path::Path>,
@@ -302,6 +306,7 @@ pub async fn generate(
 }
 
 /// Write subtitles to an async writer streamingly (no full-string allocation).
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   subtitles: &[Subtitle],
   header: Option<&str>,
@@ -537,6 +542,7 @@ mod tests {
     assert_eq!(result.subtitles()[0].start, 0);
   }
 
+  #[cfg(not(target_arch = "wasm32"))]
   #[tokio::test]
   async fn test_round_trip() {
     let original = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld\n\n";

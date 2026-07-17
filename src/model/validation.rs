@@ -40,6 +40,12 @@ pub enum ValidationIssue {
   },
 }
 
+impl std::fmt::Display for ValidationIssue {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str(&self.description())
+  }
+}
+
 impl ValidationIssue {
   pub fn description(&self) -> String {
     match self {

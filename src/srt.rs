@@ -7,7 +7,9 @@ use regex::Regex;
 use reqwest;
 use smallvec::SmallVec;
 use std::sync::LazyLock;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::fs;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
 
 static RE_SRT_TAG: LazyLock<Regex> =
@@ -234,6 +236,7 @@ fn handle_ts(
   Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   let subs = parse(&text)?;
@@ -427,6 +430,7 @@ pub fn to_string(subtitles: &[Subtitle]) -> String {
   content
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn generate(
   subtitles: &[Subtitle],
   file_path: impl AsRef<std::path::Path>,
@@ -476,6 +480,7 @@ pub async fn generate(
 }
 
 /// Write subtitles to an async writer streamingly (no full-string allocation).
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   subtitles: &[Subtitle],
   writer: &mut W,
@@ -566,6 +571,7 @@ mod tests {
     assert_eq!(result.subtitles()[0].text, "Hello!");
   }
 
+  #[cfg(not(target_arch = "wasm32"))]
   #[tokio::test]
   async fn test_round_trip() {
     let original =
@@ -683,6 +689,7 @@ mod tests {
     assert_eq!(results[1].text, "World!");
   }
 
+  #[cfg(not(target_arch = "wasm32"))]
   #[tokio::test]
   async fn test_write_stream() {
     let subtitles = vec![
@@ -701,6 +708,7 @@ mod tests {
     assert!(output.contains("World!"));
   }
 
+  #[cfg(not(target_arch = "wasm32"))]
   #[tokio::test]
   async fn test_generate_refuse_if_exists() {
     // 目标文件已存在时，RefuseIfExists 必须报错而非覆写
@@ -725,6 +733,7 @@ mod tests {
     let _ = std::fs::remove_file(path);
   }
 
+  #[cfg(not(target_arch = "wasm32"))]
   #[tokio::test]
   async fn test_generate_append() {
     // Append 策略应把新字幕追加到既有文件末尾

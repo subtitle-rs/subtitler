@@ -1485,6 +1485,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-wasm-bindgen"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8302e169f0eddcc139c70f139d19d6467353af16f9fce27e8c30158036a1e16b"
+dependencies = [
+ "js-sys",
+ "serde",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1595,17 +1606,20 @@ dependencies = [
  "clap",
  "criterion",
  "encoding_rs",
+ "js-sys",
  "proptest",
  "quick-xml",
  "regex",
  "reqwest",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "smallvec",
  "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1739,9 +1753,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.7.0"
+version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
+checksum = "6328af13490e73a9b4694030fafd93f8c8c6a9dede33e821c3fc63eddf8042ba"
 dependencies = [
  "proc-macro2",
  "quote",

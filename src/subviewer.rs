@@ -3,6 +3,7 @@ use crate::model::{Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
 use std::sync::LazyLock;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
 
 static RE_SUBVIEWER_LINE: LazyLock<Regex> = LazyLock::new(|| {
@@ -125,6 +126,7 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
 }
 
 /// Parse a SubViewer file asynchronously.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   Ok(parse_content(&text)?)
@@ -206,6 +208,7 @@ impl<'a> Iterator for SubViewerStream<'a> {
 impl<'a> crate::model::StreamingParser for SubViewerStream<'a> {}
 
 /// Write SubViewer subtitles to an async writer streamingly.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   subtitles: &[Subtitle],
   header: Option<&str>,

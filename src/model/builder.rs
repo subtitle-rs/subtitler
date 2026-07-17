@@ -1,5 +1,6 @@
 use super::format::{Format, SubtitleFile};
 use super::subtitle::Subtitle;
+#[cfg(any(feature = "ass", feature = "ssa"))]
 use super::types::{AssData, AssStyle};
 
 /// Builder for constructing `SubtitleFile` with a fluent API.
@@ -21,6 +22,7 @@ pub struct SubtitleFileBuilder {
   subtitles: Vec<Subtitle>,
   fps: Option<f64>,
   header: Option<String>,
+  #[cfg(any(feature = "ass", feature = "ssa"))]
   styles: Vec<AssStyle>,
 }
 
@@ -32,6 +34,7 @@ impl SubtitleFileBuilder {
       subtitles: Vec::new(),
       fps: None,
       header: None,
+      #[cfg(any(feature = "ass", feature = "ssa"))]
       styles: Vec::new(),
     }
   }
@@ -61,12 +64,14 @@ impl SubtitleFileBuilder {
   }
 
   /// Add an ASS style (for ASS/SSA formats).
+  #[cfg(any(feature = "ass", feature = "ssa"))]
   pub fn add_style(mut self, style: AssStyle) -> Self {
     self.styles.push(style);
     self
   }
 
   /// Add multiple ASS styles.
+  #[cfg(any(feature = "ass", feature = "ssa"))]
   pub fn add_styles(mut self, styles: impl IntoIterator<Item = AssStyle>) -> Self {
     self.styles.extend(styles);
     self

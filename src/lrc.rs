@@ -10,6 +10,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::LazyLock;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
 
 static RE_LRC_LINE: LazyLock<Regex> =
@@ -120,6 +121,7 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
 }
 
 /// Parse an LRC file asynchronously.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   Ok(parse_content(&text)?)
@@ -214,6 +216,7 @@ impl<'a> Iterator for LrcStream<'a> {
 impl<'a> crate::model::StreamingParser for LrcStream<'a> {}
 
 /// Write LRC lyrics to an async writer streamingly.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   subtitles: &[Subtitle],
   writer: &mut W,
