@@ -131,7 +131,7 @@ fn bench_srt_stringify_small(c: &mut Criterion) {
   let content = small_srt();
   let subs = srt::parse_content(&content).unwrap();
   c.bench_function("srt_stringify_small", |b| {
-    b.iter(|| black_box(srt::to_string(&subs)))
+    b.iter(|| black_box(srt::to_string(subs.subtitles())))
   });
 }
 
@@ -139,7 +139,7 @@ fn bench_srt_stringify_large(c: &mut Criterion) {
   let content = large_srt(1000);
   let subs = srt::parse_content(&content).unwrap();
   c.bench_function("srt_stringify_large", |b| {
-    b.iter(|| black_box(srt::to_string(&subs)))
+    b.iter(|| black_box(srt::to_string(subs.subtitles())))
   });
 }
 
@@ -524,7 +524,7 @@ fn bench_srt_to_vtt_convert(c: &mut Criterion) {
   let content = large_srt(100);
   let subs = srt::parse_content(&content).unwrap();
   c.bench_function("srt_to_vtt_convert_100", |b| {
-    b.iter(|| black_box(vtt::to_string(&subs, None)))
+    b.iter(|| black_box(vtt::to_string(subs.subtitles(), None)))
   });
 }
 
@@ -536,7 +536,7 @@ fn bench_srt_to_ass_convert(c: &mut Criterion) {
       black_box(ass::to_string(
         &Default::default(),
         &[subtitler::model::AssStyle::default_style()],
-        &subs,
+        subs.subtitles(),
       ))
     })
   });

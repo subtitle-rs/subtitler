@@ -1,4 +1,4 @@
-use crate::model::{Subtitle, TextPart};
+use crate::model::{Subtitle, SubtitleFile, TextPart};
 use crate::types::AnyResult;
 use crate::utils::{format_timestamp, parse_timestamp};
 use anyhow::anyhow;
@@ -193,25 +193,29 @@ fn parse(content: &str) -> AnyResult<Vec<Subtitle>> {
   Ok(subtitles)
 }
 
-pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  parse(&text)
+  let subs = parse(&text)?;
+  Ok(SubtitleFile::Srt(subs))
 }
 
-pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
+pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  parse(&text)
+  let subs = parse(&text)?;
+  Ok(SubtitleFile::Srt(subs))
 }
 
 #[cfg(feature = "http")]
-pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  parse(&content)
+  let subs = parse(&content)?;
+  Ok(SubtitleFile::Srt(subs))
 }
 
-pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
-  parse(content)
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
+  let subs = parse(content)?;
+  Ok(SubtitleFile::Srt(subs))
 }
 
 /// Streaming SRT parser. Processes content incrementally, yielding subtitles
@@ -445,6 +449,7 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
 mod tests {
   use super::*;
   use crate::model::Subtitle;
+  use crate::model::SubtitleFormat;
 
   fn make_subtitle(index: usize, start: u64, end: u64, text: &str) -> Subtitle {
     Subtitle {
@@ -465,43 +470,49 @@ mod tests {
     let content =
       "1\n00:00:01,000 --> 00:00:03,500\nHello!\n\n2\n00:00:04,000 --> 00:00:06,500\nWorld!\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 2);
-    assert_eq!(result[0], make_subtitle(1, 1000, 3500, "Hello!"));
-    assert_eq!(result[1], make_subtitle(2, 4000, 6500, "World!"));
+    assert_eq!(result.subtitles().len(), 2);
+    assert_eq!(
+      result.subtitles()[0],
+      make_subtitle(1, 1000, 3500, "Hello!")
+    );
+    assert_eq!(
+      result.subtitles()[1],
+      make_subtitle(2, 4000, 6500, "World!")
+    );
   }
 
   #[test]
   fn test_parse_multiline_text() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\nLine one\nLine two\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].text, "Line one\nLine two");
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].text, "Line one\nLine two");
   }
 
   #[test]
   fn test_parse_start_at_zero() {
     let content = "1\n00:00:00,000 --> 00:00:03,500\nFrom zero\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].start, 0);
-    assert_eq!(result[0].end, 3500);
-    assert_eq!(result[0].text, "From zero");
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].start, 0);
+    assert_eq!(result.subtitles()[0].end, 3500);
+    assert_eq!(result.subtitles()[0].text, "From zero");
   }
 
   #[test]
   fn test_parse_numeric_text_not_mistaken_for_index() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n42\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].text, "42");
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].text, "42");
   }
 
   #[test]
   fn test_parse_no_trailing_blank_line() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\nHello!";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].text, "Hello!");
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].text, "Hello!");
   }
 
   #[tokio::test]
@@ -510,20 +521,20 @@ mod tests {
       "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n2\n00:00:04,000 --> 00:00:06,500\nWorld\n\n";
     let subtitles = parse_content(original).unwrap();
     let path = "test_round_trip_srt.srt";
-    generate(&subtitles, path, None).await.unwrap();
+    generate(subtitles.subtitles(), path, None).await.unwrap();
     let parsed_back = parse_file(path).await.unwrap();
     let _ = std::fs::remove_file(path);
-    assert_eq!(subtitles, parsed_back);
+    assert_eq!(subtitles.subtitles(), parsed_back.subtitles());
   }
 
   #[test]
   fn test_parse_missing_index() {
     let content = "00:00:01,000 --> 00:00:03,500\nNo index\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].index, None);
-    assert_eq!(result[0].start, 1000);
-    assert_eq!(result[0].text, "No index");
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].index, None);
+    assert_eq!(result.subtitles()[0].start, 1000);
+    assert_eq!(result.subtitles()[0].text, "No index");
   }
 
   #[test]
@@ -537,42 +548,45 @@ mod tests {
   fn test_parse_bold_tag() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n<b>Bold text</b>\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result[0].text, "Bold text");
-    assert_eq!(result[0].text_parts.len(), 1);
-    assert!(result[0].text_parts[0].bold());
-    assert_eq!(result[0].text_parts[0].text, "Bold text");
+    assert_eq!(result.subtitles()[0].text, "Bold text");
+    assert_eq!(result.subtitles()[0].text_parts.len(), 1);
+    assert!(result.subtitles()[0].text_parts[0].bold());
+    assert_eq!(result.subtitles()[0].text_parts[0].text, "Bold text");
   }
 
   #[test]
   fn test_parse_italic_tag() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n<i>Italic</i> plain\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result[0].text, "Italic plain");
-    assert_eq!(result[0].text_parts.len(), 1);
-    assert!(result[0].text_parts[0].italic());
-    assert_eq!(result[0].text_parts[0].text, "Italic");
+    assert_eq!(result.subtitles()[0].text, "Italic plain");
+    assert_eq!(result.subtitles()[0].text_parts.len(), 1);
+    assert!(result.subtitles()[0].text_parts[0].italic());
+    assert_eq!(result.subtitles()[0].text_parts[0].text, "Italic");
   }
 
   #[test]
   fn test_parse_underline_tag() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n<u>underline</u>\n\n";
     let result = parse_content(content).unwrap();
-    assert!(result[0].text_parts[0].underline());
+    assert!(result.subtitles()[0].text_parts[0].underline());
   }
 
   #[test]
   fn test_parse_font_color_tag() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n<font color=\"#ff0000\">red</font>\n\n";
     let result = parse_content(content).unwrap();
-    assert_eq!(result[0].text_parts[0].color, Some("#ff0000".to_string()));
+    assert_eq!(
+      result.subtitles()[0].text_parts[0].color,
+      Some("#ff0000".to_string())
+    );
   }
 
   #[test]
   fn test_parse_bytes() {
     let data = b"1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
     let result = parse_bytes(data.as_ref()).unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].text, "Hello");
+    assert_eq!(result.subtitles().len(), 1);
+    assert_eq!(result.subtitles()[0].text, "Hello");
   }
 
   #[test]
@@ -656,7 +670,7 @@ mod tests {
 
     // 原内容应保持不变
     let parsed = parse_file(path).await.unwrap();
-    assert_eq!(parsed[0].text, "original");
+    assert_eq!(parsed.subtitles()[0].text, "original");
     let _ = std::fs::remove_file(path);
   }
 
@@ -677,9 +691,9 @@ mod tests {
       .unwrap();
 
     let parsed = parse_file(path).await.unwrap();
-    assert_eq!(parsed.len(), 2, "Append 应保留前一次写入的字幕");
-    assert_eq!(parsed[0].text, "first");
-    assert_eq!(parsed[1].text, "second");
+    assert_eq!(parsed.subtitles().len(), 2, "Append 应保留前一次写入的字幕");
+    assert_eq!(parsed.subtitles()[0].text, "first");
+    assert_eq!(parsed.subtitles()[1].text, "second");
     let _ = std::fs::remove_file(path);
   }
 }

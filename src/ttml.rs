@@ -5,7 +5,7 @@
 //!
 //! Uses `quick-xml` for streaming pull parsing — no DOM build.
 
-use crate::model::{Subtitle, TextPart};
+use crate::model::{Subtitle, SubtitleFile, TextPart};
 use crate::types::AnyResult;
 use crate::utils::parse_timestamp;
 use anyhow::anyhow;
@@ -38,8 +38,8 @@ fn local_name(name: &[u8]) -> &[u8] {
   }
 }
 
-/// Parse TTML content into a vector of subtitles.
-pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
+/// Parse TTML content into a SubtitleFile.
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut reader = Reader::from_str(content);
   reader.config_mut().trim_text(false);
   let mut buf = Vec::new();
@@ -173,24 +173,27 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
     buf.clear();
   }
 
-  Ok(subtitles)
+  Ok(SubtitleFile::Ttml {
+    header: None,
+    subtitles,
+  })
 }
 
 /// Parse TTML from a byte slice.
-pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
+pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = std::str::from_utf8(data).map_err(|e| anyhow!("Invalid UTF-8 in TTML: {}", e))?;
   parse_content(text)
 }
 
 /// Parse a TTML file asynchronously.
-pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   parse_content(&text)
 }
 
 /// Parse a TTML file from a URL (requires `http` feature).
 #[cfg(feature = "http")]
-pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
   parse_content(&content)
@@ -319,6 +322,7 @@ pub fn write_stream<W: std::io::Write>(subtitles: &[Subtitle], writer: &mut W) -
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::model::SubtitleFormat;
 
   const SAMPLE_TTML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xml:lang="en">
@@ -333,29 +337,30 @@ mod tests {
   #[test]
   fn test_parse_basic() {
     let subs = parse_content(SAMPLE_TTML).unwrap();
-    assert_eq!(subs.len(), 2);
-    assert_eq!(subs[0].start, 1000);
-    assert_eq!(subs[0].end, 3500);
-    assert_eq!(subs[0].text, "Hello World");
-    assert_eq!(subs[1].start, 4000);
-    assert_eq!(subs[1].end, 6500);
-    assert_eq!(subs[1].text, "Colored text");
-    // Only the styled span creates a TextPart; plain trailing text doesn't
-    assert_eq!(subs[1].text_parts.len(), 1);
-    assert_eq!(subs[1].text_parts[0].color, Some("yellow".to_string()));
+    assert_eq!(subs.subtitles().len(), 2);
+    assert_eq!(subs.subtitles()[0].start, 1000);
+    assert_eq!(subs.subtitles()[0].end, 3500);
+    assert_eq!(subs.subtitles()[0].text, "Hello World");
+    assert_eq!(subs.subtitles()[1].start, 4000);
+    assert_eq!(subs.subtitles()[1].end, 6500);
+    assert_eq!(subs.subtitles()[1].text, "Colored text");
+    assert_eq!(subs.subtitles()[1].text_parts.len(), 1);
+    assert_eq!(
+      subs.subtitles()[1].text_parts[0].color,
+      Some("yellow".to_string())
+    );
   }
 
   #[test]
   fn test_round_trip() {
     let subs = parse_content(SAMPLE_TTML).unwrap();
-    let output = to_string(&subs, None);
+    let output = to_string(subs.subtitles(), None);
     assert!(output.contains("<p"));
     assert!(output.contains("begin=\"00:00:01.000\""));
     assert!(output.contains("end=\"00:00:03.500\""));
-    // Re-parse
     let reparsed = parse_content(&output).unwrap();
-    assert_eq!(subs.len(), reparsed.len());
-    assert_eq!(subs[0].start, reparsed[0].start);
+    assert_eq!(subs.subtitles().len(), reparsed.subtitles().len());
+    assert_eq!(subs.subtitles()[0].start, reparsed.subtitles()[0].start);
   }
 
   #[test]
@@ -371,8 +376,8 @@ mod tests {
 <p begin="00:00:01.000" end="00:00:03.500">Line one<br/>Line two</p>
 </div></body></tt>"#;
     let subs = parse_content(xml).unwrap();
-    assert_eq!(subs.len(), 1);
-    assert_eq!(subs[0].text, "Line one\nLine two");
+    assert_eq!(subs.subtitles().len(), 1);
+    assert_eq!(subs.subtitles()[0].text, "Line one\nLine two");
   }
 
   #[test]
@@ -382,9 +387,9 @@ mod tests {
 <p begin="00:00:01.000" dur="2.5s">Duration test</p>
 </div></body></tt>"#;
     let subs = parse_content(xml).unwrap();
-    assert_eq!(subs.len(), 1);
-    assert_eq!(subs[0].start, 1000);
-    assert_eq!(subs[0].end, 3500); // 1000 + 2500
+    assert_eq!(subs.subtitles().len(), 1);
+    assert_eq!(subs.subtitles()[0].start, 1000);
+    assert_eq!(subs.subtitles()[0].end, 3500);
   }
 
   #[test]
@@ -394,10 +399,10 @@ mod tests {
 <p begin="00:00:01.000" end="00:00:03.500"><span tts:fontStyle="italic" tts:fontWeight="bold">Styled</span></p>
 </div></body></tt>"#;
     let subs = parse_content(xml).unwrap();
-    assert_eq!(subs.len(), 1);
-    assert_eq!(subs[0].text_parts.len(), 1);
-    assert!(subs[0].text_parts[0].italic());
-    assert!(subs[0].text_parts[0].bold());
+    assert_eq!(subs.subtitles().len(), 1);
+    assert_eq!(subs.subtitles()[0].text_parts.len(), 1);
+    assert!(subs.subtitles()[0].text_parts[0].italic());
+    assert!(subs.subtitles()[0].text_parts[0].bold());
   }
 
   #[test]

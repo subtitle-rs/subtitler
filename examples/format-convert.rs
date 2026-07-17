@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate tracing;
 
+use subtitler::SubtitleFormat;
 use subtitler::srt;
 use subtitler::types::AnyResult;
 use subtitler::vtt;
@@ -29,17 +30,17 @@ What are your plans for the weekend?
 "#;
 
   let subtitles = srt::parse_content(srt_content)?;
-  info!("Parsed {} SRT cues", subtitles.len());
+  info!("Parsed {} SRT cues", subtitles.subtitles().len());
 
   // Convert SRT -> VTT
-  let vtt_output = vtt::to_string(&subtitles, None);
+  let vtt_output = vtt::to_string(subtitles.subtitles(), None);
   info!("VTT output:\n{}", vtt_output);
 
   // Convert SRT -> ASS
   let ass_output = subtitler::ass::to_string(
     &Default::default(),
     &[subtitler::model::AssStyle::default_style()],
-    &subtitles,
+    subtitles.subtitles(),
   );
   info!("ASS output:\n{}", ass_output);
 

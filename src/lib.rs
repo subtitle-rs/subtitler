@@ -80,7 +80,7 @@ pub fn parse_bytes(data: &[u8]) -> Result<model::SubtitleFile, error::ParseError
 pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, error::ParseError> {
   match fmt {
     #[cfg(feature = "srt")]
-    Format::Srt => Ok(model::SubtitleFile::Srt(srt::parse_bytes(data)?)),
+    Format::Srt => Ok(srt::parse_bytes(data)?),
     #[cfg(feature = "vtt")]
     Format::Vtt => {
       let (header, subs) = vtt::parse_bytes_full(data)?;
@@ -104,17 +104,11 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     #[cfg(feature = "subviewer")]
     Format::SubViewer => Ok(subviewer::parse_bytes(data)?),
     #[cfg(feature = "ttml")]
-    Format::Ttml => {
-      let subs = ttml::parse_bytes(data)?;
-      Ok(model::SubtitleFile::Ttml {
-        header: None,
-        subtitles: subs,
-      })
-    }
+    Format::Ttml => Ok(ttml::parse_bytes(data)?),
     #[cfg(feature = "sbv")]
-    Format::Sbv => Ok(model::SubtitleFile::Sbv(sbv::parse_bytes(data)?)),
+    Format::Sbv => Ok(sbv::parse_bytes(data)?),
     #[cfg(feature = "lrc")]
-    Format::Lrc => Ok(model::SubtitleFile::Lrc(lrc::parse_bytes(data)?)),
+    Format::Lrc => Ok(lrc::parse_bytes(data)?),
     #[cfg(feature = "sami")]
     Format::Sami => Ok(sami::parse_bytes(data)?),
     #[cfg(feature = "mpl2")]

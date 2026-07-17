@@ -2,13 +2,13 @@
 //!
 //! Format: `time1,time2,text`  where time is `[hours:]minutes:seconds.milliseconds`.
 
-use crate::model::Subtitle;
+use crate::model::{Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use crate::utils::parse_timestamp;
 use tokio::io::AsyncWriteExt;
 
-/// Parse SBV content into a vector of subtitles.
-pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
+/// Parse SBV content into a SubtitleFile.
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut subtitles = Vec::new();
 
   for line in content.lines() {
@@ -39,24 +39,24 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
     }
   }
 
-  Ok(subtitles)
+  Ok(SubtitleFile::Sbv(subtitles))
 }
 
 /// Parse SBV from a byte slice.
-pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
+pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
   parse_content(&text)
 }
 
 /// Parse an SBV file asynchronously.
-pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
   parse_content(&text)
 }
 
 /// Parse an SBV file from a URL (requires `http` feature).
 #[cfg(feature = "http")]
-pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
   parse_content(&content)
@@ -176,11 +176,13 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::model::SubtitleFormat;
 
   #[test]
   fn test_parse_basic() {
     let content = "0:00:01.000,0:00:03.500,Hello World\n0:00:04.000,0:00:06.500,Line two\n";
-    let subs = parse_content(content).unwrap();
+    let file = parse_content(content).unwrap();
+    let subs = file.subtitles();
     assert_eq!(subs.len(), 2);
     assert_eq!(subs[0].start, 1000);
     assert_eq!(subs[0].end, 3500);
@@ -190,11 +192,12 @@ mod tests {
   #[test]
   fn test_round_trip() {
     let content = "0:00:01.000,0:00:03.500,Hello\n";
-    let subs = parse_content(content).unwrap();
-    let output = to_string(&subs);
+    let file = parse_content(content).unwrap();
+    let subs = file.subtitles();
+    let output = to_string(subs);
     assert!(output.contains("Hello"));
     let reparsed = parse_content(&output).unwrap();
-    assert_eq!(subs.len(), reparsed.len());
+    assert_eq!(subs.len(), reparsed.subtitles().len());
   }
 
   #[test]

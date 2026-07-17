@@ -130,9 +130,9 @@ fn unified_parse_bytes_unknown_format_errors() {
 #[test]
 fn sbv_multiline_text() {
   let content = "0:00:01.000,0:00:03.500,Line one|Line two\n0:00:04.000,0:00:06.500,Single\n";
-  let subs = subtitler::sbv::parse_content(content).unwrap();
+  let file = subtitler::sbv::parse_content(content).unwrap();
+  let subs = file.subtitles();
   assert_eq!(subs.len(), 2);
-  // SBV uses | for line breaks internally; the parser replaces | with \n
   assert_eq!(subs[0].text, "Line one|Line two");
 }
 

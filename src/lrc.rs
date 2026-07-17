@@ -3,7 +3,7 @@
 //! Lines: `[mm:ss.xx]lyric text`  or  `[ti:Title]` for metadata.
 //! Multiple timestamps can share a line: `[00:01.50][00:15.00]text`
 
-use crate::model::Subtitle;
+use crate::model::{Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -106,44 +106,30 @@ impl LrcData {
   }
 }
 
-/// Parse LRC content into a vector of subtitles (each timestamp becomes a
-/// separate subtitle with a 5-second default duration).
-#[deprecated(
-  since = "0.10.0",
-  note = "use LrcData::parse to preserve multi-timestamp lines"
-)]
-pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
+/// Parse LRC content into a `SubtitleFile`.
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let data = LrcData::parse(content)?;
-  let mut subs = Vec::new();
-  for line in &data.lines {
-    for &t in &line.times_ms {
-      subs.push(Subtitle::new(t, t + 5000, &line.text));
-    }
-  }
-  subs.sort_by_key(|s| s.start);
-  Ok(subs)
+  let subtitles = data.to_subtitles();
+  Ok(SubtitleFile::Lrc { data, subtitles })
 }
 
 /// Parse LRC from a byte slice.
-pub fn parse_bytes(data: &[u8]) -> AnyResult<Vec<Subtitle>> {
+pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  #[allow(deprecated)]
   parse_content(&text)
 }
 
 /// Parse an LRC file asynchronously.
-pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  #[allow(deprecated)]
   parse_content(&text)
 }
 
 /// Parse an LRC file from a URL (requires `http` feature).
 #[cfg(feature = "http")]
-pub async fn parse_url(url: &str) -> AnyResult<Vec<Subtitle>> {
+pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  #[allow(deprecated)]
   parse_content(&content)
 }
 
@@ -248,38 +234,38 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::model::SubtitleFormat;
 
-  #[allow(deprecated)]
   #[test]
   fn test_parse_basic() {
     let content = "[00:01.50]Hello\n[00:03.20]World\n";
-    let subs = parse_content(content).unwrap();
+    let file = parse_content(content).unwrap();
+    let subs = file.subtitles();
     assert_eq!(subs.len(), 2);
     assert_eq!(subs[0].start, 1500);
-    assert_eq!(subs[0].end, 6500); // default 5s display duration
     assert_eq!(subs[0].text, "Hello");
     assert_eq!(subs[1].start, 3200);
   }
 
-  #[allow(deprecated)]
   #[test]
   fn test_parse_multi_timestamp() {
     let content = "[00:10.00][00:30.00]Repeated\n";
-    let subs = parse_content(content).unwrap();
+    let file = parse_content(content).unwrap();
+    let subs = file.subtitles();
     assert_eq!(subs.len(), 2);
     assert_eq!(subs[0].start, 10000);
     assert_eq!(subs[1].start, 30000);
   }
 
-  #[allow(deprecated)]
   #[test]
   fn test_round_trip() {
     let content = "[00:01.50]Hello\n[00:03.20]World\n";
-    let subs = parse_content(content).unwrap();
+    let file = parse_content(content).unwrap();
+    let subs = file.subtitles();
     let output = to_string(&subs);
     assert!(output.contains("Hello"));
     let reparsed = parse_content(&output).unwrap();
-    assert_eq!(subs.len(), reparsed.len());
+    assert_eq!(subs.len(), reparsed.subtitles().len());
   }
 
   #[test]

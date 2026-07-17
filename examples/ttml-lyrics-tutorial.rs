@@ -17,8 +17,8 @@ fn main() -> subtitler::types::AnyResult<()> {
 </tt>"#;
 
   println!("=== TTML ===");
-  let subs = subtitler::ttml::parse_content(ttml)?;
-  for (i, s) in subs.iter().enumerate() {
+  let file = subtitler::ttml::parse_content(ttml)?;
+  for (i, s) in file.subtitles().iter().enumerate() {
     println!("  [{}] {}-{}ms '{}'", i, s.start, s.end, s.text);
     if !s.text_parts.is_empty() {
       for p in &s.text_parts {
@@ -49,8 +49,8 @@ fn main() -> subtitler::types::AnyResult<()> {
              0:00:04.000,0:00:06.500,Second line\n";
 
   println!("=== SBV ===");
-  let subs = subtitler::sbv::parse_content(sbv)?;
-  for (i, s) in subs.iter().enumerate() {
+  let file = subtitler::sbv::parse_content(sbv)?;
+  for (i, s) in file.subtitles().iter().enumerate() {
     println!("  [{}] {}-{}ms '{}'", i, s.start, s.end, s.text);
   }
 

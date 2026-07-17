@@ -91,16 +91,12 @@ fn resolve_output_format(output: &str, hint: Option<CliFormat>) -> AnyResult<Cli
   })
 }
 
-#[allow(deprecated)]
 async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
   // 走库的编码检测路径，正确处理 UTF-16 / GBK / BOM 等
   let text = subtitler::encoding::decode_to_string(data)?;
   match format {
     #[cfg(feature = "srt")]
-    CliFormat::Srt => {
-      let subs = srt::parse_content(&text)?;
-      Ok(SubtitleFile::Srt(subs))
-    }
+    CliFormat::Srt => srt::parse_content(&text),
     #[cfg(feature = "vtt")]
     CliFormat::Vtt => {
       let (header, subs) = vtt::parse_content_full(&text)?;
@@ -121,17 +117,11 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     #[cfg(feature = "subviewer")]
     CliFormat::SubViewer => subtitler::subviewer::parse_content(&text),
     #[cfg(feature = "ttml")]
-    CliFormat::Ttml => {
-      let subs = subtitler::ttml::parse_content(&text)?;
-      Ok(SubtitleFile::Ttml {
-        header: None,
-        subtitles: subs,
-      })
-    }
+    CliFormat::Ttml => subtitler::ttml::parse_content(&text),
     #[cfg(feature = "sbv")]
-    CliFormat::Sbv => Ok(SubtitleFile::Sbv(subtitler::sbv::parse_content(&text)?)),
+    CliFormat::Sbv => subtitler::sbv::parse_content(&text),
     #[cfg(feature = "lrc")]
-    CliFormat::Lrc => Ok(SubtitleFile::Lrc(subtitler::lrc::parse_content(&text)?)),
+    CliFormat::Lrc => subtitler::lrc::parse_content(&text),
     #[cfg(feature = "sami")]
     CliFormat::Sami => subtitler::sami::parse_content(&text),
     #[cfg(feature = "mpl2")]
@@ -147,30 +137,31 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
 
 // ── Commands ──
 
-#[allow(deprecated)]
 async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
   let (data, ext) = read_input(&args.input).await?;
   let format = resolve_format(&data, args.format.or(ext))
     .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format. Use --format to specify."))?;
 
   let content = subtitler::encoding::decode_to_string(&data)?;
-  let subs = match format {
+  let file = match format {
     #[cfg(feature = "srt")]
     CliFormat::Srt => srt::parse_content(&content)?,
     #[cfg(feature = "vtt")]
-    CliFormat::Vtt => vtt::parse_content(&content)?,
+    CliFormat::Vtt => {
+      let (header, subs) = vtt::parse_content_full(&content)?;
+      SubtitleFile::Vtt {
+        header,
+        subtitles: subs,
+      }
+    }
     #[cfg(feature = "ass")]
-    CliFormat::Ass => ass::parse_content(&content)?.subtitles().to_vec(),
+    CliFormat::Ass => ass::parse_content(&content)?,
     #[cfg(feature = "ssa")]
-    CliFormat::Ssa => ass::parse_content(&content)?.subtitles().to_vec(),
+    CliFormat::Ssa => ass::parse_content(&content)?,
     #[cfg(feature = "microdvd")]
-    CliFormat::MicroDvd => subtitler::microdvd::parse_content(&content, None)?
-      .subtitles()
-      .to_vec(),
+    CliFormat::MicroDvd => subtitler::microdvd::parse_content(&content, None)?,
     #[cfg(feature = "subviewer")]
-    CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?
-      .subtitles()
-      .to_vec(),
+    CliFormat::SubViewer => subtitler::subviewer::parse_content(&content)?,
     #[cfg(feature = "ttml")]
     CliFormat::Ttml => subtitler::ttml::parse_content(&content)?,
     #[cfg(feature = "sbv")]
@@ -178,20 +169,15 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     #[cfg(feature = "lrc")]
     CliFormat::Lrc => subtitler::lrc::parse_content(&content)?,
     #[cfg(feature = "sami")]
-    CliFormat::Sami => subtitler::sami::parse_content(&content)?
-      .subtitles()
-      .to_vec(),
+    CliFormat::Sami => subtitler::sami::parse_content(&content)?,
     #[cfg(feature = "mpl2")]
-    CliFormat::Mpl2 => subtitler::mpl2::parse_content(&content)?
-      .subtitles()
-      .to_vec(),
+    CliFormat::Mpl2 => subtitler::mpl2::parse_content(&content)?,
     #[cfg(feature = "scc")]
-    CliFormat::Scc => subtitler::scc::parse_content(&content)?
-      .subtitles()
-      .to_vec(),
+    CliFormat::Scc => subtitler::scc::parse_content(&content)?,
     #[cfg(feature = "ebu_stl")]
-    CliFormat::EbuStl => subtitler::ebu_stl::parse_bytes(&data)?.subtitles().to_vec(),
+    CliFormat::EbuStl => subtitler::ebu_stl::parse_bytes(&data)?,
   };
+  let subs = file.subtitles();
 
   if args.json {
     println!("{}", serde_json::to_string_pretty(&subs)?);

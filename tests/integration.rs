@@ -20,13 +20,18 @@ async fn test_srt_parse_example_file() {
   let mut path = fixture_dir();
   path.push("example.srt");
   let subtitles = srt::parse_file(&path).await.unwrap();
-  assert_eq!(subtitles.len(), 10);
-  assert_eq!(subtitles[0].index, Some(1));
-  assert_eq!(subtitles[0].start, 1000);
-  assert_eq!(subtitles[0].end, 3500);
-  assert_eq!(subtitles[0].text, "Hello! How are you today?");
-  assert_eq!(subtitles[9].index, Some(10));
-  assert!(subtitles.iter().all(|s| s.start > 0 && s.end > s.start));
+  assert_eq!(subtitles.subtitles().len(), 10);
+  assert_eq!(subtitles.subtitles()[0].index, Some(1));
+  assert_eq!(subtitles.subtitles()[0].start, 1000);
+  assert_eq!(subtitles.subtitles()[0].end, 3500);
+  assert_eq!(subtitles.subtitles()[0].text, "Hello! How are you today?");
+  assert_eq!(subtitles.subtitles()[9].index, Some(10));
+  assert!(
+    subtitles
+      .subtitles()
+      .iter()
+      .all(|s| s.start > 0 && s.end > s.start)
+  );
 }
 
 #[tokio::test]
@@ -36,12 +41,18 @@ async fn test_srt_round_trip_full() {
   let original = srt::parse_file(&path).await.unwrap();
 
   let out_path = fixture_dir().join("_test_round_trip.srt");
-  srt::generate(&original, &out_path, None).await.unwrap();
+  srt::generate(original.subtitles(), &out_path, None)
+    .await
+    .unwrap();
   let round_tripped = srt::parse_file(&out_path).await.unwrap();
   std::fs::remove_file(&out_path).ok();
 
-  assert_eq!(original.len(), round_tripped.len());
-  for (a, b) in original.iter().zip(round_tripped.iter()) {
+  assert_eq!(original.subtitles().len(), round_tripped.subtitles().len());
+  for (a, b) in original
+    .subtitles()
+    .iter()
+    .zip(round_tripped.subtitles().iter())
+  {
     assert_eq!(a.start, b.start);
     assert_eq!(a.end, b.end);
     assert_eq!(a.text, b.text);
@@ -51,14 +62,14 @@ async fn test_srt_round_trip_full() {
 #[tokio::test]
 async fn test_srt_parse_content_empty() {
   let result = srt::parse_content("").unwrap();
-  assert!(result.is_empty());
+  assert!(result.subtitles().is_empty());
 }
 
 #[tokio::test]
 async fn test_srt_parse_content_only_header_like() {
   let content = "1\n00:00:01,000 --> 00:00:03,000\nx\n\n2\n00:00:04,000 --> 00:00:06,000\ny\n\n";
   let result = srt::parse_content(content).unwrap();
-  assert_eq!(result.len(), 2);
+  assert_eq!(result.subtitles().len(), 2);
 }
 
 #[tokio::test]
@@ -66,29 +77,29 @@ async fn test_srt_consecutive_blank_lines() {
   let content =
     "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n\n2\n00:00:04,000 --> 00:00:06,500\nWorld\n\n";
   let result = srt::parse_content(content).unwrap();
-  assert_eq!(result.len(), 2);
+  assert_eq!(result.subtitles().len(), 2);
 }
 
 #[tokio::test]
 async fn test_srt_empty_text() {
   let content = "1\n00:00:01,000 --> 00:00:03,500\n\n\n";
   let result = srt::parse_content(content).unwrap();
-  assert_eq!(result.len(), 1);
-  assert_eq!(result[0].text, "");
+  assert_eq!(result.subtitles().len(), 1);
+  assert_eq!(result.subtitles()[0].text, "");
 }
 
 #[tokio::test]
 async fn test_srt_leading_newline() {
   let content = "\n1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
   let result = srt::parse_content(content).unwrap();
-  assert_eq!(result[0].text, "Hello");
+  assert_eq!(result.subtitles()[0].text, "Hello");
 }
 
 #[tokio::test]
 async fn test_srt_missing_index() {
   let content = "00:00:01,000 --> 00:00:03,500\nNo index here\n\n";
   let result = srt::parse_content(content).unwrap();
-  assert_eq!(result[0].index, None);
+  assert_eq!(result.subtitles()[0].index, None);
 }
 
 #[tokio::test]

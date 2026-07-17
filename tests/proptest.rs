@@ -4,6 +4,7 @@
 
 use proptest::prelude::*;
 use subtitler::model::Subtitle;
+use subtitler::model::SubtitleFormat;
 
 fn arb_subtitle() -> impl Strategy<Value = Subtitle> {
   (
@@ -26,11 +27,10 @@ proptest! {
   fn srt_round_trip_preserves_text_and_times(sub in arb_subtitle()) {
     let s = subtitler::srt::to_string(std::slice::from_ref(&sub));
     let parsed = subtitler::srt::parse_content(&s).unwrap();
-    prop_assert_eq!(parsed.len(), 1, "should produce 1 cue");
-    prop_assert_eq!(parsed[0].start, sub.start, "start mismatch");
-    prop_assert_eq!(parsed[0].end, sub.end, "end mismatch");
-    // SRT/VTT parsing trims whitespace, so compare trimmed text
-    prop_assert_eq!(parsed[0].text.trim(), sub.text.trim(), "text mismatch");
+    prop_assert_eq!(parsed.subtitles().len(), 1, "should produce 1 cue");
+    prop_assert_eq!(parsed.subtitles()[0].start, sub.start, "start mismatch");
+    prop_assert_eq!(parsed.subtitles()[0].end, sub.end, "end mismatch");
+    prop_assert_eq!(parsed.subtitles()[0].text.trim(), sub.text.trim(), "text mismatch");
   }
 
   #[test]
