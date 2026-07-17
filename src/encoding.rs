@@ -1,5 +1,4 @@
-use crate::types::AnyResult;
-use anyhow::anyhow;
+use crate::error::SubtitleError;
 
 pub fn detect_encoding(data: &[u8]) -> &'static str {
   if data.len() >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
@@ -20,12 +19,15 @@ pub fn detect_encoding(data: &[u8]) -> &'static str {
   encoding.name()
 }
 
-pub fn decode_to_string(data: &[u8]) -> AnyResult<String> {
+pub fn decode_to_string(data: &[u8]) -> Result<String, SubtitleError> {
   let encoding = detect_encoding(data);
 
   match encoding {
     "UTF-8" | "UTF-8-BOM" => {
-      let text = String::from_utf8(data.to_vec()).map_err(|e| anyhow!("Invalid UTF-8: {}", e))?;
+      let text = String::from_utf8(data.to_vec()).map_err(|e| SubtitleError::InvalidEncoding {
+        encoding: encoding.to_string(),
+        error: e.to_string(),
+      })?;
       Ok(text.trim_start_matches('\u{FEFF}').to_string())
     }
     "UTF-16BE" => {
@@ -33,17 +35,22 @@ pub fn decode_to_string(data: &[u8]) -> AnyResult<String> {
         .chunks_exact(2)
         .map(|c| u16::from_be_bytes([c[0], c[1]]))
         .collect();
-      String::from_utf16(&u16).map_err(|e| anyhow!("Invalid UTF-16BE: {:?}", e))
+      String::from_utf16(&u16).map_err(|e| SubtitleError::InvalidEncoding {
+        encoding: "UTF-16BE".to_string(),
+        error: format!("{:?}", e),
+      })
     }
     "UTF-16LE" => {
       let u16: Vec<u16> = data
         .chunks_exact(2)
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
         .collect();
-      String::from_utf16(&u16).map_err(|e| anyhow!("Invalid UTF-16LE: {:?}", e))
+      String::from_utf16(&u16).map_err(|e| SubtitleError::InvalidEncoding {
+        encoding: "UTF-16LE".to_string(),
+        error: format!("{:?}", e),
+      })
     }
     _ => {
-      // True decoding via encoding_rs for GBK, Shift_JIS, Big5, etc.
       let label = encoding.as_bytes();
       if let Some(enc) = encoding_rs::Encoding::for_label_no_replacement(label) {
         let (cow, _enc, had_errors) = enc.decode(data);
@@ -52,10 +59,9 @@ pub fn decode_to_string(data: &[u8]) -> AnyResult<String> {
         }
         Ok(cow.into_owned())
       } else {
-        anyhow::bail!(
-          "Cannot decode encoding '{}'. Try converting to UTF-8 first.",
-          encoding
-        )
+        Err(SubtitleError::UnsupportedEncoding {
+          encoding: encoding.to_string(),
+        })
       }
     }
   }

@@ -1,21 +1,25 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use subtitler::model::{Subtitle, SubtitleFile, SubtitleFormat, frames_to_ms, ms_to_frames};
+use subtitler::model::{
+  Format, Subtitle, SubtitleFile, SubtitleFormat, frames_to_ms, ms_to_frames,
+};
 use subtitler::{ass, srt, utils, vtt};
 
 // ── Utility Benchmarks ──
 
 fn bench_parse_timestamp(c: &mut Criterion) {
   c.bench_function("parse_timestamp", |b| {
-    b.iter(|| black_box(utils::parse_timestamp("01:02:03.456").unwrap()))
+    b.iter(|| black_box(utils::parse_timestamp("01:02:03.456", Format::Vtt).unwrap()))
   });
 }
 
 fn bench_parse_timestamps(c: &mut Criterion) {
   c.bench_function("parse_timestamps", |b| {
     b.iter(|| {
-      black_box(utils::parse_timestamps("00:01:02.000 --> 00:01:05.000 align:start").unwrap())
+      black_box(
+        utils::parse_timestamps("00:01:02.000 --> 00:01:05.000 align:start", Format::Vtt).unwrap(),
+      )
     })
   });
 }

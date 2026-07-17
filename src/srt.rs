@@ -1,7 +1,7 @@
-use crate::model::{Subtitle, SubtitleFile, TextPart};
+use crate::error::SubtitleError;
+use crate::model::{Format, Subtitle, SubtitleFile, TextPart};
 use crate::types::AnyResult;
 use crate::utils::{format_timestamp, parse_timestamp};
-use anyhow::anyhow;
 use regex::Regex;
 #[cfg(feature = "http")]
 use reqwest;
@@ -99,15 +99,14 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
   (plain, parts)
 }
 
-fn parse(content: &str) -> AnyResult<Vec<Subtitle>> {
+fn parse(content: &str) -> Result<Vec<Subtitle>, SubtitleError> {
   let mut subtitles = Vec::new();
   let mut current_subtitle: Option<Subtitle> = None;
   let mut phase = Phase::Index;
-  let mut row: usize = 0;
   let mut is_first_content_line = true;
 
-  for line in content.lines() {
-    row += 1;
+  for (row_idx, line) in content.lines().enumerate() {
+    let row = row_idx + 1;
     let mut trimmed = line.trim().to_string();
 
     // Strip BOM from first content line (matching JS strip-bom behavior)
@@ -146,29 +145,36 @@ fn parse(content: &str) -> AnyResult<Vec<Subtitle>> {
           phase = Phase::Timestamp;
         } else if trimmed.contains("-->") {
           if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
-            let subtitle =
-              Subtitle::new(parse_timestamp(start_str)?, parse_timestamp(end_str)?, "");
+            let subtitle = Subtitle::new(
+              parse_timestamp(start_str, Format::Srt)?,
+              parse_timestamp(end_str, Format::Srt)?,
+              "",
+            );
             phase = Phase::Text;
             current_subtitle = Some(subtitle);
           } else {
-            return Err(anyhow!(
-              "expected index or timestamp at row {row}, but received: \"{}\"",
-              trimmed
-            ));
+            return Err(SubtitleError::UnexpectedLine {
+              format: Format::Srt,
+              row,
+              expected: "index or timestamp",
+              got: trimmed.to_string(),
+            });
           }
         }
       }
       Phase::Timestamp => {
         if let Some(sub) = &mut current_subtitle {
           if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
-            sub.start = parse_timestamp(start_str)?;
-            sub.end = parse_timestamp(end_str)?;
+            sub.start = parse_timestamp(start_str, Format::Srt)?;
+            sub.end = parse_timestamp(end_str, Format::Srt)?;
             phase = Phase::Text;
           } else {
-            return Err(anyhow!(
-              "expected timestamp at row {row}, but received: \"{}\"",
-              trimmed
-            ));
+            return Err(SubtitleError::UnexpectedLine {
+              format: Format::Srt,
+              row,
+              expected: "timestamp",
+              got: trimmed.to_string(),
+            });
           }
         }
       }
@@ -296,19 +302,25 @@ impl<'a> Iterator for SrtStream<'a> {
           } else if trimmed.contains("-->")
             && let Some((start_str, end_str)) = trimmed.split_once(" --> ")
           {
-            match (parse_timestamp(start_str), parse_timestamp(end_str)) {
+            match (
+              parse_timestamp(start_str, Format::Srt),
+              parse_timestamp(end_str, Format::Srt),
+            ) {
               (Ok(s), Ok(e)) => {
                 self.current_subtitle = Some(Subtitle::new(s, e, ""));
                 self.phase = Phase::Text;
               }
-              (Err(e), _) | (_, Err(e)) => return Some(Err(e)),
+              (Err(e), _) | (_, Err(e)) => return Some(Err(e.into())),
             }
           }
         }
         Phase::Timestamp => {
           if let Some(sub) = &mut self.current_subtitle
             && let Some((start_str, end_str)) = trimmed.split_once(" --> ")
-            && let (Ok(s), Ok(e)) = (parse_timestamp(start_str), parse_timestamp(end_str))
+            && let (Ok(s), Ok(e)) = (
+              parse_timestamp(start_str, Format::Srt),
+              parse_timestamp(end_str, Format::Srt),
+            )
           {
             sub.start = s;
             sub.end = e;
@@ -390,7 +402,12 @@ pub async fn generate(
   let policy = policy.unwrap_or_default();
 
   if policy == crate::model::WritePolicy::RefuseIfExists && path.exists() {
-    anyhow::bail!("Refusing to overwrite existing file: {}", path.display());
+    return Err(
+      SubtitleError::FileExists {
+        path: path.to_path_buf(),
+      }
+      .into(),
+    );
   }
 
   let mut open_opts = fs::OpenOptions::new();

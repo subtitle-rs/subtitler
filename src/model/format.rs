@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::subtitle::Subtitle;
 use super::r#trait::SubtitleFormat;
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum Format {
   #[cfg(feature = "srt")]
   Srt,

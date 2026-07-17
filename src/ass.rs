@@ -1,6 +1,6 @@
-use crate::model::{AssData, AssStyle, Subtitle, SubtitleFile};
+use crate::error::SubtitleError;
+use crate::model::{AssData, AssStyle, Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
-use anyhow::anyhow;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -30,13 +30,23 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   None
 }
 
-fn parse_ass_time(h: &str, m: &str, s: &str, ms: &str) -> AnyResult<u64> {
-  let hours: u64 = h.parse().map_err(|_| anyhow!("Invalid hours: {h}"))?;
-  let minutes: u64 = m.parse().map_err(|_| anyhow!("Invalid minutes: {m}"))?;
-  let seconds: u64 = s.parse().map_err(|_| anyhow!("Invalid seconds: {s}"))?;
-  let centiseconds: u64 = ms
-    .parse()
-    .map_err(|_| anyhow!("Invalid centiseconds: {ms}"))?;
+fn parse_ass_time(h: &str, m: &str, s: &str, ms: &str) -> Result<u64, SubtitleError> {
+  let hours: u64 = h.parse().map_err(|_| SubtitleError::InvalidTimestamp {
+    format: Format::Ass,
+    value: h.to_string(),
+  })?;
+  let minutes: u64 = m.parse().map_err(|_| SubtitleError::InvalidTimestamp {
+    format: Format::Ass,
+    value: m.to_string(),
+  })?;
+  let seconds: u64 = s.parse().map_err(|_| SubtitleError::InvalidTimestamp {
+    format: Format::Ass,
+    value: s.to_string(),
+  })?;
+  let centiseconds: u64 = ms.parse().map_err(|_| SubtitleError::InvalidTimestamp {
+    format: Format::Ass,
+    value: ms.to_string(),
+  })?;
   Ok(hours * 3600000 + minutes * 60000 + seconds * 1000 + centiseconds * 10)
 }
 
@@ -105,7 +115,7 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
   Some(subtitle)
 }
 
-pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
+pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
   let mut info = HashMap::new();
   let mut styles = Vec::new();
   let mut subtitles = Vec::new();
@@ -166,19 +176,19 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 #[cfg(feature = "http")]
 pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  parse_content(&content)
+  Ok(parse_content(&content)?)
 }
 
 #[derive(PartialEq)]

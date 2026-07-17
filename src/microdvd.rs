@@ -1,6 +1,6 @@
-use crate::model::{Subtitle, SubtitleFile, frames_to_ms, ms_to_frames};
+use crate::error::SubtitleError;
+use crate::model::{Format, Subtitle, SubtitleFile, frames_to_ms, ms_to_frames};
 use crate::types::AnyResult;
-use anyhow::anyhow;
 use regex::Regex;
 use std::sync::LazyLock;
 use tokio::io::AsyncWriteExt;
@@ -25,7 +25,7 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   None
 }
 
-pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile> {
+pub fn parse_content(content: &str, fps: Option<f64>) -> Result<SubtitleFile, SubtitleError> {
   let fps = fps.unwrap_or(DEFAULT_FPS);
   let mut subtitles = Vec::new();
   let mut saved_fps = fps;
@@ -50,10 +50,16 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile>
     }
 
     if let Some(caps) = RE_MICRODVD.captures(trimmed) {
-      let start_frame: u64 = caps[1]
-        .parse()
-        .map_err(|_| anyhow!("Invalid start frame"))?;
-      let end_frame: u64 = caps[2].parse().map_err(|_| anyhow!("Invalid end frame"))?;
+      let start_frame: u64 = caps[1].parse().map_err(|_| SubtitleError::InvalidFrame {
+        format: Format::MicroDvd,
+        role: "start",
+        value: caps[1].to_string(),
+      })?;
+      let end_frame: u64 = caps[2].parse().map_err(|_| SubtitleError::InvalidFrame {
+        format: Format::MicroDvd,
+        role: "end",
+        value: caps[2].to_string(),
+      })?;
       let text = caps[3].to_string().replace('|', "\n");
 
       let subtitle = Subtitle::new(
@@ -74,7 +80,7 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile>
 /// Decode bytes to UTF-8 then parse, returning a `SubtitleFile`.
 pub fn parse_bytes(data: &[u8], fps: Option<f64>) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  parse_content(&text, fps)
+  Ok(parse_content(&text, fps)?)
 }
 
 /// Parse a MicroDVD file asynchronously.
@@ -83,7 +89,7 @@ pub async fn parse_file(
   fps: Option<f64>,
 ) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  parse_content(&text, fps)
+  Ok(parse_content(&text, fps)?)
 }
 
 /// Parse a MicroDVD file from a URL (requires `http` feature).
@@ -91,7 +97,7 @@ pub async fn parse_file(
 pub async fn parse_url(url: &str, fps: Option<f64>) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  parse_content(&content, fps)
+  Ok(parse_content(&content, fps)?)
 }
 
 pub fn to_string(subtitles: &[Subtitle], fps: Option<f64>) -> String {

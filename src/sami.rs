@@ -5,7 +5,8 @@
 //!
 //! Format: HTML-like structure with `<Sync>` and `<P>` tags.
 
-use crate::model::{Subtitle, SubtitleFile};
+use crate::error::SubtitleError;
+use crate::model::{Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -48,7 +49,7 @@ pub struct SamiData {
 
 impl SamiData {
   /// Parse SAMI content into structured data.
-  pub fn parse(content: &str) -> AnyResult<Self> {
+  pub fn parse(content: &str) -> Result<Self, SubtitleError> {
     let mut header = None;
     let mut styles = HashMap::new();
 
@@ -180,7 +181,7 @@ impl SamiData {
 }
 
 /// Parse SAMI content into a SubtitleFile.
-pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
+pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
   let data = SamiData::parse(content)?;
   Ok(SubtitleFile::Sami(data))
 }
@@ -188,13 +189,13 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 /// Parse SAMI from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 /// Parse a SAMI file asynchronously.
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 /// Parse a SAMI file from a URL (requires `http` feature).
@@ -202,7 +203,7 @@ pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Subtitle
 pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  parse_content(&content)
+  Ok(parse_content(&content)?)
 }
 
 /// Detect if data looks like SAMI.
@@ -253,7 +254,13 @@ impl<'a> Iterator for SamiStream<'a> {
         Err(e) => {
           // 解析失败时跳过本 Sync 标签，避免死循环
           self.pos += full_match.end();
-          return Some(Err(anyhow::anyhow!("Invalid start time: {}", e)));
+          return Some(Err(
+            SubtitleError::InvalidTimestamp {
+              format: Format::Sami,
+              value: e.to_string(),
+            }
+            .into(),
+          ));
         }
       };
 

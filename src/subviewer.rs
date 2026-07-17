@@ -1,6 +1,6 @@
-use crate::model::{Subtitle, SubtitleFile};
+use crate::error::SubtitleError;
+use crate::model::{Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
-use anyhow::anyhow;
 use regex::Regex;
 use std::sync::LazyLock;
 use tokio::io::AsyncWriteExt;
@@ -30,32 +30,56 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   None
 }
 
-fn parse_subviewer_time(ts: &str) -> AnyResult<u64> {
+fn parse_subviewer_time(ts: &str) -> Result<u64, SubtitleError> {
   let parts: Vec<&str> = ts.split(':').collect();
   if parts.len() != 3 {
-    return Err(anyhow!("Invalid SubViewer time: {}", ts));
+    return Err(SubtitleError::InvalidTimestamp {
+      format: Format::SubViewer,
+      value: ts.to_string(),
+    });
   }
-  let h: u64 = parts[0].parse()?;
-  let m: u64 = parts[1].parse()?;
+  let h: u64 = parts[0]
+    .parse()
+    .map_err(|_| SubtitleError::InvalidTimestamp {
+      format: Format::SubViewer,
+      value: ts.to_string(),
+    })?;
+  let m: u64 = parts[1]
+    .parse()
+    .map_err(|_| SubtitleError::InvalidTimestamp {
+      format: Format::SubViewer,
+      value: ts.to_string(),
+    })?;
   let s_parts: Vec<&str> = parts[2].split('.').collect();
-  let s: u64 = s_parts[0].parse()?;
+  let s: u64 = s_parts[0]
+    .parse()
+    .map_err(|_| SubtitleError::InvalidTimestamp {
+      format: Format::SubViewer,
+      value: ts.to_string(),
+    })?;
   let ms: u64 = if s_parts.len() > 1 {
     let centisecs_str = s_parts[1];
     // SubViewer uses centiseconds (0-99), validate
     if centisecs_str.len() > 2 {
-      return Err(anyhow!(
-        "Invalid SubViewer time: fractional part must be at most 2 digits (centiseconds), got '{}'",
-        centisecs_str
-      ));
+      return Err(SubtitleError::InvalidTimestamp {
+        format: Format::SubViewer,
+        value: ts.to_string(),
+      });
     }
-    centisecs_str.parse::<u64>()? * 10 // centiseconds → ms
+    centisecs_str
+      .parse::<u64>()
+      .map_err(|_| SubtitleError::InvalidTimestamp {
+        format: Format::SubViewer,
+        value: ts.to_string(),
+      })?
+      * 10 // centiseconds → ms
   } else {
     0
   };
   Ok(h * 3600000 + m * 60000 + s * 1000 + ms)
 }
 
-pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
+pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
   let mut subtitles = Vec::new();
   let mut pending_timestamp: Option<(u64, u64)> = None;
   let mut header_lines: Vec<String> = Vec::new();
@@ -97,13 +121,13 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 /// Decode bytes to UTF-8 then parse, returning a `SubtitleFile`.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 /// Parse a SubViewer file asynchronously.
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 /// Parse a SubViewer file from a URL (requires `http` feature).
@@ -111,7 +135,7 @@ pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Subtitle
 pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  parse_content(&content)
+  Ok(parse_content(&content)?)
 }
 
 pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {

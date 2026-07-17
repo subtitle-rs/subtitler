@@ -5,10 +5,10 @@
 //!
 //! Uses `quick-xml` for streaming pull parsing — no DOM build.
 
-use crate::model::{Subtitle, SubtitleFile, TextPart};
+use crate::error::SubtitleError;
+use crate::model::{Format, Subtitle, SubtitleFile, TextPart};
 use crate::types::AnyResult;
 use crate::utils::parse_timestamp;
-use anyhow::anyhow;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 use smallvec::SmallVec;
@@ -19,7 +19,7 @@ use std::io::Cursor;
 fn ttml_to_ms(attr: &str) -> Option<u64> {
   let attr = attr.trim();
   if attr.contains(':') {
-    return parse_timestamp(attr).ok();
+    return parse_timestamp(attr, Format::Ttml).ok();
   }
   // Handle "123.456s" format (seconds with optional 's' suffix)
   let num_str = attr.strip_suffix('s').unwrap_or(attr);
@@ -131,9 +131,10 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
         }
       }
       Ok(Event::Text(ref e)) => {
-        let text = e
-          .decode()
-          .map_err(|e| anyhow::anyhow!("TTML decode error: {}", e))?;
+        let text = e.decode().map_err(|e| SubtitleError::Xml {
+          format: Format::Ttml,
+          error: e.to_string(),
+        })?;
         if in_p && !text.trim().is_empty() {
           let segment = text.to_string();
           current_text.push_str(&segment);
@@ -167,7 +168,15 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
         }
       }
       Ok(Event::Eof) => break,
-      Err(e) => return Err(anyhow!("TTML parse error: {}", e)),
+      Err(e) => {
+        return Err(
+          SubtitleError::Xml {
+            format: Format::Ttml,
+            error: e.to_string(),
+          }
+          .into(),
+        );
+      }
       _ => {}
     }
     buf.clear();
@@ -181,7 +190,10 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 
 /// Parse TTML from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
-  let text = std::str::from_utf8(data).map_err(|e| anyhow!("Invalid UTF-8 in TTML: {}", e))?;
+  let text = std::str::from_utf8(data).map_err(|e| SubtitleError::InvalidEncoding {
+    encoding: "UTF-8".to_string(),
+    error: e.to_string(),
+  })?;
   parse_content(text)
 }
 

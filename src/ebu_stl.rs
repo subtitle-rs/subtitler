@@ -12,7 +12,8 @@
 //! - SMPTE timecode: HH:MM:SS:FF (hours:minutes:seconds:frames)
 //! - Frame rates: 25 fps (PAL) or 29.97 fps (NTSC)
 
-use crate::model::{Subtitle, SubtitleFile};
+use crate::error::SubtitleError;
+use crate::model::{Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use serde::{Deserialize, Serialize};
 
@@ -118,9 +119,12 @@ impl EbuStlData {
   }
 
   /// Parse EBU STL binary data
-  pub fn parse(data: &[u8]) -> AnyResult<Self> {
+  pub fn parse(data: &[u8]) -> Result<Self, SubtitleError> {
     if data.len() < 1024 {
-      return Err(anyhow::anyhow!("File too short for EBU STL format"));
+      return Err(SubtitleError::InvalidFormat {
+        format: Format::EbuStl,
+        reason: "File too short for EBU STL format".to_string(),
+      });
     }
 
     // Parse GSI block (first 1024 bytes)
@@ -171,7 +175,7 @@ impl EbuStlData {
 
 impl GsiBlock {
   /// Parse GSI block from binary data
-  fn parse(data: &[u8]) -> AnyResult<Self> {
+  fn parse(data: &[u8]) -> Result<Self, SubtitleError> {
     // Simplified GSI parsing - in production, would parse all 1024 bytes
     let language_code = String::from_utf8_lossy(&data[14..17]).to_string();
 
@@ -213,7 +217,7 @@ impl GsiBlock {
 
 impl TtiBlock {
   /// Parse TTI block from binary data
-  fn parse(data: &[u8]) -> AnyResult<Option<Self>> {
+  fn parse(data: &[u8]) -> Result<Option<Self>, SubtitleError> {
     if data.len() < 128 {
       return Ok(None);
     }
@@ -273,7 +277,7 @@ impl TtiBlock {
 }
 
 /// Parse SMPTE timecode from binary
-fn parse_smpte_timecode(data: &[u8]) -> AnyResult<u32> {
+fn parse_smpte_timecode(data: &[u8]) -> Result<u32, SubtitleError> {
   if data.len() < 4 {
     return Ok(0);
   }

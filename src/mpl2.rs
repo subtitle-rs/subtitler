@@ -5,7 +5,8 @@
 //!
 //! Uses frame numbers instead of timestamps. Frame rate defaults to 23.976 fps.
 
-use crate::model::{Subtitle, SubtitleFile};
+use crate::error::SubtitleError;
+use crate::model::{Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -36,7 +37,7 @@ impl Mpl2Data {
   }
 
   /// Parse MPL2 content into structured data.
-  pub fn parse(content: &str, fps: Option<f64>) -> AnyResult<Self> {
+  pub fn parse(content: &str, fps: Option<f64>) -> Result<Self, SubtitleError> {
     let fps = fps.unwrap_or(DEFAULT_FPS);
     let mut subtitles = Vec::new();
 
@@ -97,7 +98,7 @@ fn ms_to_frame(ms: u64, fps: f64) -> u64 {
 }
 
 /// Parse MPL2 content into a SubtitleFile.
-pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
+pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
   let data = Mpl2Data::parse(content, None)?;
   Ok(SubtitleFile::Mpl2(data.subtitles))
 }
@@ -105,19 +106,19 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 /// Parse MPL2 from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 #[cfg(feature = "http")]
 pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  parse_content(&content)
+  Ok(parse_content(&content)?)
 }
 
 /// Detect if data looks like MPL2.
@@ -169,12 +170,30 @@ impl<'a> Iterator for Mpl2Stream<'a> {
       if let Some(caps) = RE_MPL2_LINE.captures(trimmed) {
         let start_frame: u64 = match caps[1].parse() {
           Ok(v) => v,
-          Err(e) => return Some(Err(anyhow::anyhow!("Invalid start frame: {}", e))),
+          Err(e) => {
+            return Some(Err(
+              SubtitleError::InvalidFrame {
+                format: Format::Mpl2,
+                role: "start",
+                value: e.to_string(),
+              }
+              .into(),
+            ));
+          }
         };
 
         let end_frame: u64 = match caps[2].parse() {
           Ok(v) => v,
-          Err(e) => return Some(Err(anyhow::anyhow!("Invalid end frame: {}", e))),
+          Err(e) => {
+            return Some(Err(
+              SubtitleError::InvalidFrame {
+                format: Format::Mpl2,
+                role: "end",
+                value: e.to_string(),
+              }
+              .into(),
+            ));
+          }
         };
 
         let text = caps[3].trim().to_string();

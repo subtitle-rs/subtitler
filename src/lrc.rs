@@ -3,6 +3,7 @@
 //! Lines: `[mm:ss.xx]lyric text`  or  `[ti:Title]` for metadata.
 //! Multiple timestamps can share a line: `[00:01.50][00:15.00]text`
 
+use crate::error::SubtitleError;
 use crate::model::{Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
@@ -39,7 +40,7 @@ pub struct LrcLine {
 
 impl LrcData {
   /// Parse LRC content into structured data, preserving multi-timestamp lines.
-  pub fn parse(content: &str) -> AnyResult<Self> {
+  pub fn parse(content: &str) -> Result<Self, SubtitleError> {
     let mut lines: Vec<LrcLine> = Vec::new();
 
     for line in content.lines() {
@@ -107,7 +108,7 @@ impl LrcData {
 }
 
 /// Parse LRC content into a `SubtitleFile`.
-pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
+pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
   let data = LrcData::parse(content)?;
   let subtitles = data.to_subtitles();
   Ok(SubtitleFile::Lrc { data, subtitles })
@@ -116,13 +117,13 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 /// Parse LRC from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 /// Parse an LRC file asynchronously.
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  parse_content(&text)
+  Ok(parse_content(&text)?)
 }
 
 /// Parse an LRC file from a URL (requires `http` feature).
@@ -130,7 +131,7 @@ pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Subtitle
 pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  parse_content(&content)
+  Ok(parse_content(&content)?)
 }
 
 /// Detect if data looks like LRC.

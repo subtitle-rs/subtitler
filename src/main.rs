@@ -99,27 +99,27 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     #[cfg(feature = "vtt")]
     CliFormat::Vtt => vtt::parse_content(&text),
     #[cfg(feature = "ass")]
-    CliFormat::Ass => ass::parse_content(&text),
+    CliFormat::Ass => Ok(ass::parse_content(&text)?),
     #[cfg(feature = "ssa")]
-    CliFormat::Ssa => ass::parse_content(&text),
+    CliFormat::Ssa => Ok(ass::parse_content(&text)?),
     #[cfg(feature = "microdvd")]
-    CliFormat::MicroDvd => subtitler::microdvd::parse_content(&text, None),
+    CliFormat::MicroDvd => Ok(subtitler::microdvd::parse_content(&text, None)?),
     #[cfg(feature = "subviewer")]
-    CliFormat::SubViewer => subtitler::subviewer::parse_content(&text),
+    CliFormat::SubViewer => Ok(subtitler::subviewer::parse_content(&text)?),
     #[cfg(feature = "ttml")]
     CliFormat::Ttml => subtitler::ttml::parse_content(&text),
     #[cfg(feature = "sbv")]
     CliFormat::Sbv => subtitler::sbv::parse_content(&text),
     #[cfg(feature = "lrc")]
-    CliFormat::Lrc => subtitler::lrc::parse_content(&text),
+    CliFormat::Lrc => Ok(subtitler::lrc::parse_content(&text)?),
     #[cfg(feature = "sami")]
-    CliFormat::Sami => subtitler::sami::parse_content(&text),
+    CliFormat::Sami => Ok(subtitler::sami::parse_content(&text)?),
     #[cfg(feature = "mpl2")]
-    CliFormat::Mpl2 => subtitler::mpl2::parse_content(&text),
+    CliFormat::Mpl2 => Ok(subtitler::mpl2::parse_content(&text)?),
     #[cfg(feature = "scc")]
-    CliFormat::Scc => scc::parse_content(&text),
+    CliFormat::Scc => Ok(scc::parse_content(&text)?),
     #[cfg(feature = "ebu_stl")]
-    CliFormat::EbuStl => ebu_stl::parse_content(data),
+    CliFormat::EbuStl => Ok(ebu_stl::parse_content(data)?),
   }
 }
 

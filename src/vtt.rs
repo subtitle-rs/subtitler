@@ -1,7 +1,7 @@
-use crate::model::{Subtitle, SubtitleFile, TextPart};
+use crate::error::SubtitleError;
+use crate::model::{Format, Subtitle, SubtitleFile, TextPart};
 use crate::types::AnyResult;
 use crate::utils::{format_timestamp, parse_timestamps};
-use anyhow::anyhow;
 use regex::Regex;
 #[cfg(feature = "http")]
 use reqwest;
@@ -94,17 +94,16 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
   (plain, parts)
 }
 
-fn parse(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
+fn parse(content: &str) -> Result<(Option<String>, Vec<Subtitle>), SubtitleError> {
   let mut subtitles = Vec::new();
   let mut current_subtitle: Option<Subtitle> = None;
   let mut phase = Phase::Header;
-  let mut row: usize = 0;
   let mut is_first_content_line = true;
   let mut header_lines: Vec<String> = Vec::new();
   let mut header: Option<String> = None;
 
-  for line in content.lines() {
-    row += 1;
+  for (row_idx, line) in content.lines().enumerate() {
+    let row = row_idx + 1;
     let mut trimmed = line.trim().to_string();
 
     // Strip BOM from first content line (matching JS strip-bom behavior)
@@ -142,7 +141,7 @@ fn parse(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
         } else if trimmed.starts_with("NOTE") {
           phase = Phase::VttComment;
         } else if trimmed.contains("-->") {
-          let timestamp = parse_timestamps(&trimmed)?;
+          let timestamp = parse_timestamps(&trimmed, Format::Vtt)?;
           let mut subtitle = Subtitle::new(timestamp.start, timestamp.end, "");
           subtitle.settings = timestamp.settings;
           current_subtitle = Some(subtitle);
@@ -158,16 +157,18 @@ fn parse(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
       Phase::Timestamp => {
         if let Some(sub) = &mut current_subtitle {
           if trimmed.contains("-->") {
-            let timestamp = parse_timestamps(&trimmed)?;
+            let timestamp = parse_timestamps(&trimmed, Format::Vtt)?;
             sub.start = timestamp.start;
             sub.end = timestamp.end;
             sub.settings = timestamp.settings;
             phase = Phase::Text;
           } else {
-            return Err(anyhow!(
-              "expected timestamp at row {row}, but received: \"{}\"",
-              trimmed
-            ));
+            return Err(SubtitleError::UnexpectedLine {
+              format: Format::Vtt,
+              row,
+              expected: "timestamp",
+              got: trimmed.to_string(),
+            });
           }
         }
       }
@@ -209,7 +210,7 @@ pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
 
 pub fn parse_bytes_full(data: &[u8]) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
   let text = crate::encoding::decode_to_string(data)?;
-  parse(&text)
+  Ok(parse(&text)?)
 }
 
 #[cfg(feature = "http")]
@@ -225,7 +226,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 }
 
 pub fn parse_content_full(content: &str) -> AnyResult<(Option<String>, Vec<Subtitle>)> {
-  parse(content)
+  Ok(parse(content)?)
 }
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
@@ -278,7 +279,12 @@ pub async fn generate(
   let policy = policy.unwrap_or_default();
 
   if policy == crate::model::WritePolicy::RefuseIfExists && path.exists() {
-    anyhow::bail!("Refusing to overwrite existing file: {}", path.display());
+    return Err(
+      SubtitleError::FileExists {
+        path: path.to_path_buf(),
+      }
+      .into(),
+    );
   }
 
   let mut open_opts = fs::OpenOptions::new();
@@ -305,7 +311,7 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   subtitles: &[Subtitle],
   header: Option<&str>,
   writer: &mut W,
-) -> AnyResult<()> {
+) -> Result<(), SubtitleError> {
   // Write WEBVTT header
   match header {
     Some(h) => {
@@ -386,12 +392,12 @@ impl<'a> Iterator for VttStream<'a> {
           let (plain, _) = extract_text_parts(&sub.text);
           sub.text = plain;
           self.phase = 1;
-          if let Ok(ts) = parse_timestamps(&trimmed) {
+          if let Ok(ts) = parse_timestamps(&trimmed, Format::Vtt) {
             self.current_subtitle = Some(Subtitle::new(ts.start, ts.end, ""));
           }
           return Some(Ok(sub));
         }
-        if let Ok(ts) = parse_timestamps(&trimmed) {
+        if let Ok(ts) = parse_timestamps(&trimmed, Format::Vtt) {
           self.current_subtitle = Some(Subtitle::new(ts.start, ts.end, ""));
         }
         self.phase = 1;

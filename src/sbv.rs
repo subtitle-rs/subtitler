@@ -2,7 +2,8 @@
 //!
 //! Format: `time1,time2,text`  where time is `[hours:]minutes:seconds.milliseconds`.
 
-use crate::model::{Subtitle, SubtitleFile};
+use crate::error::SubtitleError;
+use crate::model::{Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use crate::utils::parse_timestamp;
 use tokio::io::AsyncWriteExt;
@@ -33,7 +34,10 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
         t2.to_string()
       };
 
-      if let (Ok(start), Ok(end)) = (parse_timestamp(&t1_fixed), parse_timestamp(&t2_fixed)) {
+      if let (Ok(start), Ok(end)) = (
+        parse_timestamp(&t1_fixed, Format::Sbv),
+        parse_timestamp(&t2_fixed, Format::Sbv),
+      ) {
         subtitles.push(Subtitle::new(start, end, text.trim()));
       }
     }
@@ -128,7 +132,7 @@ impl<'a> Iterator for SbVStream<'a> {
       if trimmed.is_empty() {
         continue;
       }
-      return Some(parse_sbv_line(trimmed));
+      return Some(parse_sbv_line(trimmed).map_err(Into::into));
     }
     None
   }
@@ -136,10 +140,13 @@ impl<'a> Iterator for SbVStream<'a> {
 
 impl<'a> crate::model::StreamingParser for SbVStream<'a> {}
 
-fn parse_sbv_line(line: &str) -> Result<Subtitle, anyhow::Error> {
+fn parse_sbv_line(line: &str) -> Result<Subtitle, SubtitleError> {
   let parts: Vec<&str> = line.splitn(3, ',').collect();
   if parts.len() < 3 {
-    return Err(anyhow::anyhow!("Invalid SBV line: {}", line));
+    return Err(SubtitleError::InvalidLine {
+      format: Format::Sbv,
+      line: line.to_string(),
+    });
   }
   let (t1, t2, text) = (parts[0], parts[1], parts[2]);
   let t1_fixed = if t1.chars().filter(|&c| c == ':').count() == 1 {
@@ -152,8 +159,8 @@ fn parse_sbv_line(line: &str) -> Result<Subtitle, anyhow::Error> {
   } else {
     t2.to_string()
   };
-  let start = crate::utils::parse_timestamp(&t1_fixed)?;
-  let end = crate::utils::parse_timestamp(&t2_fixed)?;
+  let start = crate::utils::parse_timestamp(&t1_fixed, Format::Sbv)?;
+  let end = crate::utils::parse_timestamp(&t2_fixed, Format::Sbv)?;
   Ok(Subtitle::new(start, end, text.trim()))
 }
 
