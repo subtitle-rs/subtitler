@@ -1,3 +1,122 @@
+# Migrating from 1.x to 2.0.0
+
+2.0.0 completes the v2 API unification — all `parse_*` functions now return
+`SubtitleFile`, errors are structured, and the internals have been modularized.
+
+## All `parse_content` / `parse_bytes` / `parse_file` return `SubtitleFile`
+
+Every format module (SRT, VTT, ASS, TTML, SBV, LRC, SAMI, MicroDVD,
+SubViewer, MPL2, SCC, EBU STL) now consistently returns `SubtitleFile`
+from all public parse entry points. Previously some modules returned
+`Vec<Subtitle>` (e.g. VTT, MPL2 parse_bytes).
+
+```rust
+// Before (1.x)
+let subs: Vec<Subtitle> = subtitler::vtt::parse_content(&text)?;
+let subs: Vec<Subtitle> = subtitler::mpl2::parse_bytes(data)?;
+
+// After (2.0)
+let file: SubtitleFile = subtitler::vtt::parse_content(&text)?;
+let file: SubtitleFile = subtitler::mpl2::parse_bytes(data)?;
+// Access subtitles via trait:
+let subs: &[Subtitle] = file.subtitles();
+```
+
+## Accessing subtitles from `SubtitleFile`
+
+`SubtitleFile` is a parsed file, not a `Vec`. Use the `SubtitleFormat`
+trait to access shared methods:
+
+```rust
+use subtitler::SubtitleFormat; // re-exported from model
+
+let file = subtitler::srt::parse_content(&content)?;
+let count = file.subtitles().len();        // not file.len()
+let first = &file.subtitles()[0];           // not &file[0]
+file.validate();                           // trait method
+file.sort();                               // trait method
+```
+
+## `parse_timestamp` / `parse_timestamps` now require `Format`
+
+```rust
+// Before
+subtitler::utils::parse_timestamp("00:00:01,000")?;
+
+// After
+subtitler::utils::parse_timestamp("00:00:01,000", Format::Srt)?;
+subtitler::utils::parse_timestamps("... --> ...", Format::Vtt)?;
+```
+
+## Structured errors: `SubtitleError` replaces `anyhow` in internals
+
+Format modules now use structured `SubtitleError` variants instead of
+`anyhow!()` macros. Public API still returns `AnyResult` via `?` coercion.
+
+New error variants give you format-aware context:
+
+```rust
+match subtitler::srt::parse_content(&text) {
+  Ok(file) => { /* ... */ }
+  Err(e) => {
+    // e is anyhow::Error, but the source is a SubtitleError:
+    if let Some(se) = e.downcast_ref::<subtitler::error::SubtitleError>() {
+      match se {
+        SubtitleError::InvalidTimestamp { format, value } => { /* ... */ }
+        SubtitleError::UnexpectedLine { format, row, expected, got } => { /* ... */ }
+        _ => {}
+      }
+    }
+  }
+}
+```
+
+## `encoding::decode_to_string` returns `Result<_, SubtitleError>`
+
+```rust
+// Before
+let text: anyhow::Result<String> = subtitler::encoding::decode_to_string(data);
+
+// After
+let text: Result<String, subtitler::error::SubtitleError> =
+  subtitler::encoding::decode_to_string(data);
+```
+
+## `SCC::to_string` now accepts `drop_frame` parameter
+
+```rust
+// Before
+let scc = subtitler::scc::to_string(&subs);
+
+// After
+let scc = subtitler::scc::to_string(&subs, true);  // drop-frame
+let scc = subtitler::scc::to_string(&subs, false); // non-drop-frame
+```
+
+## Data type `to_string()` renamed to `render()`
+
+`LrcData::to_string`, `SamiData::to_string`, `Mpl2Data::to_string`,
+`SccData::to_string` renamed to `render()` to avoid shadowing
+`std::string::ToString`.
+
+```rust
+// Before
+data.to_string();
+
+// After
+data.render();
+```
+
+## Available feature flags
+
+```toml
+subtitler = { version = "2.0", default-features = false,
+  features = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer",
+              "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "http"] }
+```
+
+---
+
 # Migrating from 0.1.x to 1.0.0
 
 1.0.0 unifies the subtitle architecture. Here's how to update.
@@ -46,21 +165,10 @@ match file {
 }
 ```
 
-The `Ass` variant also changed shape: it now wraps `AssData` (the shared
-ASS/SSA struct) instead of inline fields:
-
-```rust
-// Before
-SubtitleFile::Ass { info, styles, subtitles }
-// After
-SubtitleFile::Ass(AssData { info, styles, subtitles })
-```
-
 ## Parsing cores are now sync
 
 `srt::parse_content`, `srt::parse_bytes`, and the `vtt::` equivalents are no
-longer `async` (they never did real async I/O — the `.await` was on a
-synchronous `Cursor`):
+longer `async`:
 
 ```rust
 // Before
@@ -70,50 +178,25 @@ let subs = subtitler::srt::parse_content(&text).await?;
 let subs = subtitler::srt::parse_content(&text)?;
 ```
 
-`parse_file` and `parse_url` remain `async` (real I/O).
+`parse_file` and `parse_url` remain `async`.
 
 ## New unified entry points (recommended)
 
 ```rust
-// Auto-detect and parse any format from bytes / file / URL
 let file = subtitler::parse_bytes(&data)?;
 let file = subtitler::parse_file("path.sub").await?;
 #[cfg(feature = "http")]
 let file = subtitler::parse_url("https://example.com/sub.vtt").await?;
 ```
 
-These return `Result<SubtitleFile, subtitler::error::ParseError>`.
-
 ## Removed Subtitle fields
 
-The `Subtitle` struct no longer has `layer`, `margin_l`, `margin_r`, `margin_v`, or `effect`
-fields. These were ASS/SSA-only fields that every subtitle carried as `Option`, wasting
-~80 bytes per subtitle for SRT/VTT files.
-
-If you accessed these fields directly, remove the accesses — they always returned `None`
-for non-ASS formats, and the ASS `to_string` output now defaults to `0` for margins
-and empty string for effect.
-
-```rust
-// Before
-let layer = sub.layer.unwrap_or(0);
-let margin = sub.margin_l.unwrap_or(10);
-
-// After — use defaults directly
-let layer = 0;
-let margin = 10;
-```
-
-Builder method `Subtitle::with_layer` has been removed. If you need ASS-specific fields,
-construct them at the ASS output level.
+The `Subtitle` struct no longer has `layer`, `margin_l`, `margin_r`, `margin_v`, or `effect` fields.
 
 ## Per-format feature flags
 
-If you use `default-features = false`, enable the formats you need:
-
 ```toml
-[dependencies]
 subtitler = { version = "1.0", default-features = false, features = ["srt", "vtt"] }
 ```
 
-Available flags: `srt`, `vtt`, `ass`, `ssa`, `microdvd`, `subviewer`, `http`.
+Available flags: `srt`, `vtt`, `ass`, `ssa`, `microdvd`, `subviewer`, `ttml`, `sbv`, `lrc`, `sami`, `mpl2`, `scc`, `ebu_stl`, `http`.

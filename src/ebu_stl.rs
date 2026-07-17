@@ -142,8 +142,8 @@ impl EbuStlData {
 
         // Convert to Subtitle
         if !tti.text.is_empty() {
-          let start_ms = tti_timecode_to_ms(tti.timecode_start);
-          let end_ms = tti_timecode_to_ms(tti.timecode_end);
+          let start_ms = tti.timecode_start as u64;
+          let end_ms = tti.timecode_end as u64;
           subtitles.push(Subtitle::new(start_ms, end_ms, &tti.text));
         }
       }
@@ -336,11 +336,6 @@ fn decode_stl_text(data: &[u8]) -> String {
   text.trim().to_string()
 }
 
-/// Convert TTI timecode to milliseconds
-fn tti_timecode_to_ms(timecode: u32) -> u64 {
-  timecode as u64
-}
-
 /// Parse EBU STL from file content
 pub fn parse_content(data: &[u8]) -> AnyResult<SubtitleFile> {
   let stl_data = EbuStlData::parse(data)?;
@@ -366,13 +361,18 @@ pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   parse_content(&data)
 }
 
-/// Detect if data looks like EBU STL
+/// Detect if data looks like EBU STL.
+///
+/// EBU STL files are 1024-byte GSI header + N×128-byte TTI blocks.
+/// The first byte is the code page number (0–31); the second byte
+/// is the disk format code (typically STL25.01 / STL30.01);
+/// character bytes at offset 3+ carry subtitle count metadata.
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
-  // EBU STL files are 1024 bytes + multiples of 128 bytes
   if data.len() >= 1024 && (data.len() - 1024) % 128 == 0 {
-    // Check for valid GSI structure (simplified)
-    if data[0] < 16 {
-      // Code page number should be 0-15
+    let tti_count = u16::from_be_bytes([data[1], data[2]]) as usize;
+    let expected_tti = (data.len() - 1024) / 128;
+    let code_page = data[0];
+    if code_page < 32 && tti_count > 0 && tti_count == expected_tti {
       return Some(crate::model::Format::EbuStl);
     }
   }
@@ -433,9 +433,9 @@ mod tests {
 
   #[test]
   fn test_detect() {
-    // Valid EBU STL structure (1024 + 128 bytes)
     let mut data = vec![0u8; 1152];
-    data[0] = 5; // Valid code page
+    data[0] = 5;
+    data[2] = 1;
     assert!(detect_format(&data).is_some());
 
     // Invalid structure

@@ -76,8 +76,7 @@ impl LrcData {
   }
 
   /// Serialize back to LRC string format.
-  #[allow(clippy::inherent_to_string)]
-  pub fn to_string(&self) -> String {
+  pub fn render(&self) -> String {
     let mut buf = String::new();
     for line in &self.lines {
       for &t in &line.times_ms {
@@ -278,7 +277,7 @@ mod tests {
     assert_eq!(data.lines[0].times_ms[0], 10000);
     assert_eq!(data.lines[0].times_ms[1], 30000);
     // Round-trip
-    let output = data.to_string();
+    let output = data.render();
     assert!(
       output.contains("[00:10.00]"),
       "missing first timestamp in:\n{output}"

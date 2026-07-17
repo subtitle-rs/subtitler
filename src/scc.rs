@@ -145,8 +145,7 @@ impl SccData {
   }
 
   /// Serialize back to SCC format.
-  #[allow(clippy::inherent_to_string)]
-  pub fn to_string(&self) -> String {
+  pub fn render(&self) -> String {
     let mut buf = String::from("Scenarist_SCC V1.0\n\n");
 
     for sub in &self.subtitles {
@@ -336,13 +335,13 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
 }
 
 /// Serialize subtitles to SCC format.
-pub fn to_string(subtitles: &[Subtitle]) -> String {
+pub fn to_string(subtitles: &[Subtitle], drop_frame: bool) -> String {
   let data = SccData {
     fps: DEFAULT_FPS,
-    drop_frame: true,
+    drop_frame,
     subtitles: subtitles.to_vec(),
   };
-  data.to_string()
+  data.render()
 }
 
 pub struct SccStream<'a> {

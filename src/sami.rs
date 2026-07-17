@@ -144,8 +144,7 @@ impl SamiData {
   }
 
   /// Serialize back to SAMI format.
-  #[allow(clippy::inherent_to_string)]
-  pub fn to_string(&self) -> String {
+  pub fn render(&self) -> String {
     let mut buf = String::from("<SAMI>\n");
 
     // Header
@@ -222,7 +221,7 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     styles: HashMap::new(),
     subtitles: subtitles.to_vec(),
   };
-  data.to_string()
+  data.render()
 }
 
 pub struct SamiStream<'a> {

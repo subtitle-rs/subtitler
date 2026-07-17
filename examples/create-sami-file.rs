@@ -55,7 +55,7 @@ fn main() -> anyhow::Result<()> {
   };
 
   // Generate SAMI output
-  let output = sami_data.to_string();
+  let output = sami_data.render();
 
   println!("Generated SAMI content:\n");
   println!("{}", output);

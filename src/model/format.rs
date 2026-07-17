@@ -228,7 +228,7 @@ impl SubtitleFormat for SubtitleFile {
       Format::Sbv => crate::sbv::to_string(subs),
       #[cfg(feature = "lrc")]
       Format::Lrc => match self {
-        SubtitleFile::Lrc { data, .. } => data.to_string(),
+        SubtitleFile::Lrc { data, .. } => data.render(),
         _ => crate::lrc::to_string(subs),
       },
       #[cfg(feature = "sami")]
@@ -242,7 +242,13 @@ impl SubtitleFormat for SubtitleFile {
       #[cfg(feature = "mpl2")]
       Format::Mpl2 => crate::mpl2::to_string(subs, None),
       #[cfg(feature = "scc")]
-      Format::Scc => crate::scc::to_string(subs),
+      Format::Scc => {
+        let drop_frame = match self {
+          SubtitleFile::Scc(data) => data.drop_frame,
+          _ => true,
+        };
+        crate::scc::to_string(subs, drop_frame)
+      }
       #[cfg(feature = "ebu_stl")]
       Format::EbuStl => String::from_utf8_lossy(&crate::ebu_stl::to_string(subs)).to_string(),
     }

@@ -24,20 +24,23 @@ pub fn frames_to_ms(frames: u64, fps: f64) -> u64 {
 pub fn split_text_chunks(text: &str, max_chars: usize) -> Vec<String> {
   let mut chunks = Vec::new();
   let words: Vec<&str> = text.split_whitespace().collect();
-  let mut current = String::new();
+  let mut current = String::with_capacity(max_chars);
 
   for word in words {
-    let test = if current.is_empty() {
-      word.to_string()
+    let needed = if current.is_empty() {
+      word.len()
     } else {
-      format!("{} {}", current, word)
+      current.len() + 1 + word.len()
     };
 
-    if test.chars().count() > max_chars && !current.is_empty() {
+    if needed > max_chars && !current.is_empty() {
       chunks.push(std::mem::take(&mut current));
       current.push_str(word);
     } else {
-      current = test;
+      if !current.is_empty() {
+        current.push(' ');
+      }
+      current.push_str(word);
     }
   }
 

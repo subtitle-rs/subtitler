@@ -47,7 +47,7 @@ fn main() -> anyhow::Result<()> {
   }
 
   // Generate MPL2 output
-  let output = mpl2_data.to_string();
+  let output = mpl2_data.render();
 
   println!("\n=== Generated MPL2 Content ===\n");
   println!("{}", output);
@@ -63,7 +63,7 @@ fn main() -> anyhow::Result<()> {
     subtitles,
   };
 
-  let output_25fps = mpl2_25fps.to_string();
+  let output_25fps = mpl2_25fps.render();
   println!("{}", output_25fps);
 
   std::fs::write("output_25fps.mpl", &output_25fps)?;

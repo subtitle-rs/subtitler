@@ -240,9 +240,49 @@ This release marks the first stable version with unified architecture, complete 
 
 - `MIGRATION.md` for a 0.1 → 1.0 upgrade guide.
 
-## [Unreleased]
+## [Unreleased] — v2.0.0
 
-## [0.1.0] - 2026-07-15
+### Breaking Changes
+
+- All format modules (`srt`, `vtt`, `ass`, `ttml`, `sbv`, `lrc`, `sami`,
+  `microdvd`, `subviewer`, `mpl2`, `scc`, `ebu_stl`) now consistently return
+  `SubtitleFile` from `parse_content` / `parse_bytes` / `parse_file` / `parse_url`.
+  Previously some modules returned `Vec<Subtitle>`.
+- `utils::parse_timestamp` and `utils::parse_timestamps` now require a `Format`
+  parameter for format-specific error messages.
+- `encoding::decode_to_string` returns `Result<_, SubtitleError>` instead of
+  `anyhow::Result`.
+- `LrcData::to_string`, `SamiData::to_string`, `Mpl2Data::to_string`,
+  `SccData::to_string` renamed to `render()` (avoid shadowing `std::ToString`).
+- `SCC::to_string` now accepts `drop_frame: bool` parameter.
+
+### Added
+
+- Structured `SubtitleError` enum (11 variants) replacing `anyhow!()` macros
+  in all format internals. Format-aware error messages with `format` context.
+- `SubtitleFile` now derives `Deserialize` / `Serialize` for all variants.
+- `LrcData` strong type with `LrcLine` structs preserving multi-timestamp fidelity.
+- EBU STL `detect_format` strengthened: validates TTI block count matches
+  header metadata in addition to size/structure checks.
+
+### Changed
+
+- `model.rs` split into `model/` sub-modules: `format.rs`, `trait.rs`,
+  `subtitle.rs`, `types.rs`, `convert.rs`, `builder.rs`, `streaming.rs`,
+  `validation.rs`, `mod.rs`.
+- `main.rs` format dispatch simplified: all arms delegate directly to
+  `format::parse_content`, removing duplicate `SubtitleFile` construction.
+- `split_text_chunks` optimized: avoids O(n²) intermediate `format!()`
+  allocations by pre-allocating `String::with_capacity` and byte-counting.
+
+### Fixed
+
+- SCC `to_string` no longer hardcodes `drop_frame: true`; inherited from
+  parsed input for round-trip correctness.
+- Removed EBU STL `tti_timecode_to_ms` no-op function (timecode values are
+  already in milliseconds from `parse_smpte_timecode`).
+
+## [1.4.0] - 2026-07-15
 
 ### Performance
 

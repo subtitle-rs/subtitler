@@ -71,8 +71,7 @@ impl Mpl2Data {
   }
 
   /// Serialize back to MPL2 format.
-  #[allow(clippy::inherent_to_string)]
-  pub fn to_string(&self) -> String {
+  pub fn render(&self) -> String {
     let mut buf = String::new();
 
     for sub in &self.subtitles {
@@ -140,7 +139,7 @@ pub fn to_string(subtitles: &[Subtitle], fps: Option<f64>) -> String {
     fps: fps.unwrap_or(DEFAULT_FPS),
     subtitles: subtitles.to_vec(),
   };
-  data.to_string()
+  data.render()
 }
 
 pub struct Mpl2Stream<'a> {

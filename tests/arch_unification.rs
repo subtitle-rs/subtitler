@@ -154,7 +154,7 @@ fn lrc_multi_timestamp_round_trip() {
   assert_eq!(subs[1].end, 35000);
 
   // Round-trip: serialize back, each cue becomes its own LRC line
-  let output = data.to_string();
+  let output = data.render();
   assert!(output.contains("[00:10.00]"));
   assert!(output.contains("[00:30.00]"));
 }
