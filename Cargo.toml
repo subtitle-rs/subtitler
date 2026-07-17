@@ -7,7 +7,7 @@ categories = [
   "multimedia",
   "parser-implementations",
 ] 
-description = "Parse, convert, validate, edit, and generate subtitles in 12 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC). Full CLI included." 
+description = "Parse, convert, validate, edit, and generate subtitles in 13 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL). Full CLI included." 
 documentation = "https://docs.rs/subtitler" 
 edition = "2024" 
 keywords = [
@@ -23,7 +23,7 @@ publish = true
 readme = "README.md" 
 repository = "https://github.com/subtitle-rs/subtitler" 
 rust-version = "1.85"
-version = "1.3.0" 
+version = "1.4.0" 
 
 include = [
   "Cargo.toml",
@@ -59,7 +59,7 @@ criterion = "0.8"
 proptest = "1.5"
 
 [features]
-default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "http"]
+default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "http"]
 
 srt = []
 vtt = []
@@ -73,6 +73,7 @@ lrc = []
 sami = []
 mpl2 = []
 scc = []
+ebu_stl = []
 http = ["reqwest"]
 
 [profile.release]

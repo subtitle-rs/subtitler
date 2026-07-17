@@ -6,7 +6,11 @@ use clap::Parser;
 use cli::{Commands, Format as CliFormat};
 #[cfg(feature = "ass")]
 use subtitler::ass;
+#[cfg(feature = "ebu_stl")]
+use subtitler::ebu_stl;
 use subtitler::model::{Format, SubtitleFile, SubtitleFormat};
+#[cfg(feature = "scc")]
+use subtitler::scc;
 #[cfg(feature = "srt")]
 use subtitler::srt;
 #[cfg(feature = "vtt")]
@@ -96,6 +100,8 @@ fn resolve_format(data: &[u8], hint: Option<CliFormat>) -> Option<CliFormat> {
     Some(Format::Mpl2) => Some(CliFormat::Mpl2),
     #[cfg(feature = "scc")]
     Some(Format::Scc) => Some(CliFormat::Scc),
+    #[cfg(feature = "ebu_stl")]
+    Some(Format::EbuStl) => Some(CliFormat::EbuStl),
     None => None,
   }
 }
@@ -159,7 +165,9 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
       subtitler::mpl2::parse_content(&text)?.subtitles().to_vec(),
     )),
     #[cfg(feature = "scc")]
-    CliFormat::Scc => subtitler::scc::parse_content(&text),
+    CliFormat::Scc => scc::parse_content(&text),
+    #[cfg(feature = "ebu_stl")]
+    CliFormat::EbuStl => ebu_stl::parse_content(&data),
   }
 }
 
@@ -207,6 +215,8 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     CliFormat::Scc => subtitler::scc::parse_content(&content)?
       .subtitles()
       .to_vec(),
+    #[cfg(feature = "ebu_stl")]
+    CliFormat::EbuStl => subtitler::ebu_stl::parse_bytes(&data)?.subtitles().to_vec(),
   };
 
   if args.json {
@@ -345,6 +355,8 @@ fn format_to_subtitle_format(f: &CliFormat) -> Format {
     CliFormat::Mpl2 => Format::Mpl2,
     #[cfg(feature = "scc")]
     CliFormat::Scc => Format::Scc,
+    #[cfg(feature = "ebu_stl")]
+    CliFormat::EbuStl => Format::EbuStl,
   }
 }
 
@@ -478,6 +490,8 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
     Some(Format::Mpl2) => println!("mpl2"),
     #[cfg(feature = "scc")]
     Some(Format::Scc) => println!("scc"),
+    #[cfg(feature = "ebu_stl")]
+    Some(Format::EbuStl) => println!("ebu_stl"),
     None => {
       eprintln!("Unknown format");
       std::process::exit(1);

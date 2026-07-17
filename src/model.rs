@@ -255,6 +255,8 @@ pub enum Format {
   Mpl2,
   #[cfg(feature = "scc")]
   Scc,
+  #[cfg(feature = "ebu_stl")]
+  EbuStl,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -437,6 +439,11 @@ pub enum SubtitleFile {
   /// CEA-608 closed caption format for broadcast television.
   #[cfg(feature = "scc")]
   Scc(crate::scc::SccData),
+
+  /// EBU STL (Standard Transmission Format) format (`.stl`).
+  /// Professional broadcast-grade binary format from European Broadcasting Union.
+  #[cfg(feature = "ebu_stl")]
+  EbuStl(crate::ebu_stl::EbuStlData),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -839,6 +846,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Mpl2(subs) => subs,
       #[cfg(feature = "scc")]
       SubtitleFile::Scc(data) => &data.subtitles,
+      #[cfg(feature = "ebu_stl")]
+      SubtitleFile::EbuStl(data) => &data.subtitles,
     }
   }
 
@@ -876,6 +885,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Mpl2(subs) => subs,
       #[cfg(feature = "scc")]
       SubtitleFile::Scc(data) => &mut data.subtitles,
+      #[cfg(feature = "ebu_stl")]
+      SubtitleFile::EbuStl(data) => &mut data.subtitles,
     }
   }
 
@@ -905,6 +916,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Mpl2(_) => Format::Mpl2,
       #[cfg(feature = "scc")]
       SubtitleFile::Scc(_) => Format::Scc,
+      #[cfg(feature = "ebu_stl")]
+      SubtitleFile::EbuStl(_) => Format::EbuStl,
     }
   }
 
@@ -967,6 +980,8 @@ impl SubtitleFormat for SubtitleFile {
       Format::Mpl2 => crate::mpl2::to_string(subs, None),
       #[cfg(feature = "scc")]
       Format::Scc => crate::scc::to_string(subs),
+      #[cfg(feature = "ebu_stl")]
+      Format::EbuStl => String::from_utf8_lossy(&crate::ebu_stl::to_string(subs)).to_string(),
     }
   }
 }
@@ -1192,6 +1207,32 @@ impl SubtitleFileBuilder {
         drop_frame: true,
         subtitles: self.subtitles,
       })),
+
+      #[cfg(feature = "ebu_stl")]
+      Format::EbuStl => {
+        let tti_blocks: Vec<crate::ebu_stl::TtiBlock> = self
+          .subtitles
+          .iter()
+          .enumerate()
+          .map(|(i, sub)| crate::ebu_stl::TtiBlock {
+            subtitle_group: 0,
+            subtitle_number: (i + 1) as u16,
+            extension_block: 0,
+            cumulative_status: 0,
+            timecode_start: (sub.start / 40) as u32,
+            timecode_end: (sub.end / 40) as u32,
+            vertical_position: 20,
+            justification: 0,
+            comment_flag: false,
+            text: sub.text.clone(),
+          })
+          .collect();
+        Some(SubtitleFile::EbuStl(crate::ebu_stl::EbuStlData {
+          gsi: crate::ebu_stl::GsiBlock::default(),
+          subtitles: self.subtitles,
+          tti_blocks,
+        }))
+      }
     }
   }
 }

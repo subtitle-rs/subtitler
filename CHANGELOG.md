@@ -4,6 +4,42 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-07-17
+
+### Added
+
+#### New Format Support
+- **SCC format (.scc)**: Scenarist Closed Caption format
+  - CEA-608 standard for broadcast closed captions
+  - SMPTE timecode format (HH:MM:SS;FF or HH:MM:SS:FF)
+  - Drop-frame and non-drop-frame timecode support
+  - Default 29.97 fps (NTSC)
+  - Hex-encoded caption data decoding
+  - Streaming parser (SccStream)
+  - Widely used in US broadcast television
+
+- **EBU STL format (.stl)**: European Broadcasting Union Standard Transmission Format
+  - Professional broadcast-grade binary format
+  - GSI (General Subtitle Information) block: 1024-byte file header
+  - TTI (Text and Timing Information) blocks: 128-byte subtitle entries
+  - SMPTE timecode format (HH:MM:SS:FF)
+  - Multi-language subtitle support
+  - Rich metadata (program title, language, creator info, etc.)
+  - Binary parsing with precise timing
+  - Standard in European broadcast industry
+
+#### Format Support Summary
+- Format support expanded from 11 to 13 formats
+- Total test count: 216 tests (124 unit + 92 integration)
+- Support matrix:
+  - Web: SRT, VTT, TTML, SAMI
+  - Video editing: ASS, SSA
+  - DVD: MicroDVD, SubViewer
+  - Broadcast: SCC, EBU STL
+  - YouTube: SBV
+  - Karaoke: LRC
+  - Eastern Europe: MPL2
+
 ## [1.3.0] - 2026-07-17
 
 ### Added

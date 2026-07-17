@@ -193,7 +193,10 @@ fn ms_to_scc_timecode(ms: u64, fps: f64, drop_frame: bool) -> String {
 
   let separator = if drop_frame { ";" } else { ":" };
 
-  format!("{:02}:{:02}:{:02}{}{:02}", hours, minutes, seconds, separator, frames)
+  format!(
+    "{:02}:{:02}:{:02}{}{:02}",
+    hours, minutes, seconds, separator, frames
+  )
 }
 
 /// Decode SCC hexadecimal data to text.
@@ -442,7 +445,11 @@ mod tests {
     if let SubtitleFile::Scc(data) = file {
       // Should parse at least one subtitle
       // Even if decoding is incomplete, the structure should be valid
-      assert!(data.subtitles.len() >= 0, "Parsed {} subtitles", data.subtitles.len());
+      assert!(
+        data.subtitles.len() >= 0,
+        "Parsed {} subtitles",
+        data.subtitles.len()
+      );
       assert!(data.drop_frame);
       assert_eq!(data.fps, DEFAULT_FPS);
     } else {

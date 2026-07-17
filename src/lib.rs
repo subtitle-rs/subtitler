@@ -1,6 +1,8 @@
 #[cfg(feature = "ass")]
 pub mod ass;
 pub mod config;
+#[cfg(feature = "ebu_stl")]
+pub mod ebu_stl;
 pub mod encoding;
 pub mod error;
 #[cfg(feature = "lrc")]
@@ -63,6 +65,8 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| mpl2::detect_format(data));
   #[cfg(feature = "scc")]
   let f = f.or_else(|| scc::detect_format(data));
+  #[cfg(feature = "ebu_stl")]
+  let f = f.or_else(|| ebu_stl::detect_format(data));
   f
 }
 
@@ -117,6 +121,8 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     Format::Mpl2 => Ok(model::SubtitleFile::Mpl2(mpl2::parse_bytes(data)?)),
     #[cfg(feature = "scc")]
     Format::Scc => Ok(scc::parse_bytes(data)?),
+    #[cfg(feature = "ebu_stl")]
+    Format::EbuStl => Ok(ebu_stl::parse_bytes(data)?),
     #[allow(unreachable_patterns)]
     _ => Err(error::ParseError::Unsupported(fmt)),
   }
