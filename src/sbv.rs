@@ -5,6 +5,7 @@
 use crate::model::Subtitle;
 use crate::types::AnyResult;
 use crate::utils::parse_timestamp;
+use tokio::io::AsyncWriteExt;
 
 /// Parse SBV content into a vector of subtitles.
 pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
@@ -155,6 +156,23 @@ fn parse_sbv_line(line: &str) -> Result<Subtitle, anyhow::Error> {
   let end = crate::utils::parse_timestamp(&t2_fixed)?;
   Ok(Subtitle::new(start, end, text.trim()))
 }
+
+/// Write SBV subtitles to an async writer streamingly.
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  subtitles: &[Subtitle],
+  writer: &mut W,
+) -> AnyResult<()> {
+  for sub in subtitles {
+    let start = format_sbv_time(sub.start);
+    let end = format_sbv_time(sub.end);
+    writer
+      .write_all(format!("{},{},{}\n", start, end, sub.text).as_bytes())
+      .await?;
+  }
+  writer.flush().await?;
+  Ok(())
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

@@ -9,6 +9,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::LazyLock;
+use tokio::io::AsyncWriteExt;
 
 static RE_LRC_LINE: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"\[(\d{1,3}):(\d{1,2})\.(\d{1,3})\]").unwrap());
@@ -225,6 +226,24 @@ impl<'a> Iterator for LrcStream<'a> {
 }
 
 impl<'a> crate::model::StreamingParser for LrcStream<'a> {}
+
+/// Write LRC lyrics to an async writer streamingly.
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  subtitles: &[Subtitle],
+  writer: &mut W,
+) -> AnyResult<()> {
+  for sub in subtitles {
+    let total_seconds = sub.start / 1000;
+    let minutes = total_seconds / 60;
+    let seconds = total_seconds % 60;
+    let cs = (sub.start % 1000) / 10;
+    writer
+      .write_all(format!("[{:02}:{:02}.{:02}]{}\n", minutes, seconds, cs, sub.text).as_bytes())
+      .await?;
+  }
+  writer.flush().await?;
+  Ok(())
+}
 
 #[cfg(test)]
 mod tests {

@@ -48,14 +48,9 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
       if !segment.is_empty() {
         plain.push_str(segment);
         if bold || italic || underline || color.is_some() {
-          parts.push(TextPart {
-            text: segment.to_string(),
-            bold,
-            italic,
-            underline,
-            color: color.clone(),
-            voice: None,
-          });
+          let mut part = TextPart::new(segment, bold, italic, underline);
+          part.color = color.clone();
+          parts.push(part);
         }
       }
     }
@@ -90,14 +85,9 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
     let segment = &text[last_end..];
     plain.push_str(segment);
     if bold || italic || underline || color.is_some() {
-      parts.push(TextPart {
-        text: segment.to_string(),
-        bold,
-        italic,
-        underline,
-        color: color.clone(),
-        voice: None,
-      });
+      let mut part = TextPart::new(segment, bold, italic, underline);
+      part.color = color.clone();
+      parts.push(part);
     }
   }
 
@@ -418,6 +408,27 @@ pub async fn generate(
   Ok(path.to_string_lossy().into_owned())
 }
 
+/// Write subtitles to an async writer streamingly (no full-string allocation).
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  subtitles: &[Subtitle],
+  writer: &mut W,
+) -> AnyResult<()> {
+  for (i, sub) in subtitles.iter().enumerate() {
+    let index = sub.index.unwrap_or(i + 1);
+    let start = format_timestamp(sub.start, "SRT");
+    let end = format_timestamp(sub.end, "SRT");
+
+    writer.write_all(format!("{}\n", index).as_bytes()).await?;
+    writer
+      .write_all(format!("{} --> {}\n", start, end).as_bytes())
+      .await?;
+    writer.write_all(sub.text.as_bytes()).await?;
+    writer.write_all(b"\n\n").await?;
+  }
+  writer.flush().await?;
+  Ok(())
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -516,7 +527,7 @@ mod tests {
     let result = parse_content(content).unwrap();
     assert_eq!(result[0].text, "Bold text");
     assert_eq!(result[0].text_parts.len(), 1);
-    assert!(result[0].text_parts[0].bold);
+    assert!(result[0].text_parts[0].bold());
     assert_eq!(result[0].text_parts[0].text, "Bold text");
   }
 
@@ -526,7 +537,7 @@ mod tests {
     let result = parse_content(content).unwrap();
     assert_eq!(result[0].text, "Italic plain");
     assert_eq!(result[0].text_parts.len(), 1);
-    assert!(result[0].text_parts[0].italic);
+    assert!(result[0].text_parts[0].italic());
     assert_eq!(result[0].text_parts[0].text, "Italic");
   }
 
@@ -534,7 +545,7 @@ mod tests {
   fn test_parse_underline_tag() {
     let content = "1\n00:00:01,000 --> 00:00:03,500\n<u>underline</u>\n\n";
     let result = parse_content(content).unwrap();
-    assert!(result[0].text_parts[0].underline);
+    assert!(result[0].text_parts[0].underline());
   }
 
   #[test]
@@ -593,5 +604,23 @@ mod tests {
     assert_eq!(results[0].start, 1000);
     assert_eq!(results[0].text, "Hello!");
     assert_eq!(results[1].text, "World!");
+  }
+
+  #[tokio::test]
+  async fn test_write_stream() {
+    let subtitles = vec![
+      make_subtitle(1, 1000, 3500, "Hello!"),
+      make_subtitle(2, 4000, 6500, "World!"),
+    ];
+
+    let mut buffer = Vec::new();
+    write_stream(&subtitles, &mut buffer).await.unwrap();
+    let output = String::from_utf8(buffer).unwrap();
+
+    assert!(output.contains("1\n"));
+    assert!(output.contains("00:00:01,000 --> 00:00:03,500"));
+    assert!(output.contains("Hello!"));
+    assert!(output.contains("2\n"));
+    assert!(output.contains("World!"));
   }
 }

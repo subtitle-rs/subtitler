@@ -49,14 +49,9 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
       if !segment.is_empty() {
         plain.push_str(segment);
         if bold || italic || underline || voice.is_some() {
-          parts.push(TextPart {
-            text: segment.to_string(),
-            bold,
-            italic,
-            underline,
-            color: None,
-            voice: voice.clone(),
-          });
+          let mut part = TextPart::new(segment, bold, italic, underline);
+          part.voice = voice.clone();
+          parts.push(part);
         }
       }
     }
@@ -86,14 +81,9 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
     let segment = &text[last_end..];
     plain.push_str(segment);
     if bold || italic || underline || voice.is_some() {
-      parts.push(TextPart {
-        text: segment.to_string(),
-        bold,
-        italic,
-        underline,
-        color: None,
-        voice: voice.clone(),
-      });
+      let mut part = TextPart::new(segment, bold, italic, underline);
+      part.voice = voice.clone();
+      parts.push(part);
     }
   }
 
@@ -314,6 +304,39 @@ pub async fn generate(
   Ok(path.to_string_lossy().into_owned())
 }
 
+/// Write subtitles to an async writer streamingly (no full-string allocation).
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  subtitles: &[Subtitle],
+  header: Option<&str>,
+  writer: &mut W,
+) -> AnyResult<()> {
+  // Write WEBVTT header
+  match header {
+    Some(h) => {
+      writer.write_all(h.as_bytes()).await?;
+      writer.write_all(b"\n\n").await?;
+    }
+    None => {
+      writer.write_all(b"WEBVTT\n\n").await?;
+    }
+  }
+
+  for (i, sub) in subtitles.iter().enumerate() {
+    let index = sub.index.unwrap_or(i + 1);
+    let start = format_timestamp(sub.start, "WebVTT");
+    let end = format_timestamp(sub.end, "WebVTT");
+
+    writer.write_all(format!("{}\n", index).as_bytes()).await?;
+    writer
+      .write_all(format!("{} --> {}\n", start, end).as_bytes())
+      .await?;
+    writer.write_all(sub.text.as_bytes()).await?;
+    writer.write_all(b"\n\n").await?;
+  }
+  writer.flush().await?;
+  Ok(())
+}
+
 pub struct VttStream<'a> {
   lines: std::str::Lines<'a>,
   phase: u8,
@@ -486,7 +509,7 @@ mod tests {
   fn test_parse_bold_tag() {
     let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\n<b>bold</b>\n\n";
     let result = parse_content(content).unwrap();
-    assert!(result[0].text_parts[0].bold);
+    assert!(result[0].text_parts[0].bold());
   }
 
   #[test]

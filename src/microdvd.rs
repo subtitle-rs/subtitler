@@ -3,6 +3,7 @@ use crate::types::AnyResult;
 use anyhow::anyhow;
 use regex::Regex;
 use std::sync::LazyLock;
+use tokio::io::AsyncWriteExt;
 
 static RE_MICRODVD: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"\{(\d+)\}\{(\d+)\}(.*)").unwrap());
@@ -161,6 +162,25 @@ impl<'a> Iterator for MicroDvdStream<'a> {
 }
 
 impl<'a> crate::model::StreamingParser for MicroDvdStream<'a> {}
+
+/// Write MicroDVD subtitles to an async writer streamingly.
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  subtitles: &[Subtitle],
+  fps: Option<f64>,
+  writer: &mut W,
+) -> AnyResult<()> {
+  let fps = fps.unwrap_or(23.976);
+
+  for sub in subtitles {
+    let start_frame = ms_to_frames(sub.start, fps);
+    let end_frame = ms_to_frames(sub.end, fps);
+    writer
+      .write_all(format!("{{{}}}{{{}}}{}\n", start_frame, end_frame, sub.text).as_bytes())
+      .await?;
+  }
+  writer.flush().await?;
+  Ok(())
+}
 
 #[cfg(test)]
 mod tests {

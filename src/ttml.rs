@@ -138,14 +138,9 @@ pub fn parse_content(content: &str) -> AnyResult<Vec<Subtitle>> {
           let segment = text.to_string();
           current_text.push_str(&segment);
           if in_span || span_bold || span_italic || span_color.is_some() {
-            parts.push(TextPart {
-              text: segment,
-              bold: span_bold,
-              italic: span_italic,
-              underline: false,
-              color: span_color.clone(),
-              voice: None,
-            });
+            let mut part = TextPart::new(&segment, span_bold, span_italic, false);
+            part.color = span_color.clone();
+            parts.push(part);
           }
         }
       }
@@ -243,7 +238,7 @@ pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
       let _ = writer.write_event(Event::Text(BytesText::new(&sub.text)));
     } else {
       for part in &sub.text_parts {
-        if part.color.is_some() || part.bold || part.italic || part.underline {
+        if part.color.is_some() || part.bold() || part.italic() || part.underline() {
           let mut span = BytesStart::new("span");
           if let Some(ref color) = part.color {
             span.push_attribute(("tts:color", color.as_str()));
@@ -269,6 +264,56 @@ pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
     eprintln!("warning: TTML writer produced invalid UTF-8: {}", e);
     String::new()
   })
+}
+
+/// Write TTML subtitles to a synchronous writer streamingly.
+/// Note: TTML uses quick-xml which requires std::io::Write, not AsyncWrite.
+pub fn write_stream<W: std::io::Write>(subtitles: &[Subtitle], writer: &mut W) -> AnyResult<()> {
+  let mut xml_writer = Writer::new_with_indent(writer, b' ', 2);
+
+  xml_writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
+  let tt = BytesStart::new("tt").with_attributes([
+    ("xmlns", "http://www.w3.org/ns/ttml"),
+    ("xmlns:tts", "http://www.w3.org/ns/ttml#styling"),
+    ("xml:lang", "en"),
+  ]);
+  xml_writer.write_event(Event::Start(tt))?;
+  xml_writer.write_event(Event::Start(BytesStart::new("body")))?;
+  xml_writer.write_event(Event::Start(BytesStart::new("div")))?;
+
+  for sub in subtitles {
+    let start = crate::utils::format_timestamp(sub.start, "WebVTT");
+    let end = crate::utils::format_timestamp(sub.end, "WebVTT");
+
+    let p =
+      BytesStart::new("p").with_attributes([("begin", start.as_str()), ("end", end.as_str())]);
+    xml_writer.write_event(Event::Start(p))?;
+
+    if sub.text_parts.is_empty() {
+      xml_writer.write_event(Event::Text(BytesText::new(&sub.text)))?;
+    } else {
+      for part in &sub.text_parts {
+        if part.color.is_some() || part.bold() || part.italic() || part.underline() {
+          let mut span = BytesStart::new("span");
+          if let Some(ref color) = part.color {
+            span.push_attribute(("tts:color", color.as_str()));
+          }
+          xml_writer.write_event(Event::Start(span))?;
+          xml_writer.write_event(Event::Text(BytesText::new(&part.text)))?;
+          xml_writer.write_event(Event::End(BytesEnd::new("span")))?;
+        } else {
+          xml_writer.write_event(Event::Text(BytesText::new(&part.text)))?;
+        }
+      }
+    }
+    xml_writer.write_event(Event::End(BytesEnd::new("p")))?;
+  }
+
+  xml_writer.write_event(Event::End(BytesEnd::new("div")))?;
+  xml_writer.write_event(Event::End(BytesEnd::new("body")))?;
+  xml_writer.write_event(Event::End(BytesEnd::new("tt")))?;
+
+  Ok(())
 }
 
 #[cfg(test)]
@@ -351,8 +396,8 @@ mod tests {
     let subs = parse_content(xml).unwrap();
     assert_eq!(subs.len(), 1);
     assert_eq!(subs[0].text_parts.len(), 1);
-    assert!(subs[0].text_parts[0].italic);
-    assert!(subs[0].text_parts[0].bold);
+    assert!(subs[0].text_parts[0].italic());
+    assert!(subs[0].text_parts[0].bold());
   }
 
   #[test]

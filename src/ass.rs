@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use tokio::io::AsyncWriteExt;
 
 static RE_DIALOGUE: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"^(?:Dialogue|Comment):\s*(?:\d+,)?(\d+):(\d+):(\d+)[,.](\d+),(\d+):(\d+):(\d+)[,.](\d+),(?:([^,]*),)?(?:([^,]*),)?(?:(-?\d+),)?(?:(-?\d+),)?(?:(-?\d+),)?(?:([^,]*),)?(?:(\{.*\})?,)?(.+)$").unwrap()
@@ -302,14 +303,10 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
     }
 
     if !current.is_empty() {
-      parts.push(crate::model::TextPart {
-        text: std::mem::take(&mut current),
-        bold,
-        italic,
-        underline,
-        color: color.clone(),
-        voice: None,
-      });
+      let mut part =
+        crate::model::TextPart::new(std::mem::take(&mut current), bold, italic, underline);
+      part.color = color.clone();
+      parts.push(part);
     }
 
     let tag_content = &caps[1];
@@ -349,14 +346,9 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
   }
 
   if !current.is_empty() {
-    parts.push(crate::model::TextPart {
-      text: current,
-      bold,
-      italic,
-      underline,
-      color: color.clone(),
-      voice: None,
-    });
+    let mut part = crate::model::TextPart::new(current, bold, italic, underline);
+    part.color = color.clone();
+    parts.push(part);
   }
 
   parts
@@ -381,6 +373,91 @@ fn format_ass_timestamp(ms: u64) -> String {
     "{}:{:02}:{:02}.{:02}",
     hours, minutes, seconds, centiseconds
   )
+}
+
+/// Write ASS/SSA subtitles to an async writer streamingly.
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  info: &HashMap<String, String>,
+  styles: &[AssStyle],
+  subtitles: &[Subtitle],
+  writer: &mut W,
+) -> AnyResult<()> {
+  // Write [Script Info]
+  writer.write_all(b"[Script Info]\n").await?;
+  if info.is_empty() {
+    writer.write_all(b"Title: <untitled>\n").await?;
+    writer.write_all(b"ScriptType: v4.00+\n").await?;
+    writer.write_all(b"PlayResX: 384\n").await?;
+    writer.write_all(b"PlayResY: 288\n").await?;
+    writer.write_all(b"WrapStyle: 0\n").await?;
+  } else {
+    for (key, value) in info {
+      writer
+        .write_all(format!("{}: {}\n", key, value).as_bytes())
+        .await?;
+    }
+  }
+  writer.write_all(b"\n").await?;
+
+  // Write [V4+ Styles]
+  writer.write_all(b"[V4+ Styles]\n").await?;
+  writer.write_all(b"Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n").await?;
+  for style in styles {
+    let line = format!(
+      "Style: {},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+      style.name,
+      style.fontname,
+      style.fontsize,
+      format_ass_color(&style.primary_color),
+      format_ass_color(&style.secondary_color),
+      format_ass_color(&style.outline_color),
+      format_ass_color(&style.back_color),
+      if style.bold { -1 } else { 0 },
+      if style.italic { -1 } else { 0 },
+      if style.underline { -1 } else { 0 },
+      if style.strikeout { -1 } else { 0 },
+      style.scale_x,
+      style.scale_y,
+      style.spacing,
+      style.angle,
+      style.border_style,
+      style.outline,
+      style.shadow,
+      style.alignment,
+      style.margin_l,
+      style.margin_r,
+      style.margin_v,
+      style.encoding,
+    );
+    writer.write_all(line.as_bytes()).await?;
+  }
+  writer.write_all(b"\n").await?;
+
+  // Write [Events]
+  writer.write_all(b"[Events]\n").await?;
+  writer
+    .write_all(b"Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+    .await?;
+  for sub in subtitles {
+    let start = format_ass_timestamp(sub.start);
+    let end = format_ass_timestamp(sub.end);
+    let style = sub.style.as_deref().unwrap_or("Default");
+    let actor = sub.actor.as_deref().unwrap_or("");
+    let layer = 0;
+    let line_type = if sub.is_comment {
+      "Comment"
+    } else {
+      "Dialogue"
+    };
+    let line = format!(
+      "{}: {},{},{},{},{},0,0,0,,{}\n",
+      line_type, layer, start, end, style, actor, sub.text
+    );
+    writer.write_all(line.as_bytes()).await?;
+  }
+
+  writer.flush().await?;
+  Ok(())
 }
 
 #[cfg(test)]

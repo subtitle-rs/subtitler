@@ -38,10 +38,11 @@ include = [
 ]
 
 [dependencies]
-encoding_rs = "0.8"
 anyhow = "1"
+bitflags = { version = "2", features = ["serde"] }
 chardetng = "1"
 clap = {version = "4", features = ["derive"]}
+encoding_rs = "0.8"
 quick-xml = {version = "0.41", optional = true}
 regex = "1"
 reqwest = {version = "0.13", optional = true, default-features = false, features = ["rustls"]}

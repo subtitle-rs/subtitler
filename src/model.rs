@@ -6,6 +6,20 @@ use std::sync::LazyLock;
 
 use crate::types::AnyResult;
 
+bitflags::bitflags! {
+  /// Text formatting flags for TextPart.
+  ///
+  /// Uses a single byte to represent bold/italic/underline, saving 2-7 bytes
+  /// per TextPart compared to three separate bool fields.
+  #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+  #[serde(transparent)]
+  pub struct TextFormat: u8 {
+    const BOLD = 0b00000001;
+    const ITALIC = 0b00000010;
+    const UNDERLINE = 0b00000100;
+  }
+}
+
 /// Policy for writing subtitle output files.
 ///
 /// Passed to `generate()` functions in each format module.
@@ -140,12 +154,8 @@ impl Subtitle {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct TextPart {
   pub text: String,
-  #[serde(skip_serializing_if = "is_false", default)]
-  pub bold: bool,
-  #[serde(skip_serializing_if = "is_false", default)]
-  pub italic: bool,
-  #[serde(skip_serializing_if = "is_false", default)]
-  pub underline: bool,
+  #[serde(default)]
+  format: TextFormat,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub color: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -160,12 +170,54 @@ impl TextPart {
   pub fn plain(text: impl Into<String>) -> Self {
     TextPart {
       text: text.into(),
-      bold: false,
-      italic: false,
-      underline: false,
+      format: TextFormat::empty(),
       color: None,
       voice: None,
     }
+  }
+
+  /// Create a new TextPart with formatting flags.
+  pub fn new(text: impl Into<String>, bold: bool, italic: bool, underline: bool) -> Self {
+    let mut format = TextFormat::empty();
+    format.set(TextFormat::BOLD, bold);
+    format.set(TextFormat::ITALIC, italic);
+    format.set(TextFormat::UNDERLINE, underline);
+    TextPart {
+      text: text.into(),
+      format,
+      color: None,
+      voice: None,
+    }
+  }
+
+  /// Returns true if bold formatting is set.
+  pub fn bold(&self) -> bool {
+    self.format.contains(TextFormat::BOLD)
+  }
+
+  /// Returns true if italic formatting is set.
+  pub fn italic(&self) -> bool {
+    self.format.contains(TextFormat::ITALIC)
+  }
+
+  /// Returns true if underline formatting is set.
+  pub fn underline(&self) -> bool {
+    self.format.contains(TextFormat::UNDERLINE)
+  }
+
+  /// Set bold formatting.
+  pub fn set_bold(&mut self, value: bool) {
+    self.format.set(TextFormat::BOLD, value);
+  }
+
+  /// Set italic formatting.
+  pub fn set_italic(&mut self, value: bool) {
+    self.format.set(TextFormat::ITALIC, value);
+  }
+
+  /// Set underline formatting.
+  pub fn set_underline(&mut self, value: bool) {
+    self.format.set(TextFormat::UNDERLINE, value);
   }
 }
 

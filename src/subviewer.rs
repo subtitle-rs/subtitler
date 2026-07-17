@@ -3,6 +3,7 @@ use crate::types::AnyResult;
 use anyhow::anyhow;
 use regex::Regex;
 use std::sync::LazyLock;
+use tokio::io::AsyncWriteExt;
 
 static RE_SUBVIEWER_LINE: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"^(\d{1,2}:\d{2}:\d{2}\.\d{2}),(\d{1,2}:\d{2}:\d{2}\.\d{2})$").unwrap()
@@ -179,6 +180,36 @@ impl<'a> Iterator for SubViewerStream<'a> {
 }
 
 impl<'a> crate::model::StreamingParser for SubViewerStream<'a> {}
+
+/// Write SubViewer subtitles to an async writer streamingly.
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  subtitles: &[Subtitle],
+  header: Option<&str>,
+  writer: &mut W,
+) -> AnyResult<()> {
+  // Write header
+  match header {
+    Some(h) => {
+      writer.write_all(h.as_bytes()).await?;
+      writer.write_all(b"\n\n").await?;
+    }
+    None => {
+      writer.write_all(b"[INFORMATION]\n[TITLE]Subtitles\n[AUTHOR]subtitler\n[SOURCE]\n[FILEPATH]\n[DELAY]0\n[COMMENT]\n[END INFORMATION]\n[SUBTITLE]\n[COLF]&HFFFFFF,[STYLE]bd,[SIZE]18,[FONT]Arial\n\n").await?;
+    }
+  }
+
+  for sub in subtitles {
+    let start = format_subviewer_time(sub.start);
+    let end = format_subviewer_time(sub.end);
+    writer
+      .write_all(format!("{},{}\n", start, end).as_bytes())
+      .await?;
+    writer.write_all(sub.text.as_bytes()).await?;
+    writer.write_all(b"\n\n").await?;
+  }
+  writer.flush().await?;
+  Ok(())
+}
 
 #[cfg(test)]
 mod tests {
