@@ -147,6 +147,8 @@ subtitler = { version = "1.3", default-features = false, features = ["srt", "vtt
 | `lrc`        | Lyrics LRC (`.lrc`) | Song lyrics |
 | `sami`       | SAMI (`.smi`)    | Microsoft format, popular in Asia |
 | `mpl2`       | MPL2 (`.mpl`)    | Frame-based, popular in Eastern Europe |
+| `scc`        | SCC (`.scc`)     | CEA-608 closed captions, US broadcast |
+| `ebu_stl`    | EBU STL (`.stl`) | European broadcast binary format |
 | `http`       | `parse_url()` via `reqwest` | Network support |
 
 See `MIGRATION.md` for upgrading from 0.1.x.
