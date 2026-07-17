@@ -153,7 +153,9 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     #[cfg(feature = "sami")]
     CliFormat::Sami => subtitler::sami::parse_content(&text),
     #[cfg(feature = "mpl2")]
-    CliFormat::Mpl2 => Ok(SubtitleFile::Mpl2(subtitler::mpl2::parse_content(&text)?.subtitles().to_vec())),
+    CliFormat::Mpl2 => Ok(SubtitleFile::Mpl2(
+      subtitler::mpl2::parse_content(&text)?.subtitles().to_vec(),
+    )),
   }
 }
 
@@ -190,9 +192,13 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     #[cfg(feature = "lrc")]
     CliFormat::Lrc => subtitler::lrc::parse_content(&content)?,
     #[cfg(feature = "sami")]
-    CliFormat::Sami => subtitler::sami::parse_content(&content)?.subtitles().to_vec(),
+    CliFormat::Sami => subtitler::sami::parse_content(&content)?
+      .subtitles()
+      .to_vec(),
     #[cfg(feature = "mpl2")]
-    CliFormat::Mpl2 => subtitler::mpl2::parse_content(&content)?.subtitles().to_vec(),
+    CliFormat::Mpl2 => subtitler::mpl2::parse_content(&content)?
+      .subtitles()
+      .to_vec(),
   };
 
   if args.json {

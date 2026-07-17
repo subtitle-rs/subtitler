@@ -12,7 +12,7 @@
 //! cargo run --example parse-mpl2-content
 //! ```
 
-use subtitler::mpl2::{Mpl2Data, DEFAULT_FPS};
+use subtitler::mpl2::{DEFAULT_FPS, Mpl2Data};
 
 fn main() -> anyhow::Result<()> {
   let content = r#"[100][200]First subtitle line

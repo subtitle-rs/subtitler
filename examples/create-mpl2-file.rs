@@ -8,7 +8,7 @@
 //! ```
 
 use subtitler::model::Subtitle;
-use subtitler::mpl2::{Mpl2Data, DEFAULT_FPS};
+use subtitler::mpl2::{DEFAULT_FPS, Mpl2Data};
 
 fn main() -> anyhow::Result<()> {
   println!("=== Creating MPL2 File ===\n");
