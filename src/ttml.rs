@@ -318,8 +318,31 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   })
 }
 
+/// Stream TTML subtitles to an async writer.
+///
+/// Uses an internal in-memory buffer to bridge quick-xml's sync Writer
+/// to tokio's AsyncWrite (writes the whole document in one chunk).
+/// For true incremental streaming, a full async XML writer would be
+/// needed — deferred to 3.0.
+///
+/// Prefer this over `write_stream` (deprecated) for new code.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn write_stream_async<W>(subtitles: &[Subtitle], writer: &mut W) -> AnyResult<()>
+where
+  W: tokio::io::AsyncWrite + Unpin + Send,
+{
+  use tokio::io::AsyncWriteExt;
+  let mut buf = Vec::new();
+  #[allow(deprecated)]
+  write_stream(subtitles, &mut buf)?;
+  writer.write_all(&buf).await?;
+  writer.flush().await?;
+  Ok(())
+}
+
 /// Write TTML subtitles to a synchronous writer streamingly.
 /// Note: TTML uses quick-xml which requires std::io::Write, not AsyncWrite.
+#[deprecated(since = "2.2.0", note = "use write_stream_async instead")]
 pub fn write_stream<W: std::io::Write>(subtitles: &[Subtitle], writer: &mut W) -> AnyResult<()> {
   let mut xml_writer = Writer::new_with_indent(writer, b' ', 2);
 
