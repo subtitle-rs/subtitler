@@ -1002,14 +1002,19 @@ cargo build --examples                       # 示例仍工作
 ## 16. 路线图
 
 完整 spec: [docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md)。
+gap analysis: [docs/subtitler-vs-editingtools-gap-analysis.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/docs/subtitler-vs-editingtools-gap-analysis.md)。
 
 | 版本 | 状态 | 范围 |
 |------|------|------|
 | **2.0.1** | ✅ 已发布 | hotfix：clippy/CHANGELOG/README/Cargo.toml 文档对齐 |
 | **2.1.0** | ✅ 已发布 | 6 项 P1 正确性修复（SCC drop-frame、EBU STL round-trip、UTF-16 BOM、CLI 二进制、split_long、main.rs unwrap）+ dependabot。13 新测试，总 286 |
-| **2.2** | ✅ 已发布 | API 拉齐：13 格式补 generate/parse_stream/write_stream + TTML write_stream_async + header 保留。新增 5 编译期 API 一致性测试，总 293 |
-| **2.3** | ⏳ 待开始 | 测试/CI 大补：WASM 测试、cross-format 矩阵、CI 加 WASM/MSRV/clippy 矩阵、CODE_WIKI 深度更新 |
-| **3.0** | ⏳ 待开始 | 综合前进：IMSC/CEA-708/SMPTE-TT + AI 集成（translate CLI + LLM 适配器）+ zero-copy + npm/PyO3/C 绑定 |
+| **2.2.0** | ✅ 已发布 | API 拉齐：13 格式补 generate/parse_stream/write_stream + TTML write_stream_async + header 保留。7 新测试，总 293 |
+| **2.3.0** | ✅ 已发布 | 测试/CI 夯实：WASM 测试、cross-format 矩阵 23 对、proptest 扩展、chardetng fixture、CI WASM/MSRV/clippy-matrix/bench jobs。32 新测试，总 325 |
+| **2.4** | ⏳ 待开始 | gap analysis P1 收编：DFXP + Whisper JSON + 去重 PipelineOp + normalize 4 扩展 |
+| **3.0** | ⏳ 待开始 | 综合前进（瘦身后）：AI 翻译 3 适配器 + npm/PyO3/C 绑定 + IMSC/CEA-708 + WebVTT chapters |
+| **3.1** | ⏳ 待开始 | 性能深化 + 补全：zero-copy `Cow<str>` + SMPTE-TT + Spruce STL + Node native binding |
+
+> **2.4 + 3.0 + 3.1 是原 3.0 拆分而来**（2026-07-18，基于 gap analysis）。原 3.0 的 zero-copy 因与绑定稳定 API 冲突独立为 3.1；gap P1 低投入项提前为 2.4。
 
 ---
 
