@@ -531,7 +531,12 @@ mod tests {
       assert!(data.drop_frame);
       assert_eq!(data.fps, DEFAULT_FPS);
       // Verify text is actually decoded (was P1 bug in v2.4)
-      let full_text: String = data.subtitles.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" ");
+      let full_text: String = data
+        .subtitles
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
       assert!(
         full_text.contains("test"),
         "SCC text decode failed; got: {:?}",

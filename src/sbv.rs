@@ -256,7 +256,8 @@ mod tests {
   #[test]
   fn test_two_line_format() {
     // Real YouTube SBV: timestamps on one line, text on the next
-    let content = "0:00:01.000,0:00:04.000\nHello world\n\n0:00:05.000,0:00:09.000\nSecond subtitle\n";
+    let content =
+      "0:00:01.000,0:00:04.000\nHello world\n\n0:00:05.000,0:00:09.000\nSecond subtitle\n";
     let file = parse_content(content).unwrap();
     let subs = file.subtitles();
     assert_eq!(subs.len(), 2);

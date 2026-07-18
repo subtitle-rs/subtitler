@@ -10,6 +10,40 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
 
+## [2.4.1] - 2026-07-18
+
+### Fixed
+
+- **SCC text decode was completely broken (P1)**: `decode_scc_hex` parsed 4-digit
+  hex tokens as u16 and checked the full range against ASCII, but SCC hex tokens
+  are 2-byte pairs (e.g. `5468` = bytes `0x54='T'` + `0x68='h'`). All SCC text
+  was silently lost since v2.0. Rewritten to split tokens into individual bytes
+  with `& 0x7F` parity-bit masking.
+- **DFXP detected as TTML**: two issues — TTML's detector wrongly claimed DFXP
+  namespace `http://www.w3.org/2006/10/ttaf1` as its own; DFXP now matches both
+  the 2006/04 and 2006/10 namespace variants. Detect-chain order swapped so DFXP
+  is checked before TTML (both share the `<tt>` root element).
+- **SubViewer auto-detection failed**: the bracket-header regex was a narrow
+  whitelist that didn't include `[PRG]`, `[CD TRACK]`, etc. Unknown bracket
+  lines caused the detector to break before reaching timestamps. Changed to
+  match any `^\[...\]` bracket-header line.
+- **SBV two-line format**: real YouTube SBV uses timestamps on one line, text on
+  the next — subtitler only supported the comma-separated-on-one-line variant.
+  Parser now handles both formats.
+- **iTT SMPTE frame timecodes**: iTunes Timed Text uses `timeBase="smpte"` with
+  `HH:MM:SS:FF` frame-format timecodes. `ttml_to_ms` now detects 3-colon SMPTE
+  format and converts at 29.97fps.
+- **MPL2 false positive on .txt files**: removed `.txt` extension mapping from
+  MPL2 in `cli.rs` (too generic; Avid DS SubCap `.txt` files were misdetected).
+- **Silent empty parse**: `subtitler parse` now emits a warning with actionable
+  advice when parsing returns 0 subtitles.
+- **Minimal build fix**: added missing `#[cfg(feature)]` gates on `cli.rs`
+  `From<&model::Format>` impl for Dfxp/Whisper variants.
+
+### Changed
+
+- **344 tests** (up from 340 in v2.4.0).
+
 ## [2.4.0] - 2026-07-18
 
 ### Added
