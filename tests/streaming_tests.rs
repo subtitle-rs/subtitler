@@ -1,4 +1,5 @@
 //! Streaming parser tests — verify SrtStream and VttStream yield correct
+#![cfg(not(target_arch = "wasm32"))]
 //! Subtitles one-at-a-time without full Vec allocation.
 
 use subtitler::model::{StreamingParser, SubtitleFormat};

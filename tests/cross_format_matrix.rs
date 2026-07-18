@@ -1,4 +1,5 @@
 //! Cross-format conversion matrix — sparse (~25 pairs, v2.3).
+#![cfg(not(target_arch = "wasm32"))]
 //!
 //! Every format has at least 1 identity round-trip and 2 cross-format
 //! conversion paths. For each pair: parse source → to_string_with_format

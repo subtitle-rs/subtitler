@@ -1,4 +1,5 @@
 //! Regression test for EBU STL binary input handling.
+#![cfg(not(target_arch = "wasm32"))]
 //!
 //! Background: `parse_to_file` and `cmd_parse` (in `src/main.rs`) used
 //! to run `encoding::decode_to_string(data)?` before dispatching to

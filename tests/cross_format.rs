@@ -1,4 +1,5 @@
 //! Cross-format conversion tests — verify data survives SRT→VTT→ASS→SRT etc.
+#![cfg(not(target_arch = "wasm32"))]
 
 use subtitler::model::{Format, Subtitle, SubtitleFile, SubtitleFormat};
 

@@ -210,3 +210,53 @@ pub fn normalize_text(content: &str) -> String {
     Err(_) => content.to_string(),
   }
 }
+
+#[cfg(test)]
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn test_parse_subtitles_srt() {
+  let srt = "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
+  let result = parse_subtitles(srt);
+  assert!(result.is_ok());
+  assert_eq!(result.subtitle_count, 1);
+  assert!(result.output.contains("Hello"));
+}
+
+#[cfg(test)]
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn test_parse_subtitles_unknown_format() {
+  let result = parse_subtitles("garbage");
+  assert!(!result.is_ok());
+  assert_eq!(result.subtitle_count, 0);
+}
+
+#[cfg(test)]
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn test_detect_srt() {
+  let srt = "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
+  assert_eq!(detect(srt), "Srt");
+}
+
+#[cfg(test)]
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn test_detect_unknown() {
+  assert_eq!(detect("garbage"), "unknown");
+}
+
+#[cfg(test)]
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn test_convert_format_srt_to_vtt() {
+  let srt = "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
+  let result = convert_format(srt, "vtt");
+  assert!(result.is_ok());
+  assert!(result.output.contains("WEBVTT"));
+}
+
+#[cfg(test)]
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn test_validate_and_info() {
+  let srt = "1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
+  let v = validate_subtitles(srt);
+  assert!(!v.is_null());
+  let info = get_info(srt);
+  assert!(!info.is_null());
+}

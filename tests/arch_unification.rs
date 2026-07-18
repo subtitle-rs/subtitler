@@ -1,3 +1,4 @@
+#![cfg(not(target_arch = "wasm32"))]
 use subtitler::model::{AssData, Format, Subtitle, SubtitleFile, SubtitleFormat};
 
 fn sub(start: u64, end: u64, text: &str) -> Subtitle {

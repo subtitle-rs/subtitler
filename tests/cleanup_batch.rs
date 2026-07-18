@@ -1,3 +1,4 @@
+#![cfg(not(target_arch = "wasm32"))]
 use subtitler::model::{Subtitle, SubtitleFile, SubtitleFormat, ValidationIssue};
 
 #[test]

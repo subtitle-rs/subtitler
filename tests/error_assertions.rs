@@ -1,4 +1,5 @@
 //! Error type regression tests — verify that structured errors are used
+#![cfg(not(target_arch = "wasm32"))]
 //! everywhere and contain the expected variant data.
 
 use subtitler::error::SubtitleError;

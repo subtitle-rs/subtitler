@@ -1,4 +1,5 @@
 //! Pipeline and Builder integration tests — verify the chaining API works
+#![cfg(not(target_arch = "wasm32"))]
 //! correctly across multiple operations and edge cases.
 
 use subtitler::model::{Subtitle, SubtitleFile, SubtitleFormat};

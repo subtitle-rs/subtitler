@@ -1,3 +1,4 @@
+#![cfg(not(target_arch = "wasm32"))]
 use smallvec::SmallVec;
 use std::path::PathBuf;
 use subtitler::ass;

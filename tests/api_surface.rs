@@ -1,4 +1,5 @@
 //! Compile-time API surface verification for all 13 formats.
+#![cfg(not(target_arch = "wasm32"))]
 //!
 //! Tests that every format module exposes the expected set of functions.
 //! If any format regresses (e.g. someone accidentally deletes `parse_content`

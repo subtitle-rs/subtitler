@@ -1,6 +1,11 @@
 //! Property-based tests for subtitle round-trips and invariants.
 //!
 //! Run: PROPTEST_CASES=100 cargo test --test proptest
+//!
+//! Gated behind cfg(not(wasm32)) because proptest's transitive
+//! dependencies (wait-timeout) do not support wasm32-unknown-unknown.
+
+#![cfg(not(target_arch = "wasm32"))]
 
 use proptest::prelude::*;
 use subtitler::model::Subtitle;
