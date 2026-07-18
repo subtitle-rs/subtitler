@@ -38,8 +38,8 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
 
 /// Parse Whisper JSON content.
 pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
-  let transcript: WhisperTranscript = serde_json::from_str(content)
-    .map_err(|e| anyhow::anyhow!("invalid Whisper JSON: {}", e))?;
+  let transcript: WhisperTranscript =
+    serde_json::from_str(content).map_err(|e| anyhow::anyhow!("invalid Whisper JSON: {}", e))?;
 
   let subtitles: Vec<Subtitle> = transcript
     .segments
@@ -96,7 +96,11 @@ pub fn to_string(subtitles: &[Subtitle]) -> String {
     })
     .collect();
 
-  let full_text: String = subtitles.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" ");
+  let full_text: String = subtitles
+    .iter()
+    .map(|s| s.text.as_str())
+    .collect::<Vec<_>>()
+    .join(" ");
 
   serde_json::to_string_pretty(&serde_json::json!({
     "text": full_text,
@@ -131,7 +135,10 @@ mod tests {
 
   #[test]
   fn test_detect_whisper_not_srt() {
-    assert_eq!(detect_format(b"1\n00:00:01,000 --> 00:00:03,500\nHello\n"), None);
+    assert_eq!(
+      detect_format(b"1\n00:00:01,000 --> 00:00:03,500\nHello\n"),
+      None
+    );
   }
 
   #[test]
@@ -148,7 +155,8 @@ mod tests {
 
   #[test]
   fn test_round_trip() {
-    let json = r#"{"text": "Hello world", "segments": [{"start": 1.5, "end": 3.7, "text": "Hello world"}]}"#;
+    let json =
+      r#"{"text": "Hello world", "segments": [{"start": 1.5, "end": 3.7, "text": "Hello world"}]}"#;
     let file = parse_content(json).unwrap();
     let out = to_string(file.subtitles());
     let reparsed = parse_content(&out).unwrap();

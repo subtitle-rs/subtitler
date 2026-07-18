@@ -1,5 +1,19 @@
 # Migration Guide
 
+## 2.3 → 2.4
+
+### Additions (non-breaking)
+
+- **Two new formats**: DFXP (`.dfxp`) and Whisper JSON (feature flags
+  `dfxp` and `whisper`, enabled by default).
+- **`RemoveDuplicates` PipelineOp**: new op for deduplication.
+- **4 normalize functions**: `filter_language`, `merge_short_lines`,
+  `remove_all_newlines`, `replace_newlines`.
+
+### Format count
+
+- v2.3: 13 formats. v2.4: **15 formats** (+DFXP, +Whisper).
+
 ## 2.2 → 2.3
 
 ### No breaking changes

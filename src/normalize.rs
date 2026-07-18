@@ -155,8 +155,12 @@ pub fn optimize_line_breaks(text: &str, max_chars: usize) -> String {
 /// (Hebrew). Unknown `lang` returns the input unchanged.
 pub fn filter_language(text: &str, lang: &str) -> String {
   let keep = match lang {
-    "en" => |c: char| c.is_ascii_alphabetic() || c.is_ascii_digit() || c.is_ascii_punctuation() || c == ' ',
-    "zh" => |c: char| ('\u{4E00}'..='\u{9FFF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n',
+    "en" => |c: char| {
+      c.is_ascii_alphabetic() || c.is_ascii_digit() || c.is_ascii_punctuation() || c == ' '
+    },
+    "zh" => |c: char| {
+      ('\u{4E00}'..='\u{9FFF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
+    },
     "ja" => |c: char| {
       ('\u{4E00}'..='\u{9FFF}').contains(&c)
         || ('\u{3040}'..='\u{309F}').contains(&c)
@@ -168,8 +172,12 @@ pub fn filter_language(text: &str, lang: &str) -> String {
     "ko" => |c: char| {
       ('\u{AC00}'..='\u{D7AF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
     },
-    "ar" => |c: char| ('\u{0600}'..='\u{06FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n',
-    "he" => |c: char| ('\u{0590}'..='\u{05FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n',
+    "ar" => |c: char| {
+      ('\u{0600}'..='\u{06FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
+    },
+    "he" => |c: char| {
+      ('\u{0590}'..='\u{05FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
+    },
     _ => return text.to_string(),
   };
   text.chars().filter(|&c| keep(c)).collect()

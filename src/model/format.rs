@@ -94,7 +94,10 @@ pub enum SubtitleFile {
   EbuStl(Box<crate::ebu_stl::EbuStlData>),
 
   #[cfg(feature = "dfxp")]
-  Dfxp { header: Option<String>, subtitles: Vec<Subtitle> },
+  Dfxp {
+    header: Option<String>,
+    subtitles: Vec<Subtitle>,
+  },
 
   #[cfg(feature = "whisper")]
   Whisper(Vec<Subtitle>),

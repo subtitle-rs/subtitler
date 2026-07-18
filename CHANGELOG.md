@@ -10,6 +10,28 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
 
+## [2.4.0] - 2026-07-18
+
+### Added
+
+- **DFXP format** (`.dfxp`): W3C Distribution Format Exchange Profile, the
+  predecessor to TTML. Same XML structure, different namespace. Delegates
+  nearly all logic to the existing TTML module (~90% code reuse).
+  Feature flag `dfxp`.
+- **Whisper JSON format**: OpenAI Whisper speech recognition transcript
+  format (`{"text", "segments":[{"start","end","text",...}]}`).
+  Parses f64 seconds → u64 ms, serializes back to standard Whisper JSON.
+  Feature flag `whisper`.
+- **`RemoveDuplicates` PipelineOp**: removes consecutive subtitles with
+  identical text (trimmed comparison), keeping the first occurrence's
+  timing. `SubtitleBuilder::remove_duplicates()` + Pipeline + CLI `--dedup`
+  support. JSON serializable (`"op":"RemoveDuplicates"`).
+- **4 text normalization functions** in `subtitler::normalize`:
+  `filter_language(text, lang)` — keeps only chars from a Unicode block
+  (en/zh/ja/ko/ar/he); `merge_short_lines(text, max_chars)` — removes
+  newlines from short lines; `remove_all_newlines(text)` — `\n` → space;
+  `replace_newlines(text, sep)` — `\n` → custom separator.
+
 ## [2.3.0] - 2026-07-18
 
 ### Added
