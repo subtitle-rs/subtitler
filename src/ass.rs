@@ -1,4 +1,5 @@
 use crate::error::SubtitleError;
+use crate::model::convert::{MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND};
 use crate::model::{AssData, AssStyle, Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
@@ -48,7 +49,7 @@ fn parse_ass_time(h: &str, m: &str, s: &str, ms: &str) -> Result<u64, SubtitleEr
     format: Format::Ass,
     value: ms.to_string(),
   })?;
-  Ok(hours * 3600000 + minutes * 60000 + seconds * 1000 + centiseconds * 10)
+  Ok(hours * MS_PER_HOUR + minutes * MS_PER_MINUTE + seconds * MS_PER_SECOND + centiseconds * 10)
 }
 
 fn parse_ass_style_line(line: &str) -> Option<AssStyle> {

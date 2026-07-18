@@ -1,3 +1,12 @@
+/// Milliseconds per hour (3,600,000).
+pub const MS_PER_HOUR: u64 = 3_600_000;
+/// Milliseconds per minute (60,000).
+pub const MS_PER_MINUTE: u64 = 60_000;
+/// Milliseconds per second (1,000).
+pub const MS_PER_SECOND: u64 = 1_000;
+/// Default tail duration for formats without explicit end times (3 seconds).
+pub const DEFAULT_TAIL_MS: u64 = 3_000;
+
 pub fn parse_ass_color(color: &str) -> (u8, u8, u8, u8) {
   let hex = color.trim_start_matches("&H").trim_start_matches("&h");
   let parsed = u32::from_str_radix(hex, 16).unwrap_or(0x00FFFFFF);

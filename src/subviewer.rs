@@ -1,4 +1,5 @@
 use crate::error::SubtitleError;
+use crate::model::convert::{MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND};
 use crate::model::{Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
@@ -80,7 +81,7 @@ fn parse_subviewer_time(ts: &str) -> Result<u64, SubtitleError> {
   } else {
     0
   };
-  Ok(h * 3600000 + m * 60000 + s * 1000 + ms)
+  Ok(h * MS_PER_HOUR + m * MS_PER_MINUTE + s * MS_PER_SECOND + ms)
 }
 
 pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {

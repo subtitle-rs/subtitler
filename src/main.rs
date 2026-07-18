@@ -9,6 +9,7 @@ use subtitler::ass;
 #[cfg(feature = "ebu_stl")]
 use subtitler::ebu_stl;
 use subtitler::model::{Format, SubtitleFile, SubtitleFormat};
+use subtitler::model::convert::{MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND};
 use subtitler::pipeline::{Pipeline, SubtitleBuilder};
 #[cfg(feature = "scc")]
 use subtitler::scc;
@@ -203,13 +204,13 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
       println!(
         "[{}] {:0>2}:{:0>2}:{:0>2},{:0>3} --> {:0>2}:{:0>2}:{:0>2},{:0>3}",
         i + 1,
-        sub.start / 3600000,
-        (sub.start % 3600000) / 60000,
-        (sub.start % 60000) / 1000,
-        sub.start % 1000,
-        sub.end / 3600000,
-        (sub.end % 3600000) / 60000,
-        (sub.end % 60000) / 1000,
+        sub.start / MS_PER_HOUR,
+        (sub.start % MS_PER_HOUR) / MS_PER_MINUTE,
+        (sub.start % MS_PER_MINUTE) / MS_PER_SECOND,
+        sub.start % MS_PER_SECOND,
+        sub.end / MS_PER_HOUR,
+        (sub.end % MS_PER_HOUR) / MS_PER_MINUTE,
+        (sub.end % MS_PER_MINUTE) / MS_PER_SECOND,
         sub.end % 1000,
       );
       println!("{}\n", sub.text);

@@ -10,6 +10,7 @@
 //! - Supports drop-frame (`;` separator) and non-drop-frame (`:` separator)
 
 use crate::error::SubtitleError;
+use crate::model::convert::DEFAULT_TAIL_MS;
 use crate::model::{Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
@@ -128,7 +129,7 @@ impl SccData {
     if !current_text.is_empty() {
       if let Some(start) = current_start {
         // Default duration: 3 seconds
-        let end = start + 3000;
+        let end = start + DEFAULT_TAIL_MS;
         subtitles.push(Subtitle::new(start, end, &current_text));
       }
     }
@@ -498,7 +499,7 @@ impl<'a> Iterator for SccStream<'a> {
 
     if !self.current_text.is_empty() {
       if let Some(start) = self.current_start {
-        let end = start + 3000;
+        let end = start + DEFAULT_TAIL_MS;
         let subtitle = Subtitle::new(start, end, &self.current_text);
         self.current_text.clear();
         self.current_start = None;

@@ -1,5 +1,6 @@
 use crate::config::{RE_TIMESTAMP, RE_TIMESTAMPS};
 use crate::error::SubtitleError;
+use crate::model::convert::{MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND};
 use crate::model::{Format, Timestamp};
 use regex::Regex;
 use std::sync::LazyLock;
@@ -75,7 +76,7 @@ pub fn parse_timestamp(timestamp: &str, format: Format) -> Result<u64, SubtitleE
   let ms_end = (ms_start + 3).min(len);
   let ms: u64 = atoi(&bytes[ms_start..ms_end]);
 
-  Ok(hours * 3600000 + minutes * 60000 + seconds * 1000 + ms)
+  Ok(hours * MS_PER_HOUR + minutes * MS_PER_MINUTE + seconds * MS_PER_SECOND + ms)
 }
 
 /// Fast ASCII digit-to-integer conversion for short byte slices.
