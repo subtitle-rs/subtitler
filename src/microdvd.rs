@@ -264,4 +264,12 @@ mod tests {
     assert!(detect_format(b"{1}{25}test\n").is_some());
     assert!(detect_format(b"WEBVTT\n").is_none());
   }
+
+  #[test]
+  fn test_non_numeric_frame_graceful_degradation() {
+    // TODO(3.0): {abc} is not a valid frame; the parser should return
+    // SubtitleError::InvalidFrame. Currently it returns Ok with empty output.
+    let result = parse_content("{abc}{def}Today is a good day\n", None);
+    assert!(result.is_ok(), "parser should not crash on bad frames (current behavior)");
+  }
 }
