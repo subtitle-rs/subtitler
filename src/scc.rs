@@ -252,42 +252,32 @@ fn ms_to_scc_timecode(ms: u64, fps: f64, drop_frame: bool) -> String {
 }
 
 /// Decode SCC hexadecimal data to text.
+///
+/// SCC hex tokens are 4-digit hex values representing 2-byte pairs.
+/// Each byte is decoded individually via CEA-608 character mapping.
+/// Control codes (94xx, 97xx prefixes) are skipped.
 fn decode_scc_hex(hex: &str) -> String {
   let mut text = String::new();
-  let hex_bytes: Vec<&str> = hex.split_whitespace().collect();
 
-  // Process byte pairs
-  for chunk in hex_bytes.chunks(2) {
-    if chunk.len() == 2 {
-      // Skip control codes (94xx, 97xx, etc.)
-      let byte1 = chunk[0];
-      let byte2 = if chunk.len() > 1 { chunk[1] } else { "" };
-
-      // Skip control codes
-      if byte1.starts_with("94") || byte1.starts_with("97") {
-        continue;
-      }
-
-      // Decode character from byte2 (second byte in pair)
-      if byte2.len() == 4 {
-        if let Ok(byte_val) = u16::from_str_radix(byte2, 16) {
-          // CEA-608 character mapping
-          let ch = decode_cea608_char(byte_val);
-          if ch != '\0' {
-            text.push(ch);
-          }
-        }
-      }
-
-      // Also decode from byte1 if it's a character
-      if byte1.len() == 4 {
-        if let Ok(byte_val) = u16::from_str_radix(byte1, 16) {
-          let ch = decode_cea608_char(byte_val);
-          if ch != '\0' {
-            text.push(ch);
-          }
-        }
-      }
+  for token in hex.split_whitespace() {
+    if token.len() != 4 {
+      continue;
+    }
+    // Control codes (94xx, 97xx) — skip
+    if token.starts_with("94") || token.starts_with("97") {
+      continue;
+    }
+    // Parse high byte and low byte
+    let high = u8::from_str_radix(&token[0..2], 16).unwrap_or(0);
+    let low = u8::from_str_radix(&token[2..4], 16).unwrap_or(0);
+    // CEA-608: bits 0–6 are data; bit 7 is parity → mask with 0x7F
+    let ch_high = decode_cea608_char(high as u16 & 0x7F);
+    let ch_low = decode_cea608_char(low as u16 & 0x7F);
+    if ch_high != '\0' {
+      text.push(ch_high);
+    }
+    if ch_low != '\0' {
+      text.push(ch_low);
     }
   }
 
@@ -540,6 +530,13 @@ mod tests {
       // Check that structure is valid
       assert!(data.drop_frame);
       assert_eq!(data.fps, DEFAULT_FPS);
+      // Verify text is actually decoded (was P1 bug in v2.4)
+      let full_text: String = data.subtitles.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" ");
+      assert!(
+        full_text.contains("test"),
+        "SCC text decode failed; got: {:?}",
+        full_text
+      );
     } else {
       panic!("Expected Scc variant");
     }
