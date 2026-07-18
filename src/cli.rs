@@ -81,7 +81,7 @@ impl Format {
       return Some(Format::Sami);
     }
     #[cfg(feature = "mpl2")]
-    if lower.ends_with(".mpl") || lower.ends_with(".txt") {
+    if lower.ends_with(".mpl") {
       return Some(Format::Mpl2);
     }
     #[cfg(feature = "scc")]

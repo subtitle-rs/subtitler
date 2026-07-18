@@ -215,6 +215,11 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
       println!("{}\n", sub.text);
     }
     eprintln!("{} subtitles parsed (format: {})", subs.len(), format);
+    if subs.is_empty() {
+      eprintln!(
+        "warning: parsing returned 0 subtitles — the file may be empty, malformed, or in a different format. Try '--format' to force a specific format, or 'detect' to check format detection."
+      );
+    }
   }
   Ok(())
 }

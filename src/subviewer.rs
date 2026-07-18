@@ -11,7 +11,10 @@ static RE_SUBVIEWER_LINE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static RE_SUBVIEWER_BRACKET: LazyLock<Regex> = LazyLock::new(|| {
-  Regex::new(r"^\[(?:COLF|STYLE|SIZE|FONT|INFORMATION|TITLE|AUTHOR|SOURCE|FILEPATH|DELAY|COMMENT|END|SUBTITLE)").unwrap()
+  // Match any [...] header line used by SubViewer/MicroDVD (e.g. [INFORMATION],
+  // [STYLE], [PRG], [CD TRACK], etc.). Previous whitelist was too narrow and
+  // caused detection to break on non-standard bracket headers.
+  Regex::new(r"^\[.*\]").unwrap()
 });
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
