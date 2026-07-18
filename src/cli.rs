@@ -36,6 +36,9 @@ pub enum Format {
   #[cfg(feature = "dfxp")]
   #[value(name = "dfxp")]
   Dfxp,
+  #[cfg(feature = "whisper")]
+  #[value(name = "whisper")]
+  Whisper,
 }
 
 impl Format {
@@ -125,6 +128,7 @@ impl From<&subtitler::model::Format> for Format {
       #[cfg(feature = "ebu_stl")]
       M::EbuStl => Format::EbuStl,
       M::Dfxp => Format::Dfxp,
+      M::Whisper => Format::Whisper,
     }
   }
 }
@@ -161,6 +165,8 @@ impl From<&Format> for subtitler::model::Format {
       Format::EbuStl => M::EbuStl,
       #[cfg(feature = "dfxp")]
       Format::Dfxp => M::Dfxp,
+      #[cfg(feature = "whisper")]
+      Format::Whisper => M::Whisper,
     }
   }
 }
@@ -196,6 +202,8 @@ impl std::fmt::Display for Format {
       Format::EbuStl => write!(f, "EBU STL"),
       #[cfg(feature = "dfxp")]
       Format::Dfxp => write!(f, "DFXP"),
+      #[cfg(feature = "whisper")]
+      Format::Whisper => write!(f, "Whisper JSON"),
     }
   }
 }

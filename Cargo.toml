@@ -71,7 +71,7 @@ proptest = "1.5"
 wasm-bindgen-test = "0.3"
 
 [features]
-default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "dfxp", "http"]
+default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "dfxp", "whisper", "http"]
 
 srt = []
 vtt = []
@@ -87,6 +87,7 @@ mpl2 = []
 scc = []
 ebu_stl = []
 dfxp = []
+whisper = []
 http = ["reqwest"]
 wasm = []
 
