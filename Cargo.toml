@@ -7,7 +7,7 @@ categories = [
   "multimedia",
   "parser-implementations",
 ] 
-description = "Parse, convert, validate, edit, and generate subtitles in 13 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL). Full CLI included." 
+description = "Parse, convert, validate, edit, and generate subtitles in 15 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL, DFXP, Whisper JSON). Full CLI included." 
 documentation = "https://docs.rs/subtitler" 
 edition = "2024" 
 keywords = [
