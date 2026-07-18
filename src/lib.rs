@@ -1,6 +1,8 @@
 #[cfg(feature = "ass")]
 pub mod ass;
 pub mod config;
+#[cfg(feature = "dfxp")]
+pub mod dfxp;
 #[cfg(feature = "ebu_stl")]
 pub mod ebu_stl;
 pub mod encoding;
@@ -58,6 +60,8 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| subviewer::detect_format(data));
   #[cfg(feature = "ttml")]
   let f = f.or_else(|| ttml::detect_format(data));
+  #[cfg(feature = "dfxp")]
+  let f = f.or_else(|| dfxp::detect_format(data));
   #[cfg(feature = "sbv")]
   let f = f.or_else(|| sbv::detect_format(data));
   #[cfg(feature = "lrc")]
@@ -114,6 +118,8 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     Format::Scc => Ok(scc::parse_bytes(data)?),
     #[cfg(feature = "ebu_stl")]
     Format::EbuStl => Ok(ebu_stl::parse_bytes(data)?),
+    #[cfg(feature = "dfxp")]
+    Format::Dfxp => Ok(dfxp::parse_bytes(data)?),
     #[allow(unreachable_patterns)]
     _ => Err(error::ParseError::Unsupported(fmt)),
   }

@@ -31,6 +31,8 @@ pub enum Format {
   Scc,
   #[cfg(feature = "ebu_stl")]
   EbuStl,
+  #[cfg(feature = "dfxp")]
+  Dfxp,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -88,6 +90,9 @@ pub enum SubtitleFile {
 
   #[cfg(feature = "ebu_stl")]
   EbuStl(Box<crate::ebu_stl::EbuStlData>),
+
+  #[cfg(feature = "dfxp")]
+  Dfxp { header: Option<String>, subtitles: Vec<Subtitle> },
 }
 
 impl SubtitleFormat for SubtitleFile {
@@ -119,6 +124,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Scc(data) => &data.subtitles,
       #[cfg(feature = "ebu_stl")]
       SubtitleFile::EbuStl(data) => &data.subtitles,
+      #[cfg(feature = "dfxp")]
+      SubtitleFile::Dfxp { subtitles, .. } => subtitles,
     }
   }
 
@@ -150,6 +157,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Scc(data) => &mut data.subtitles,
       #[cfg(feature = "ebu_stl")]
       SubtitleFile::EbuStl(data) => &mut data.subtitles,
+      #[cfg(feature = "dfxp")]
+      SubtitleFile::Dfxp { subtitles, .. } => subtitles,
     }
   }
 
@@ -181,6 +190,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Scc(_) => Format::Scc,
       #[cfg(feature = "ebu_stl")]
       SubtitleFile::EbuStl(_) => Format::EbuStl,
+      #[cfg(feature = "dfxp")]
+      SubtitleFile::Dfxp { .. } => Format::Dfxp,
     }
   }
 
@@ -251,6 +262,14 @@ impl SubtitleFormat for SubtitleFile {
       }
       #[cfg(feature = "ebu_stl")]
       Format::EbuStl => String::from_utf8_lossy(&crate::ebu_stl::to_string(subs)).to_string(),
+      #[cfg(feature = "dfxp")]
+      Format::Dfxp => {
+        let header = match self {
+          SubtitleFile::Dfxp { header, .. } => header.as_deref(),
+          _ => None,
+        };
+        crate::dfxp::to_string(subs, header)
+      }
     }
   }
 }

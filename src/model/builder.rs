@@ -194,6 +194,12 @@ impl SubtitleFileBuilder {
           tti_blocks,
         })))
       }
+
+      #[cfg(feature = "dfxp")]
+      Format::Dfxp => Some(SubtitleFile::Dfxp {
+        header: self.header,
+        subtitles: self.subtitles,
+      }),
     }
   }
 }
