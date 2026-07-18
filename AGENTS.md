@@ -343,6 +343,13 @@ grep -rn "15 格式\|15 formats\|15 subtitle\|15 种" README.md SKILL.md docs/CO
 
 ### 7.3 发布步骤（顺序很重要）
 
+> **铁律：绝不 force-update / 删除已 push 的 tag。**
+> 一旦 tag 推送到 GitHub，即使发现 bug 也不碰它。
+> crates.io 不可撤回已发布的版本。
+> force-update tag 会让 GitHub tag 与 crates.io 包内容不一致——两个渠道对同一版本号给出不同代码，用户无法信任。
+>
+> **发现已发布版本有 bug 时**：直接 bump 新 patch 版本（x.y.Z+1），走正常发布流程。旧版本留在历史里，用户自动拿到新版。
+
 ```bash
 # 1. 打 annotated tag（不要用 lightweight tag，annotated 才有 release notes）
 git tag -a vX.Y.Z -m "vX.Y.Z: <一句话说明>
