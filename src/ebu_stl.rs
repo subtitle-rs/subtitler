@@ -381,6 +381,22 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   None
 }
 
+/// Write subtitles to a file in EBU STL binary format.
+///
+/// `policy` controls overwrite behavior (None = default Overwrite).
+/// EBU STL is a binary format, so this writes raw bytes (not text).
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn generate(
+  subtitles: &[Subtitle],
+  file_path: impl AsRef<std::path::Path>,
+  policy: Option<crate::model::WritePolicy>,
+) -> AnyResult<String> {
+  let bytes = to_string(subtitles);
+  let path = file_path.as_ref();
+  crate::io::write_with_policy(path, &bytes, policy).await?;
+  Ok(path.to_string_lossy().into_owned())
+}
+
 /// Serialize subtitles to EBU STL format
 pub fn to_string(subtitles: &[Subtitle]) -> Vec<u8> {
   let gsi = GsiBlock::default();

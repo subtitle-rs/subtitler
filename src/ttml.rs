@@ -226,6 +226,23 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
 
 /// Serialize subtitles to a minimal TTML document.
 ///
+/// Write subtitles to a file in TTML format.
+///
+/// `policy` controls overwrite behavior (None = default Overwrite).
+/// Omits the optional `<head>` block; to include one, call `to_string`
+/// directly and write the result with `tokio::fs::write`.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn generate(
+  subtitles: &[Subtitle],
+  file_path: impl AsRef<std::path::Path>,
+  policy: Option<crate::model::WritePolicy>,
+) -> AnyResult<String> {
+  let content = to_string(subtitles, None);
+  let path = file_path.as_ref();
+  crate::io::write_with_policy(path, content.as_bytes(), policy).await?;
+  Ok(path.to_string_lossy().into_owned())
+}
+
 /// Note: `_header` is reserved for metadata preservation (not yet implemented;
 /// the `<head>` block is currently omitted).
 pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
