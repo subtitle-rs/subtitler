@@ -139,6 +139,13 @@ pub fn to_string_with_fps_header(subtitles: &[Subtitle], fps: f64) -> String {
   buf
 }
 
+/// Streaming parser entry point — yields subtitles one at a time
+/// without allocating a full `Vec`. Uses the default fps (`DEFAULT_FPS`);
+/// for a custom fps, construct `MicroDvdStream::new(content, Some(fps))` directly.
+pub fn parse_stream<'a>(content: &'a str) -> MicroDvdStream<'a> {
+  MicroDvdStream::new(content, None)
+}
+
 pub struct MicroDvdStream<'a> {
   lines: std::str::Lines<'a>,
   saved_fps: f64,

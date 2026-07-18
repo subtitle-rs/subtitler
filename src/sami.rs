@@ -225,6 +225,12 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   data.render()
 }
 
+/// Streaming parser entry point — yields subtitles one at a time
+/// without allocating a full `Vec`.
+pub fn parse_stream<'a>(content: &'a str) -> SamiStream<'a> {
+  SamiStream::new(content)
+}
+
 pub struct SamiStream<'a> {
   content: &'a str,
   pos: usize,

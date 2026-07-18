@@ -186,6 +186,12 @@ fn format_subviewer_time(ms: u64) -> String {
   )
 }
 
+/// Streaming parser entry point — yields subtitles one at a time
+/// without allocating a full `Vec`.
+pub fn parse_stream<'a>(content: &'a str) -> SubViewerStream<'a> {
+  SubViewerStream::new(content)
+}
+
 pub struct SubViewerStream<'a> {
   lines: std::str::Lines<'a>,
 }

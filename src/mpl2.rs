@@ -160,6 +160,13 @@ pub fn to_string(subtitles: &[Subtitle], fps: Option<f64>) -> String {
   data.render()
 }
 
+/// Streaming parser entry point — yields subtitles one at a time
+/// without allocating a full `Vec`. Uses the default fps (`DEFAULT_FPS`);
+/// for a custom fps, construct `Mpl2Stream::new(content, Some(fps))` directly.
+pub fn parse_stream<'a>(content: &'a str) -> Mpl2Stream<'a> {
+  Mpl2Stream::new(content, None)
+}
+
 pub struct Mpl2Stream<'a> {
   lines: std::str::Lines<'a>,
   fps: f64,

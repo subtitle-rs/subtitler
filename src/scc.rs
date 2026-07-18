@@ -414,6 +414,12 @@ pub fn to_string(subtitles: &[Subtitle], drop_frame: bool) -> String {
   data.render()
 }
 
+/// Streaming parser entry point — yields subtitles one at a time
+/// without allocating a full `Vec`.
+pub fn parse_stream<'a>(content: &'a str) -> SccStream<'a> {
+  SccStream::new(content)
+}
+
 pub struct SccStream<'a> {
   lines: std::str::Lines<'a>,
   current_text: String,

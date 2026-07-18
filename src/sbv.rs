@@ -129,6 +129,12 @@ fn format_sbv_time(ms: u64) -> String {
   format!("{}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
 }
 
+/// Streaming parser entry point — yields subtitles one at a time
+/// without allocating a full `Vec`.
+pub fn parse_stream<'a>(content: &'a str) -> SbVStream<'a> {
+  SbVStream::new(content)
+}
+
 pub struct SbVStream<'a> {
   lines: std::str::Lines<'a>,
 }

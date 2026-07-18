@@ -178,6 +178,12 @@ pub fn to_string(subtitles: &[Subtitle]) -> String {
   buf
 }
 
+/// Streaming parser entry point — yields subtitles one at a time
+/// without allocating a full `Vec`.
+pub fn parse_stream<'a>(content: &'a str) -> LrcStream<'a> {
+  LrcStream::new(content)
+}
+
 pub struct LrcStream<'a> {
   lines: std::str::Lines<'a>,
   pending_subs: VecDeque<AnyResult<Subtitle>>,
