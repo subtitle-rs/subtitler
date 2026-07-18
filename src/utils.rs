@@ -201,6 +201,7 @@ mod tests {
   }
 
   #[test]
+  #[cfg(feature = "vtt")]
   fn test_parse_timestamp_vtt() {
     assert_eq!(parse_timestamp("00:00:01.000", Format::Vtt).unwrap(), 1000);
     assert_eq!(parse_timestamp("00:00:03.500", Format::Vtt).unwrap(), 3500);
@@ -215,6 +216,7 @@ mod tests {
   }
 
   #[test]
+  #[cfg(feature = "vtt")]
   fn test_parse_timestamps_with_settings() {
     let ts = parse_timestamps("00:00:01.000 --> 00:00:03.500 align:start", Format::Vtt).unwrap();
     assert_eq!(ts.start, 1000);
