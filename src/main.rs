@@ -8,8 +8,8 @@ use cli::{Commands, Format as CliFormat};
 use subtitler::ass;
 #[cfg(feature = "ebu_stl")]
 use subtitler::ebu_stl;
-use subtitler::model::{Format, SubtitleFile, SubtitleFormat};
 use subtitler::model::convert::{MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND};
+use subtitler::model::{Format, SubtitleFile, SubtitleFormat};
 use subtitler::pipeline::{Pipeline, SubtitleBuilder};
 #[cfg(feature = "scc")]
 use subtitler::scc;

@@ -10,6 +10,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
 
+## [2.5.0] - 2026-07-18
+
+### Changed
+
+- **Error type unification**: all 15 format modules now consistently return
+  `AnyResult<SubtitleFile>` from `parse_content` (previously 7 modules returned
+  `Result<_, SubtitleError>`, inconsistent with the v2.0 design intent of
+  "internals use SubtitleError, public API uses AnyResult"). Enables uniform
+  `?` usage across formats.
+- **Magic number extraction**: time conversion constants (`MS_PER_HOUR`,
+  `MS_PER_MINUTE`, `MS_PER_SECOND`, `DEFAULT_TAIL_MS`) extracted to
+  `model::convert` and used throughout `utils.rs`, `ass.rs`, `subviewer.rs`,
+  `scc.rs`, and `main.rs`.
+
 ## [2.4.1] - 2026-07-18
 
 ### Fixed
