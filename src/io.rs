@@ -39,12 +39,14 @@ pub async fn open_with_policy(
   let mut open_opts = tokio::fs::OpenOptions::new();
   let file = match policy {
     WritePolicy::Append => open_opts.create(true).append(true).open(path).await,
-    _ => open_opts
-      .create(true)
-      .write(true)
-      .truncate(true)
-      .open(path)
-      .await,
+    _ => {
+      open_opts
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .await
+    }
   }?;
   Ok(file)
 }

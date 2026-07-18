@@ -227,11 +227,7 @@ pub async fn generate(
   file_path: impl AsRef<std::path::Path>,
   policy: Option<crate::model::WritePolicy>,
 ) -> AnyResult<String> {
-  let content = to_string(
-    &HashMap::new(),
-    &[AssStyle::default_style()],
-    subtitles,
-  );
+  let content = to_string(&HashMap::new(), &[AssStyle::default_style()], subtitles);
   let path = file_path.as_ref();
   crate::io::write_with_policy(path, content.as_bytes(), policy).await?;
   Ok(path.to_string_lossy().into_owned())
