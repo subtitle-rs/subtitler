@@ -131,7 +131,7 @@ you don't need:
 
 ```toml
 [dependencies]
-subtitler = { version = "1.3", default-features = false, features = ["srt", "vtt"] }
+subtitler = { version = "2.0", default-features = false, features = ["srt", "vtt"] }
 ```
 
 | Flag         | Format           | Notes |
@@ -164,16 +164,11 @@ pub struct Subtitle {
     pub end: u64,                 // end time in milliseconds
     pub text: String,             // subtitle text (stripped of tags)
     pub settings: Option<String>, // VTT cue settings
-    pub text_parts: Vec<TextPart>, // structured rich text parts
+    pub text_parts: SmallVec<[TextPart; 4]>, // structured rich text (stack-allocated for ≤4 parts)
 
     // ASS/SSA fields
     pub style: Option<String>,    // style name reference
     pub actor: Option<String>,    // speaker/actor name
-    pub layer: Option<i32>,       // z-ordering
-    pub margin_l: Option<i32>,    // left margin
-    pub margin_r: Option<i32>,    // right margin
-    pub margin_v: Option<i32>,    // vertical margin
-    pub effect: Option<String>,   // effect name
     pub is_comment: bool,         // comment flag
 }
 
@@ -198,13 +193,15 @@ pub enum SubtitleFile {
     Vtt { header: Option<String>, subtitles: Vec<Subtitle> },
     Ass(AssData),
     Ssa(AssData),
-    MicroDvd { fps: Option<f64>, subtitles: Vec<Subtitle> },
+    MicroDvd { fps: f64, subtitles: Vec<Subtitle> },
     SubViewer { header: Option<String>, subtitles: Vec<Subtitle> },
     Ttml { header: Option<String>, subtitles: Vec<Subtitle> },
     Sbv(Vec<Subtitle>),
     Lrc(Vec<Subtitle>),
     Sami(SamiData),
     Mpl2(Vec<Subtitle>),
+    Scc(SccData),
+    EbuStl(Box<EbuStlData>),
 }
 ```
 
