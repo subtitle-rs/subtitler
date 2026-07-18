@@ -151,6 +151,42 @@ mod tests {
   }
 
   #[test]
+  fn test_split_long_no_zero_duration() {
+    // 8 single-char words split at max_chars=1 → 8 chunks.
+    // duration = 1003 - 1000 = 3ms; integer division 3/8 = 0 per chunk.
+    // Before the fix: middle chunks got start == end (zero duration),
+    // which validate() reports as ZeroDuration.
+    let mut file = SubtitleFile::Srt(vec![Subtitle::new(
+      1000,
+      1003,
+      "a b c d e f g h",
+    )]);
+    file.split_long(1);
+    let subs = file.subtitles();
+    // Sanity: the split actually produced multiple chunks
+    assert!(subs.len() > 1, "split_long did not split: {} subs", subs.len());
+    // Every produced subtitle must have positive duration
+    for (i, sub) in subs.iter().enumerate() {
+      assert!(
+        sub.duration_ms() > 0,
+        "subtitle {} has zero duration (start={}, end={})",
+        i,
+        sub.start,
+        sub.end
+      );
+    }
+    // And validate() must not flag any ZeroDuration
+    let issues = file.validate();
+    assert!(
+      !issues
+        .iter()
+        .any(|i| matches!(i, crate::model::ValidationIssue::ZeroDuration { .. })),
+      "validate() flagged zero-duration after split_long: {:?}",
+      issues
+    );
+  }
+
+  #[test]
   fn test_transform_framerate() {
     let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "test")]);
     file.transform_framerate(23.976, 25.0);

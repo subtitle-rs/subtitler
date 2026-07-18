@@ -235,14 +235,25 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
 
       let start = subs[i].start;
       let end = subs[i].end;
-      let duration = end - start;
+      // Guard: zero or negative-duration subtitles cannot be split into
+      // positive-duration chunks; skip them.
+      if end <= start {
+        i += 1;
+        continue;
+      }
       let style = subs[i].style.clone();
       let actor = subs[i].actor.clone();
       let text = std::mem::take(&mut subs[i].text);
 
       let chunks = split_text_chunks(&text, max_chars);
       let num_chunks = chunks.len() as u64;
-      let chunk_duration = duration / num_chunks;
+      // Each chunk must have a positive duration. When the original
+      // duration is too short to divide evenly (duration < num_chunks),
+      // stretch the effective end so that chunk_duration = max(1) and
+      // the chunks remain contiguous and monotonic. The last chunk's
+      // end is the (possibly stretched) end, not the original end.
+      let chunk_duration = ((end - start) / num_chunks).max(1);
+      let effective_end = start + chunk_duration * num_chunks;
 
       subs[i].text = chunks[0].clone();
       subs[i].end = start + chunk_duration;
@@ -251,7 +262,7 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
       for (chunk_idx, chunk) in chunks.iter().enumerate().skip(1) {
         let new_start = start + (chunk_idx as u64) * chunk_duration;
         let new_end = if chunk_idx + 1 == chunks.len() {
-          end
+          effective_end
         } else {
           start + ((chunk_idx + 1) as u64) * chunk_duration
         };
