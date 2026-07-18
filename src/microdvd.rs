@@ -102,6 +102,23 @@ pub async fn parse_url(url: &str, fps: Option<f64>) -> AnyResult<SubtitleFile> {
   Ok(parse_content(&content, fps)?)
 }
 
+/// Write subtitles to a file in MicroDVD format.
+///
+/// `policy` controls overwrite behavior (None = default Overwrite).
+/// Uses the default fps (`DEFAULT_FPS`); for a custom fps, call
+/// `to_string` directly and write the result with `tokio::fs::write`.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn generate(
+  subtitles: &[Subtitle],
+  file_path: impl AsRef<std::path::Path>,
+  policy: Option<crate::model::WritePolicy>,
+) -> AnyResult<String> {
+  let content = to_string(subtitles, None);
+  let path = file_path.as_ref();
+  crate::io::write_with_policy(path, content.as_bytes(), policy).await?;
+  Ok(path.to_string_lossy().into_owned())
+}
+
 pub fn to_string(subtitles: &[Subtitle], fps: Option<f64>) -> String {
   let fps = fps.unwrap_or(DEFAULT_FPS);
   let mut buf = String::new();
