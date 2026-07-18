@@ -294,6 +294,9 @@ mod tests {
     // This test locks the current graceful-degradation behavior (no panic)
     // until error handling is tightened.
     let result = parse_content("{abc}{def}Hello\n");
-    assert!(result.is_ok(), "parser should not crash on bad frames (current behavior)");
+    assert!(
+      result.is_ok(),
+      "parser should not crash on bad frames (current behavior)"
+    );
   }
 }

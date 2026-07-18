@@ -17,7 +17,11 @@ fn arb_subtitle() -> impl Strategy<Value = Subtitle> {
     "[\x20-\x7E\u{80}-\u{FF}\u{4E00}-\u{9FFF}\u{3040}-\u{309F}]{0,60}",
   )
     .prop_map(|(start, end, text)| {
-      let (s, e) = if start <= end { (start, end) } else { (end, start) };
+      let (s, e) = if start <= end {
+        (start, end)
+      } else {
+        (end, start)
+      };
       Subtitle::new(s, e, &text)
     })
 }

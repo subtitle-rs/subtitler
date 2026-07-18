@@ -531,7 +531,12 @@ mod tests {
     // TODO(3.0): truncated XML should return a typed error. Currently it
     // returns Ok with empty subtitles (quick-xml handles malformed input
     // gracefully internally).
-    let result = parse_content("<?xml version=\"1.0\"?><tt><body><div><p begin=\"00:00:01.000\" end=\"00:00:03.000\">Hello");
-    assert!(result.is_ok(), "malformed XML should not crash (current behavior)");
+    let result = parse_content(
+      "<?xml version=\"1.0\"?><tt><body><div><p begin=\"00:00:01.000\" end=\"00:00:03.000\">Hello",
+    );
+    assert!(
+      result.is_ok(),
+      "malformed XML should not crash (current behavior)"
+    );
   }
 }
