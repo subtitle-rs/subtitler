@@ -215,6 +215,42 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   None
 }
 
+/// Write subtitles to a file in SAMI format.
+///
+/// `policy` controls overwrite behavior (None = default Overwrite).
+/// Omits the optional header; to include one, call `to_string`
+/// directly and write the result with `tokio::fs::write`.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn generate(
+  subtitles: &[Subtitle],
+  file_path: impl AsRef<std::path::Path>,
+  policy: Option<crate::model::WritePolicy>,
+) -> AnyResult<String> {
+  let content = to_string(subtitles, None);
+  let path = file_path.as_ref();
+  crate::io::write_with_policy(path, content.as_bytes(), policy).await?;
+  Ok(path.to_string_lossy().into_owned())
+}
+
+/// Streaming write — serializes via `to_string` and writes in one chunk.
+///
+/// For formats like SAMI where incremental XML/HTML generation would be
+/// complex, we buffer to a string and write_all. This matches the
+/// `generate` semantics; for very large inputs consider `to_string` +
+/// custom chunking.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  subtitles: &[Subtitle],
+  header: Option<&str>,
+  writer: &mut W,
+) -> AnyResult<()> {
+  use tokio::io::AsyncWriteExt;
+  let content = to_string(subtitles, header);
+  writer.write_all(content.as_bytes()).await?;
+  writer.flush().await?;
+  Ok(())
+}
+
 /// Serialize subtitles to SAMI format.
 pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   let data = SamiData {

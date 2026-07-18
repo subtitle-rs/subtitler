@@ -414,6 +414,21 @@ pub fn to_string(subtitles: &[Subtitle], drop_frame: bool) -> String {
   data.render()
 }
 
+/// Streaming write — serializes via `to_string` (non-drop-frame) and writes.
+///
+/// For drop-frame output, call `to_string(subs, true)` directly.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  subtitles: &[Subtitle],
+  writer: &mut W,
+) -> AnyResult<()> {
+  use tokio::io::AsyncWriteExt;
+  let content = to_string(subtitles, false);
+  writer.write_all(content.as_bytes()).await?;
+  writer.flush().await?;
+  Ok(())
+}
+
 /// Streaming parser entry point — yields subtitles one at a time
 /// without allocating a full `Vec`.
 pub fn parse_stream<'a>(content: &'a str) -> SccStream<'a> {

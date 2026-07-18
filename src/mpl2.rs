@@ -160,6 +160,21 @@ pub fn to_string(subtitles: &[Subtitle], fps: Option<f64>) -> String {
   data.render()
 }
 
+/// Streaming write — serializes via `to_string` (default fps) and writes.
+///
+/// For a custom fps, call `to_string(subs, Some(fps))` directly.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
+  subtitles: &[Subtitle],
+  writer: &mut W,
+) -> AnyResult<()> {
+  use tokio::io::AsyncWriteExt;
+  let content = to_string(subtitles, None);
+  writer.write_all(content.as_bytes()).await?;
+  writer.flush().await?;
+  Ok(())
+}
+
 /// Streaming parser entry point — yields subtitles one at a time
 /// without allocating a full `Vec`. Uses the default fps (`DEFAULT_FPS`);
 /// for a custom fps, construct `Mpl2Stream::new(content, Some(fps))` directly.
