@@ -1,7 +1,8 @@
 # Subtitler Code Wiki
 
-> 版本: v1.4.0 · Rust Edition 2024 · MSRV 1.85
+> 版本: v2.1.0 · Rust Edition 2024 · MSRV 1.85
 > 一个用于解析、转换、校验、编辑和生成 13 种字幕格式的高性能 Rust 库 + CLI 工具。
+> 286 tests passing · 13 formats · WASM-ready · Pipeline DSL
 
 ---
 
@@ -18,9 +19,12 @@
 9. [构建与运行](#9-构建与运行)
 10. [CLI 使用手册](#10-cli-使用手册)
 11. [库 API 使用指南](#11-库-api-使用指南)
-12. [测试体系](#12-测试体系)
-13. [CI 与发布](#13-ci-与发布)
-14. [设计决策与约定](#14-设计决策与约定)
+12. [Pipeline 与 Builder DSL](#12-pipeline-与-builder-dsl)（v2.0+）
+13. [WASM 集成](#13-wasm-集成)（v2.0+）
+14. [测试体系](#14-测试体系)
+15. [CI 与发布](#15-ci-与发布)
+16. [路线图](#16-路线图)
+17. [设计决策与约定](#17-设计决策与约定)
 
 ---
 
@@ -68,7 +72,8 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        CLI (main.rs)                         │
-│                  subtitler <command> [args]                  │
+│  subtitler parse|convert|validate|edit|info|detect|quality|  │
+│             normalize|shift|pipeline <args>                  │
 └──────────────┬──────────────────────────────────────────────┘
                │
                ▼
@@ -81,29 +86,31 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                   lib.rs (公共 API 层)                       │
 │   parse_bytes / parse_file / parse_url / detect_format       │
-└──────┬───────────────────────────────┬──────────────────────┘
-       │                               │
-       ▼                               ▼
-┌─────────────────┐          ┌────────────────────────┐
-│   model.rs      │          │   格式模块 (13 个)      │
-│  数据模型 +     │◀─────────│  srt/vtt/ass/ttml/...  │
-│  SubtitleFormat │          │  每个模块独立 feature   │
-│  trait 统一接口 │          └────────────────────────┘
+└──────┬──────────────────────────────────┬───────────────────┘
+       │                                  │
+       ▼                                  ▼
+┌─────────────────┐          ┌────────────────────────────┐
+│   model/        │          │   格式模块 (13 个)          │
+│  数据模型 +     │◀─────────│  srt/vtt/ass/ttml/...      │
+│  SubtitleFormat │          │  每个模块独立 feature       │
+│  trait 统一接口 │          └────────────────────────────┘
 └────┬────────────┘
      │
-     ├──── utils.rs     (时间戳解析/格式化)
-     ├──── config.rs    (共享正则常量)
-     ├──── encoding.rs  (编码检测)
-     ├──── error.rs     (结构化错误)
-     ├──── types.rs     (AnyResult 别名)
-     ├──── normalize.rs (文本规范化)
-     └──── quality.rs   (质量分析 + 翻译 trait)
+     ├──── utils.rs      (时间戳解析/格式化)
+     ├──── config.rs     (共享正则常量)
+     ├──── encoding.rs   (编码检测，UTF-16 BOM 自 2.1)
+     ├──── error.rs      (ParseError + SubtitleError)
+     ├──── types.rs      (AnyResult 别名)
+     ├──── normalize.rs  (文本规范化)
+     ├──── quality.rs    (质量分析 + Translator trait)
+     ├──── pipeline.rs   (Pipeline + SubtitleBuilder DSL，v2.0+)
+     └──── wasm.rs       (#[wasm_bindgen] 浏览器 API，v2.0+)
 ```
 
 ### 分层原则
 
 1. **公共 API 层** ([lib.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/lib.rs)): 提供 `parse_bytes`、`parse_file`、`parse_url`、`detect_format`、`parse_bytes_as` 等高层入口，自动路由到具体格式模块。
-2. **数据模型层** ([model.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/model.rs)): 定义统一的 `SubtitleFile` 枚举和 `SubtitleFormat` trait，所有格式的编辑方法（sort/merge/validate 等）通过 trait 默认实现共享。
+2. **数据模型层** ([model/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/model)): 定义统一的 `SubtitleFile` 枚举和 `SubtitleFormat` trait，所有格式的编辑方法（sort/merge/validate 等）通过 trait 默认实现共享。v2.0 拆分为 9 个子模块（详见 §5.2）。
 3. **格式实现层** (`srt.rs`, `vtt.rs`, ...): 每个格式一个模块，编译期通过 feature flag 启用/禁用。每个模块对外暴露统一的 `parse_content` / `parse_bytes` / `parse_file` / `to_string` / `generate` / `detect_format` 接口模式。
 4. **工具层**: `utils`、`encoding`、`normalize`、`quality` 提供横切关注点支持。
 5. **CLI 层** ([main.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/main.rs) + [cli.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/cli.rs)): 用 `clap` 定义子命令，调用库层完成具体功能。
@@ -117,23 +124,34 @@ subtitler/
 ├── Cargo.toml              # 包定义、依赖、feature flags、example 声明
 ├── Cargo.lock
 ├── README.md               # 用户文档
-├── CHANGELOG.md            # 版本变更记录
-├── MIGRATION.md            # 0.1.x → 1.x 升级指南
-├── AGENTS.md               # 仓库工作流约定（构建/测试命令）
-├── SKILL.md                # Skill 描述文件
+├── CHANGELOG.md            # 版本变更记录（newest-first）
+├── MIGRATION.md            # 跨版本升级指南（含 2.0→2.1 行为变更）
+├── AGENTS.md               # ★ 开发手册（14 条踩坑 + 发布 runbook）
+├── SKILL.md                # Skill 描述文件（13 格式）
 ├── LICENSE                 # Apache-2.0
 ├── rustfmt.toml            # 2 空格缩进配置
 ├── dist-workspace.toml     # cargo-dist 发布配置
 │
 ├── src/                    # 源代码
 │   ├── lib.rs              # ★ 库根，公共 API
-│   ├── main.rs             # ★ CLI 入口
+│   ├── main.rs             # ★ CLI 入口（cmd_parse_text helper 自 2.1）
 │   ├── cli.rs              # ★ clap 命令定义
-│   ├── model.rs            # ★ 核心数据模型 + SubtitleFormat trait
-│   ├── utils.rs            # ★ 时间戳工具
+│   ├── pipeline.rs         # ★ Pipeline + SubtitleBuilder DSL（v2.0+）
+│   ├── wasm.rs             # ★ WASM 绑定（cfg target_arch="wasm32"，v2.0+）
+│   ├── model/              # ★ 数据模型子模块（v2.0 拆分）
+│   │   ├── mod.rs          #   re-exports + 测试
+│   │   ├── format.rs       #   Format + SubtitleFile 枚举 + SubtitleFormat impl
+│   │   ├── subtitle.rs     #   Subtitle + TextPart + TextFormat bitflags
+│   │   ├── trait.rs        #   SubtitleFormat trait + 18 个默认方法
+│   │   ├── types.rs        #   AssData/AssStyle/Timestamp/WritePolicy
+│   │   ├── builder.rs      #   SubtitleFileBuilder + ParseConfig
+│   │   ├── streaming.rs    #   StreamingParser trait
+│   │   ├── convert.rs      #   帧转换 + parse_ass_color + split_text_chunks
+│   │   └── validation.rs   #   ValidationIssue 枚举
+│   ├── utils.rs            # ★ 时间戳工具（手动字节扫描快速路径）
 │   ├── config.rs           # 共享正则常量
-│   ├── encoding.rs         # 编码检测与解码
-│   ├── error.rs            # 结构化错误类型
+│   ├── encoding.rs         # 编码检测与解码（UTF-16 BOM 处理自 2.1）
+│   ├── error.rs            # 结构化错误类型（ParseError + SubtitleError）
 │   ├── types.rs            # AnyResult 类型别名
 │   ├── normalize.rs        # 文本规范化
 │   ├── quality.rs          # 质量报告 + Translator trait
@@ -148,21 +166,31 @@ subtitler/
 │   ├── lrc.rs              # 格式: LRC
 │   ├── sami.rs             # 格式: SAMI
 │   ├── mpl2.rs             # 格式: MPL2
-│   ├── scc.rs              # 格式: SCC (CEA-608)
-│   └── ebu_stl.rs          # 格式: EBU STL (二进制)
+│   ├── scc.rs              # 格式: SCC (CEA-608，SMPTE 12M drop-frame 自 2.1)
+│   └── ebu_stl.rs          # 格式: EBU STL (二进制，round-trip 自 2.1 修复)
 │
-├── examples/               # 23+ 使用示例 (每个 [[example]] 在 Cargo.toml 声明)
+├── examples/               # 23 使用示例 (每个 [[example]] 在 Cargo.toml 声明)
+│   └── wasm/               #   浏览器 WASM demo (index.html + README)
 ├── benches/                # criterion 性能基准
 │   └── subtitler_benchmark.rs
 ├── tests/                  # 集成测试
-│   ├── integration.rs
-│   ├── cross_format.rs     # 跨格式转换测试
-│   ├── arch_unification.rs
-│   ├── cleanup_batch.rs
-│   └── proptest.rs         # 属性测试
+│   ├── integration.rs      #   端到端流程
+│   ├── cross_format.rs     #   跨格式转换测试
+│   ├── arch_unification.rs #   架构统一性
+│   ├── cleanup_batch.rs    #   清理批处理
+│   ├── error_assertions.rs #   错误类型 Display 测试
+│   ├── pipeline_integration.rs # Pipeline + Builder 集成（v2.0+）
+│   ├── streaming_tests.rs  #   流式解析测试
+│   ├── cli_binary_format.rs #   CLI 二进制格式处理（v2.1+）
+│   └── proptest.rs         #   属性测试
 │
 ├── docs/                   # 内部设计与分析文档
-└── .github/workflows/      # CI: rust.yml + release.yml
+│   ├── CODE_WIKI.md        #   ★ 本文件
+│   ├── superpowers/        #   brainstorming/writing-plans 产出（v2.0+）
+│   │   ├── specs/          #     设计 spec（路线图、2.1 等）
+│   │   └── plans/          #     实施 plan（2.0.1 hotfix、2.1 等）
+│   └── ...
+└── .github/workflows/      # CI: rust.yml + release.yml (cargo-dist)
 ```
 
 ---
@@ -171,7 +199,7 @@ subtitler/
 
 ### 4.1 `Subtitle` — 单条字幕
 
-定义于 [model.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/model.rs#L44-L62)。
+定义于 [model/subtitle.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/model/subtitle.rs)。
 
 ```rust
 pub struct Subtitle {
@@ -229,7 +257,7 @@ pub enum SubtitleFile {
 
 ### 4.4 `SubtitleFormat` trait — 统一操作接口
 
-定义于 [model.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/model.rs#L583)。
+定义于 [model/trait.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/model/trait.rs)。
 
 ```rust
 pub trait SubtitleFormat: Debug + Clone + Send + Sync {
@@ -313,11 +341,25 @@ pub enum ValidationIssue {
 - `parse_bytes_as(&[u8], Format) -> Result<SubtitleFile>` — 按指定格式解析。
 - `parse_file(path)` / `parse_url(url)` / `parse_url_with(url, client)` — 异步 I/O 入口（`http` feature 控制 URL 支持）。
 
-### 5.2 [model.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/model.rs) — 数据模型中心
+### 5.2 [model/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/model) — 数据模型中心（v2.0 拆分为子模块）
 
 **职责**: 定义全部核心类型 + `SubtitleFormat` trait 默认实现 + `SubtitleFileBuilder` + `ParseConfig` + `StreamingParser` trait + 帧转换工具。
 
-**关键自由函数**:
+v2.0 起拆分为 9 个子模块：
+
+| 子模块 | 内容 |
+|--------|------|
+| `format.rs` | `Format` 枚举、`SubtitleFile` 枚举、`SubtitleFormat` trait impl |
+| `subtitle.rs` | `Subtitle`、`TextPart`、`TextFormat` bitflags |
+| `trait.rs` | `SubtitleFormat` trait 定义 + 18 个默认方法（编辑/校验/拆分/帧率转换） |
+| `types.rs` | `AssData`、`AssStyle`、`Timestamp`、`WritePolicy` |
+| `builder.rs` | `SubtitleFileBuilder`、`ParseConfig` |
+| `streaming.rs` | `StreamingParser` trait |
+| `convert.rs` | `ms_to_frames`/`frames_to_ms`、`parse_ass_color`、`split_text_chunks` |
+| `validation.rs` | `ValidationIssue` 枚举 |
+| `mod.rs` | re-exports + 通用测试 |
+
+**关键自由函数** (`model::convert`):
 - `ms_to_frames(ms, fps) -> u64`
 - `frames_to_ms(frames, fps) -> u64`
 - `parse_ass_color(str) -> (r, g, b, a)`
@@ -398,12 +440,53 @@ pub enum ValidationIssue {
 ### 5.10 [main.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/main.rs) + [cli.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/cli.rs) — CLI
 
 - `cli.rs`: 用 `clap` derive 定义 `Cli` / `Commands` 枚举 / 各子命令的 `*Args` 结构体 / `Format` 枚举（含 `from_ext` 扩展名映射）。
-- `main.rs`: `#[tokio::main]` 入口，dispatch 到 `cmd_parse` / `cmd_convert` / `cmd_validate` / `cmd_edit` / `cmd_info` / `cmd_detect` / `cmd_quality` / `cmd_normalize` / `cmd_shift` 九个命令处理函数。
+- `main.rs`: `#[tokio::main]` 入口，dispatch 到 10 个命令处理函数：`cmd_parse` / `cmd_convert` / `cmd_validate` / `cmd_edit` / `cmd_info` / `cmd_detect` / `cmd_quality` / `cmd_normalize` / `cmd_shift` / `cmd_pipeline`（v2.0+）。
 
 **辅助函数**:
 - `read_input(input)` — 支持 `-` (stdin) / `http(s)://` / 本地路径，返回 `(bytes, ext_hint)`。
 - `resolve_format(data, hint)` — hint 优先，否则调用 `detect_format`。
 - `resolve_output_format(output, hint)` — hint 优先，否则从扩展名推断。
+- `parse_to_file(data, format)` — 异步解析分发；**EBU STL 分支早返回**，跳过 `decode_to_string`（v2.1 修复二进制误解码 bug）。
+- `cmd_parse_text(data, format)` — 12 个文本格式的解析 helper（v2.1 重构，避免在两处重复 match）。
+
+### 5.11 [pipeline.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/pipeline.rs) — Pipeline + Builder DSL（v2.0+）
+
+**`SubtitleBuilder`** — 链式 builder 包装 `SubtitleFile`：
+```rust
+let file = SubtitleBuilder::from(file)
+  .sort()
+  .shift(500)
+  .split_long(42)
+  .merge_adjacent(200)
+  .build();
+```
+
+**`Pipeline`** — 声明式变换管道，支持 JSON 序列化（可从配置文件加载）：
+```rust
+let pipeline = Pipeline::new()
+  .sort()
+  .shift(500)
+  .split_long(42);
+let result = pipeline.apply(file)?;
+```
+
+**`PipelineOp` 枚举** 10 个变体：`Sort`、`Shift`、`MergeAdjacent`、`SplitLong`、`TransformFps`、`RemoveOverlaps`、`EnforceMinDuration`、`EnforceMaxDuration`、`AutoExtendCps`、`FilterEmpty`。
+
+CLI 入口：`subtitler pipeline input.srt output.vtt --config ops.json`。
+
+### 5.12 [wasm.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/wasm.rs) — WASM 浏览器绑定（v2.0+）
+
+`#[cfg(target_arch = "wasm32")]` 下编译，暴露 6 个 `#[wasm_bindgen]` 函数：
+- `parse_subtitles(content) -> SubtitlerResult`
+- `convert_format(content, target_format) -> SubtitlerResult`
+- `validate_subtitles(content) -> JsValue`（JSON）
+- `detect(content) -> String`
+- `get_info(content) -> JsValue`（JSON）
+- `normalize_text(content) -> String`
+
+`SubtitlerResult` 结构含 `subtitle_count`/`format`/`output`/`error`/`is_ok`。
+
+浏览器 demo 在 `examples/wasm/`（`index.html` 拖拽式）。**注意**：WASM 函数当前 0 测试覆盖（路线图 2.3 修）。
 
 ---
 
@@ -774,20 +857,78 @@ std::fs::write("out.srt", file.to_string())?;
 
 ---
 
-## 12. 测试体系
+## 12. Pipeline 与 Builder DSL（v2.0+）
 
-### 12.1 测试分布
+详见 §5.11。核心 API：
 
-- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 124 个）。
-- **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 92 个）:
-  - [integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/integration.rs) — 端到端流程
-  - [cross_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format.rs) — 跨格式转换矩阵
-  - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试
-  - [arch_unification.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/arch_unification.rs) — 架构统一性
-  - [cleanup_batch.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cleanup_batch.rs) — 清理批处理
-- **总测试数**: 216。
+```rust
+use subtitler::pipeline::{Pipeline, SubtitleBuilder, PipelineOp};
 
-### 12.2 运行
+// 链式 Builder
+let file = SubtitleBuilder::from(file)
+  .sort()
+  .shift(500)
+  .transform_fps(23.976, 25.0)
+  .build();
+
+// 声明式 Pipeline（可序列化）
+let pipeline = Pipeline::new().sort().shift(500).split_long(42);
+let json = serde_json::to_string_pretty(&pipeline)?;   // 序列化
+let parsed: Pipeline = serde_json::from_str(&json)?;   // 反序列化
+let result = pipeline.apply(file);
+```
+
+CLI 入口：`subtitler pipeline input.srt output.vtt --config ops.json`，配置 JSON 形如：
+```json
+{"operations":[{"op":"Sort"},{"op":"Shift","offset_ms":500}]}
+```
+
+`Pipeline::apply` 串行执行所有 op；每个 op 对应 `SubtitleFormat` trait 的一个方法。
+
+---
+
+## 13. WASM 集成（v2.0+）
+
+库自 v2.0 起编译到 `wasm32-unknown-unknown`。`tokio`/`reqwest` 通过 `cfg(not(target_arch = "wasm32"))` 隔离。`src/wasm.rs` 暴露 6 个 `#[wasm_bindgen]` 函数（详见 §5.12）。
+
+构建：
+```bash
+wasm-pack build --target web
+# 产物在 pkg/，含 .wasm + .js + .d.ts
+```
+
+浏览器使用：
+```javascript
+import init, { parse_subtitles, detect } from './pkg/subtitler.js';
+await init();
+const result = parse_subtitles(srtContent);
+console.log(result.subtitle_count, result.format, result.output);
+```
+
+`examples/wasm/` 含 `index.html` 拖拽式 demo。
+
+> ⚠ **当前限制**：WASM 函数 0 测试覆盖，CI 未跑 `wasm-pack test`。路线图 2.3 补齐。
+
+---
+
+## 14. 测试体系
+
+### 14.1 测试分布（v2.1.0 快照）
+
+- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 142 个）。
+- **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 144 个）:
+  - [integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/integration.rs) — 端到端流程（66 tests）
+  - [cross_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format.rs) — 跨格式转换（覆盖 ~3%，路线图 2.3 扩矩阵）
+  - [arch_unification.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/arch_unification.rs) — 架构统一性（12 tests）
+  - [cleanup_batch.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cleanup_batch.rs) — 清理批处理（6 tests）
+  - [error_assertions.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/error_assertions.rs) — 错误类型 Display（12 tests）
+  - [pipeline_integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/pipeline_integration.rs) — Pipeline + Builder（16 tests，v2.0+）
+  - [streaming_tests.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/streaming_tests.rs) — 流式解析（16 tests）
+  - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests，v2.1+）
+  - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（2 tests，仅 SRT/VTT）
+- **总测试数**: **286**（v1.4 时 216 → v2.0 时 273 → v2.1 时 286）。
+
+### 14.2 运行
 
 ```sh
 cargo test --verbose           # 全部
@@ -796,54 +937,96 @@ cargo test --test cross_format # 单个集成测试
 cargo test -- --nocapture      # 显示 println! 输出
 ```
 
-### 12.3 基准测试
+### 14.3 验证门禁（每个改动必须全过）
 
-[benches/subtitler_benchmark.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/benches/subtitler_benchmark.rs) 使用 `criterion`，通过 `cargo bench` 运行。
+```bash
+cargo fmt -- --check
+cargo clippy --all-targets -- -D warnings   # 必须 --all-targets（见 AGENTS.md §3.1）
+cargo test --all-targets                     # 测试数不能减少
+cargo build --no-default-features --features srt  # 最小构建
+cargo build --examples                       # 示例仍工作
+```
+
+### 14.4 基准测试
+
+[benches/subtitler_benchmark.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/benches/subtitler_benchmark.rs) 使用 `criterion`，通过 `cargo bench` 运行。覆盖 SRT/VTT/ASS parse + stringify + detect + model ops + regex hotspots + 10k 字幕 throughput。
+
+> ⚠ **当前限制**：benches 不在 CI 跑、缺 9 个格式/streaming/WASM/Pipeline benchmark。路线图 2.3 补齐。
+
+### 14.5 已知测试盲区（路线图 2.3 补）
+
+- WASM 函数（`src/wasm.rs` 6 个）零覆盖。
+- SSA/SCC/EBU STL round-trip 测试（SCC/EBU STL 自 v2.1 起 round-trip 正确，但 SSA 仍无）。
+- chardetng 编码回退路径零测试（Shift_JIS/GBK/Big5/Windows-1252 fixture）。
+- 错误路径：`SubtitleError::Xml`/`InvalidFrame` + `ParseError::Http/Io/Decode/Anyhow/Unsupported` 多数未触发。
+- proptest 仅 ASCII，无 Unicode/换行/标签/CJK。
 
 ---
 
-## 13. CI 与发布
+## 15. CI 与发布
 
-### 13.1 CI 流程 ([.github/workflows/rust.yml](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/.github/workflows/rust.yml))
+### 15.1 CI 流程 ([.github/workflows/rust.yml](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/.github/workflows/rust.yml))
 
-1. `cargo fmt -- --check`
-2. `cargo clippy -- -D warnings`
-3. `cargo build --verbose` + `cargo test --verbose`，配合 feature 矩阵（default / `--no-default-features` + 各组合）。
+4 个并行 job：
+1. `fmt` — `cargo fmt -- --check`
+2. `clippy` — `cargo clippy --all-targets -- -D warnings`
+3. `test` — feature 矩阵（default + `--no-default-features --features srt`）×（`cargo build --verbose` + `cargo test --verbose`）
+4. `examples` — `cargo build --examples --verbose`
 
-### 13.2 发布流程 ([.github/workflows/release.yml](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/.github/workflows/release.yml))
+> ⚠ **当前缺口**（路线图 2.3 补）：
+> - 不测 WASM build（`wasm-pack` / `cargo build --target wasm32-unknown-unknown`）。
+> - 不测 MSRV（rust-version = 1.85，CI 用 stable）。
+> - clippy 只跑 default features，`--no-default-features` 路径的 `#[cfg]` 代码未被 lint。
+
+### 15.2 发布流程 ([.github/workflows/release.yml](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/.github/workflows/release.yml))
 
 使用 **cargo-dist** 自动化，由 git tag 触发:
 
-1. 打 tag (如 `v1.4.0`)。
-2. CI 构建 release artifact（用 `[profile.dist]` 配置）。
-3. 自动创建 GitHub Release。
-4. crates.io 发布需手动: `cargo publish`。
+1. 打 annotated tag（如 `v2.1.0`，**不要用 lightweight tag**）。
+2. cargo-dist workflow 构建 release artifact（用 `[profile.dist]` 配置）。
+3. 自动创建 GitHub Release（含 `.tar.gz` 二进制）。
+4. **crates.io 发布需手动**（详见 AGENTS.md §7.4 网络注意事项）。
 
-### 13.3 版本规范
+### 15.3 版本规范
 
 遵循 [Semantic Versioning](https://semver.org/):
 
-- 新增格式 / 新公共 API → **minor**
-- 优化 / bug 修复 → **patch**
-- 破坏性变更 → **major**（v2.0 计划做零拷贝解析等重构）
+- `patch`（x.y.Z）：bug 修复、文档、零行为变更。
+- `minor`（x.Y.0）：新增 API、minor breaking change（配 MIGRATION 说明）。**行为数值变更也算 minor**（如 v2.1 SCC drop-frame 修复让 NTSC 长视频时间码改变）。
+- `major`（X.0.0）：重大架构 / 大量新 API 面。
 
-记录于 [CHANGELOG.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/CHANGELOG.md)。
+记录于 [CHANGELOG.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/CHANGELOG.md)（newest-first）。**完整发布流程见 AGENTS.md §7**。
 
 ---
 
-## 14. 设计决策与约定
+## 16. 路线图
 
-### 14.1 时间单位
+完整 spec: [docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md)。
+
+| 版本 | 状态 | 范围 |
+|------|------|------|
+| **2.0.1** | ✅ 已发布 | hotfix：clippy/CHANGELOG/README/Cargo.toml 文档对齐 |
+| **2.1.0** | ✅ 已发布 | 6 项 P1 正确性修复（SCC drop-frame、EBU STL round-trip、UTF-16 BOM、CLI 二进制、split_long、main.rs unwrap）+ dependabot。13 新测试，总 286 |
+| **2.2** | ⏳ 待开始 | API 拉齐：13 格式补 generate/parse_stream/异步 write_stream/统一返回类型 |
+| **2.3** | ⏳ 待开始 | 测试/CI 大补：WASM 测试、cross-format 矩阵、CI 加 WASM/MSRV/clippy 矩阵、CODE_WIKI 重写（本文件持续滚动更新） |
+| **3.0** | ⏳ 待开始 | 综合前进：IMSC/CEA-708/SMPTE-TT + AI 集成（translate CLI + LLM 适配器）+ zero-copy + npm/PyO3/C 绑定 |
+
+---
+
+## 17. 设计决策与约定
+
+### 17.1 时间单位
 
 **全库统一使用毫秒 (`u64`)**，不是秒。这是 SRT/VTT 的原生精度，避免浮点误差。帧格式（MicroDVD/MPL2/SCC/EBU STL）通过 `ms_to_frames` / `frames_to_ms` 转换。
 
-### 14.2 同步 vs 异步
+### 17.2 同步 vs 异步
 
 - **解析核心是同步的** (`parse_content`) — 不做真实 I/O，零开销。
 - **文件 / URL / 流式写入是异步的** (`parse_file` / `parse_url` / `generate` / `write_stream`) — 基于 `tokio`。
 - TTML/EBU STL 的流式写入因 `quick-xml` / 二进制结构限制为同步。
+- WASM target (`cfg(target_arch = "wasm32")`) 完全无异步 I/O —— `tokio`/`reqwest` 不编译。
 
-### 14.3 写入策略
+### 17.3 写入策略
 
 `generate()` 函数通过 `WritePolicy` 控制行为:
 - `Overwrite`（默认）: `OpenOptions::write(true).truncate(true)`
@@ -852,11 +1035,13 @@ cargo test -- --nocapture      # 显示 println! 输出
 
 > ⚠ 默认覆写，不是追加。
 
-### 14.4 编码处理
+### 17.4 编码处理
 
-所有 `parse_bytes` 入口都先经 `encoding::decode_to_string`，自动处理 BOM / UTF-16 / GBK / Shift_JIS / Big5 等，调用方无需关心编码。
+所有文本格式的 `parse_bytes` 入口都先经 `encoding::decode_to_string`，自动处理 BOM / UTF-16 / GBK / Shift_JIS / Big5 等。
 
-### 14.5 富文本提取
+> ⚠ **EBU STL 例外**（v2.1+）：`parse_to_file` / `cmd_parse` 对 EBU STL **跳过** `decode_to_string`，因为它是二进制格式，任意字节会让 chardetng 误判。详见 AGENTS.md §3.9。
+
+### 17.5 富文本提取
 
 SRT/VTT/ASS 解析时会:
 1. 把标签内的文本拼接到 `text` 字段（纯文本）。
@@ -864,7 +1049,7 @@ SRT/VTT/ASS 解析时会:
 
 调用方可选择用 `text`（简单）或 `text_parts`（保留样式）。
 
-### 14.6 性能优化点
+### 17.6 性能优化点
 
 - `LazyLock<Regex>` 全局缓存正则，避免重复编译。
 - `parse_timestamp` 优先走手动字节扫描快速路径，正则仅作回退。
@@ -872,27 +1057,39 @@ SRT/VTT/ASS 解析时会:
 - `SmallVec` 减少 `TextPart` 堆分配。
 - `bitflags` 把三个 bool 压成 1 字节。
 - `generate()` 内部流式写入，不构造完整字符串。
+- v2.1+ UTF-16 解码：跳过 2 字节 BOM 后再 `chunks_exact`，避免无效字符。
 
-### 14.7 代码风格
+### 17.7 SCC drop-frame 时间码（v2.1+）
+
+`src/scc.rs` 实现 SMPTE 12M-1-2014 §3.3 drop-frame 算法：
+- 用标称帧率（30，NTSC）做帧计数。
+- 每分钟丢 2 帧，每 10 分钟不丢。
+- 用真实帧率（29.97）做 ms 转换。
+
+**关键不变量**：`01:00:00;00` (drop) = **正好 3600000ms**（drop-frame 设计目的就是让显示时码与真实时间对齐）。非 drop-frame 的 `01:00:00:00` = 3603604ms（多 108 帧 ≈ 3.6s）。
+
+### 17.8 代码风格
 
 - **2 空格缩进**（[rustfmt.toml](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/rustfmt.toml)），非 Rust 默认 4 空格。
-- `cargo clippy -D warnings` 必须零警告。
-- 错误优先用 `anyhow::Result`（别名 `AnyResult`），公共 API 边界可用 `thiserror` 类型化错误。
+- `cargo clippy --all-targets -D warnings` 必须零警告（**注意 `--all-targets`**，见 AGENTS.md §3.1）。
+- 错误优先用 `anyhow::Result`（别名 `AnyResult`），公共 API 边界可用 `thiserror` 类型化错误（`ParseError` / `SubtitleError`）。
 
-### 14.8 CLI 入口
+### 17.9 CLI 入口
 
-- `subtitler file <path>` / `subtitler url <url>` 是早期形式。
-- 现版本子命令为 `parse` / `convert` / `validate` / `edit` / `info` / `detect` / `quality` / `normalize` / `shift`。
-- 格式自动检测: 内容签名优先，扩展名作 hint。
+子命令：`parse` / `convert` / `validate` / `edit` / `info` / `detect` / `quality` / `normalize` / `shift` / `pipeline`（v2.0+）。
+
+格式自动检测：**内容签名优先**，扩展名 / URL substring 作 hint。
 
 ---
 
 ## 附录: 快速链接
 
 - [README.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/README.md) — 用户面向文档
-- [CHANGELOG.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/CHANGELOG.md) — 版本历史
-- [MIGRATION.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/MIGRATION.md) — 0.1.x 升级指南
-- [AGENTS.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/AGENTS.md) — 仓库工作流
+- [CHANGELOG.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/CHANGELOG.md) — 版本历史（newest-first）
+- [MIGRATION.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/MIGRATION.md) — 跨版本升级指南（含 2.0→2.1 行为变更）
+- [AGENTS.md](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/AGENTS.md) — ★ 开发手册（14 条踩坑 + 发布 runbook + 路线图进度）
+- [路线图 spec](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md)
+- [2.1 spec](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/docs/superpowers/specs/2026-07-18-2.1-correctness-debt-design.md)
 - [crates.io: subtitler](https://crates.io/crates/subtitler)
 - [docs.rs: subtitler](https://docs.rs/subtitler)
 - [GitHub: subtitle-rs/subtitler](https://github.com/subtitle-rs/subtitler)
