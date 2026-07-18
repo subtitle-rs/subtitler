@@ -10,21 +10,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
 
-## [2.5.1] - 2026-07-18
-
-### Fixed
-
-- **MSRV 1.85 compatibility**: refactored 3 `let`-chain (`&& let`) usages in
-  `srt.rs` to nested `if let`. Let-chains require Rust 1.86+ but MSRV is 1.85.
-- **`api_surface.rs` feature gates**: every format reference now has
-  `#[cfg(feature)]` so `cargo test --no-default-features --features srt --lib`
-  passes.
-- **CI clippy-matrix**: minimal builds (`--no-default-features`) now run
-  `cargo clippy --lib` instead of `--all-targets`, because examples and
-  integration tests reference multi-format modules. Default features still
-  runs `--all-targets`.
-
-## [2.5.0] - 2026-07-18
+## [2.6.0] - 2026-07-18
 
 ### Changed
 
@@ -37,6 +23,17 @@ adheres to [Semantic Versioning](https://semver.org/).
   `MS_PER_MINUTE`, `MS_PER_SECOND`, `DEFAULT_TAIL_MS`) extracted to
   `model::convert` and used throughout `utils.rs`, `ass.rs`, `subviewer.rs`,
   `scc.rs`, and `main.rs`.
+
+### Fixed
+
+- **MSRV 1.85 compatibility**: refactored 3 `let`-chain (`&& let`) usages in
+  `srt.rs` to nested `if let`. Let-chains require Rust 1.86+ but MSRV is 1.85.
+- **`api_surface.rs` feature gates**: every format reference now has
+  `#[cfg(feature)]` so `cargo test --no-default-features --features srt --lib`
+  passes.
+- **CI clippy-matrix**: minimal builds (`--no-default-features`) now run
+  `cargo clippy --lib` instead of `--all-targets`, because examples and
+  integration tests reference multi-format modules.
 
 ## [2.4.1] - 2026-07-18
 
