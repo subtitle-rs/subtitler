@@ -77,7 +77,14 @@ impl SccData {
 
         drop_frame = separator == ";";
 
-        let timecode_ms = scc_timecode_to_ms(hours, minutes, seconds, frames, DEFAULT_FPS);
+        let timecode_ms = scc_timecode_to_ms(
+          hours,
+          minutes,
+          seconds,
+          frames,
+          DEFAULT_FPS,
+          drop_frame,
+        );
 
         // Decode hex data to text
         let decoded_text = decode_scc_hex(hex_data);
@@ -168,34 +175,94 @@ impl SccData {
   }
 }
 
-/// Convert SCC timecode to milliseconds.
-fn scc_timecode_to_ms(h: u64, m: u64, s: u64, f: u64, fps: f64) -> u64 {
-  let total_frames = h * 3600 * fps as u64 + m * 60 * fps as u64 + s * fps as u64 + f;
-  let seconds = total_frames as f64 / fps;
-  (seconds * 1000.0).round() as u64
+/// Convert SCC/CEA-608 timecode to milliseconds.
+///
+/// Implements SMPTE 12M-1-2014 §3.3 drop-frame algorithm for NTSC
+/// (29.97 fps). Drop-frame timecodes (separator `;`) drop 2 frames
+/// per minute except every 10th minute, so the displayed timecode
+/// tracks real elapsed time. Non-drop timecodes (separator `:`) treat
+/// each frame as exactly 1/fps seconds and drift ~3.6s/hour vs. real time.
+///
+/// `fps` is the true frame rate (29.97, not the nominal 30 used
+/// internally for the drop-frame bookkeeping).
+fn scc_timecode_to_ms(h: u64, m: u64, s: u64, f: u64, fps: f64, drop_frame: bool) -> u64 {
+  // Use integer frame counts at the NOMINAL frame rate (30 for NTSC).
+  // Going via f64 here would lose precision (29.97 × 3600 ≠ integer).
+  let nominal_fps = fps.round() as u64;
+  let mut total_frames = h * 3600 * nominal_fps
+    + m * 60 * nominal_fps
+    + s * nominal_fps
+    + f;
+
+  if drop_frame {
+    // SMPTE 12M-1-2014 §3.3: drop 2 frames per minute, except every 10th minute.
+    //   drop_count = 2 * (total_minutes - total_minutes / 10)
+    // Examples:
+    //   total_minutes = 0  → drop 0   (origin)
+    //   total_minutes = 1  → drop 2
+    //   total_minutes = 9  → drop 18
+    //   total_minutes = 10 → drop 18  (the 10th minute itself does NOT drop)
+    //   total_minutes = 60 → drop 108 (1 hour)
+    let total_minutes = h * 60 + m;
+    let drop_count = 2 * (total_minutes - total_minutes / 10);
+    total_frames -= drop_count;
+  }
+
+  // Convert frames → ms using the TRUE fps (29.97), not the nominal 30.
+  ((total_frames as f64) / fps * 1000.0).round() as u64
 }
 
-/// Convert milliseconds to SCC timecode.
+/// Convert milliseconds to SCC/CEA-608 timecode string.
+///
+/// Inverse of `scc_timecode_to_ms`. For drop-frame output, iterates
+/// minute-by-minute to invert the "drop 2 per minute except every
+/// 10th" rule.
 fn ms_to_scc_timecode(ms: u64, fps: f64, drop_frame: bool) -> String {
-  let total_frames = (ms as f64 / 1000.0 * fps).round() as u64;
+  let nominal_fps = fps.round() as u64;
+  let frames_per_minute = 60 * nominal_fps;
 
-  let frames_per_hour = (fps * 3600.0) as u64;
-  let frames_per_minute = (fps * 60.0) as u64;
+  // Real hours come directly from ms (independent of drop-frame).
+  let hours = ms / 3_600_000;
+  let ms_within_hour = ms % 3_600_000;
 
-  let hours = total_frames / frames_per_hour;
-  let remaining = total_frames % frames_per_hour;
+  // Convert ms-within-hour to frames at the nominal rate.
+  let mut frames_within_hour = (ms_within_hour as f64 * fps / 1000.0).round() as u64;
 
-  let minutes = remaining / frames_per_minute;
-  let remaining = remaining % frames_per_minute;
+  if drop_frame {
+    // Walk forward through minutes, subtracting the per-minute drop
+    // count, to find the displayed minute value. Each displayed minute
+    // is `frames_per_minute - drop_for_this_minute` stored frames apart,
+    // where drop_for_this_minute is 0 if the NEXT minute is a 10th
+    // (because the transition into a 10th minute doesn't drop).
+    let mut minutes = 0u64;
+    while minutes < 60 {
+      // Determine if transitioning INTO minute (minutes+1) drops frames.
+      // Per SMPTE 12M: frames are dropped at the START of each minute
+      // except minutes that are exact multiples of 10.
+      let drop_for_next = if (minutes + 1) % 10 == 0 { 0 } else { 2 };
+      let step = frames_per_minute - drop_for_next;
+      if frames_within_hour < step {
+        break;
+      }
+      frames_within_hour -= step;
+      minutes += 1;
+    }
+    let seconds = frames_within_hour / nominal_fps;
+    let frames = frames_within_hour % nominal_fps;
+    return format!(
+      "{:02}:{:02}:{:02};{:02}",
+      hours, minutes, seconds, frames
+    );
+  }
 
-  let seconds = remaining / fps as u64;
-  let frames = remaining % fps as u64;
-
-  let separator = if drop_frame { ";" } else { ":" };
-
+  // Non-drop: simple division.
+  let minutes = frames_within_hour / frames_per_minute;
+  let remaining = frames_within_hour % frames_per_minute;
+  let seconds = remaining / nominal_fps;
+  let frames = remaining % nominal_fps;
   format!(
-    "{:02}:{:02}:{:02}{}{:02}",
-    hours, minutes, seconds, separator, frames
+    "{:02}:{:02}:{:02}:{:02}",
+    hours, minutes, seconds, frames
   )
 }
 
@@ -375,10 +442,13 @@ impl<'a> Iterator for SccStream<'a> {
         let hours: u64 = caps[1].parse().unwrap_or(0);
         let minutes: u64 = caps[2].parse().unwrap_or(0);
         let seconds: u64 = caps[3].parse().unwrap_or(0);
+        // caps[4] is the separator (`:` or `;`); drop-frame uses `;`.
+        let drop_frame = &caps[4] == ";";
         let frames: u64 = caps[5].parse().unwrap_or(0);
         let hex_data = &caps[6];
 
-        let timecode_ms = scc_timecode_to_ms(hours, minutes, seconds, frames, DEFAULT_FPS);
+        let timecode_ms =
+          scc_timecode_to_ms(hours, minutes, seconds, frames, DEFAULT_FPS, drop_frame);
         let decoded_text = decode_scc_hex(hex_data);
 
         if hex_data.contains("942c") {
@@ -454,12 +524,71 @@ mod tests {
 
   #[test]
   fn test_timecode_conversion() {
-    let ms = scc_timecode_to_ms(1, 2, 3, 15, 29.97);
+    let ms = scc_timecode_to_ms(1, 2, 3, 15, 29.97, false);
     // Just check that conversion works
     assert!(ms > 0);
     let tc = ms_to_scc_timecode(ms, 29.97, true);
     // Check format is correct (HH:MM:SS;FF or HH:MM:SS:FF)
     assert!(tc.contains(':') || tc.contains(';'));
+  }
+
+  #[test]
+  fn test_scc_nondrop_accuracy() {
+    // Non-drop 01:00:00:00 at 29.97fps = 108000 frames / 29.97 ≈ 3603604ms
+    let ms = scc_timecode_to_ms(1, 0, 0, 0, 29.97, false);
+    assert_eq!(ms, 3_603_604);
+  }
+
+  #[test]
+  fn test_scc_dropframe_accuracy() {
+    // Drop-frame 01:00:00;00 at 29.97fps = (108000 - 108) / 29.97 = 3600000ms
+    // (drop-frame aligns displayed timecode with real elapsed time)
+    let ms = scc_timecode_to_ms(1, 0, 0, 0, 29.97, true);
+    assert_eq!(ms, 3_600_000);
+  }
+
+  #[test]
+  fn test_scc_dropframe_edge_zero_minute() {
+    // SMPTE 12M edge cases (values hand-verified via Python simulation).
+    // Key invariant: drop-frame aligns whole-10-minute and whole-hour
+    // boundaries to real elapsed time. Within each decade, individual
+    // minutes run short by ~7ms (2 dropped frames at 29.97fps).
+    assert_eq!(scc_timecode_to_ms(0, 0, 0, 0, 29.97, true), 0);
+    assert_eq!(scc_timecode_to_ms(0, 1, 0, 0, 29.97, true), 59_993);
+    assert_eq!(scc_timecode_to_ms(0, 10, 0, 0, 29.97, true), 600_000);
+    assert_eq!(scc_timecode_to_ms(0, 11, 0, 0, 29.97, true), 659_993);
+    assert_eq!(scc_timecode_to_ms(1, 0, 0, 0, 29.97, true), 3_600_000);
+
+    // The "skip every 10th minute" rule shows up as a 7ms discontinuity:
+    // m=9 has the same cumulative drop_count as m=10 (both 18 frames),
+    // so the 10th minute itself doesn't add a drop. Compare m=10→11
+    // (drops 2 frames) vs the 9→10 transition which carries no new drop.
+    let drop_count_at = |m: u64| 2 * (m - m / 10);
+    assert_eq!(drop_count_at(9), 18);
+    assert_eq!(drop_count_at(10), 18, "m=10 should not add a drop vs m=9");
+    assert_eq!(drop_count_at(11), 20, "m=11 should drop 2 more frames");
+  }
+
+  #[test]
+  fn test_scc_round_trip() {
+    // Round-trip a non-trivial drop-frame timecode.
+    let ms = scc_timecode_to_ms(1, 30, 45, 12, 29.97, true);
+    let tc = ms_to_scc_timecode(ms, 29.97, true);
+    // Re-parse the rendered timecode (format is HH:MM:SS;FF).
+    let bytes = tc.as_bytes();
+    let h = std::str::from_utf8(&bytes[0..2]).unwrap().parse::<u64>().unwrap();
+    let m = std::str::from_utf8(&bytes[3..5]).unwrap().parse::<u64>().unwrap();
+    let s = std::str::from_utf8(&bytes[6..8]).unwrap().parse::<u64>().unwrap();
+    let f = std::str::from_utf8(&bytes[9..11]).unwrap().parse::<u64>().unwrap();
+    let ms_back = scc_timecode_to_ms(h, m, s, f, 29.97, true);
+    // Allow 1-frame tolerance (33ms) for rounding in both directions.
+    assert!(
+      (ms_back as i64 - ms as i64).abs() <= 34,
+      "round-trip drift: original={}, re-parsed={}, tc={}",
+      ms,
+      ms_back,
+      tc
+    );
   }
 
   #[test]
