@@ -23,8 +23,17 @@
 - `generate()` functions **write** to files via `OpenOptions::write(true).truncate(true)` — they overwrite, not append.
 
 ## CLI
-- `subtitler file <path>` / `subtitler url <url>`
-- Format auto-detected by file extension or URL substring (`.srt` / `.vtt`).
+- `subtitler parse <input>` — parse and display (input = path / URL / `-` for stdin)
+- `subtitler convert <input> <output>` — format conversion (auto-detect source, infer target from extension)
+- `subtitler validate <input>` — timing and quality checks (`--max-cps`, `--max-chars`, `--max-gap`)
+- `subtitler edit <input> --output <out>` — sort / shift / merge / split / transform-fps
+- `subtitler shift <input> <ms> --output <out>` — quick time shift (positive = delay)
+- `subtitler normalize <input> --output <out>` — text normalization (`--all` or individual `--fix-ocr` / `--strip-hi` / `--quotes` / `--whitespace`)
+- `subtitler quality <input>` — quality report (`--json`)
+- `subtitler info <input>` — file statistics
+- `subtitler detect <input>` — format detection only
+- `subtitler pipeline <input> <output> --config ops.json` — declarative transformation pipeline (v2.0+)
+- Format auto-detected by content signature; file extension / URL substring used as a hint.
 
 ## Testing
 - Unit tests in `src/` plus integration tests in `tests/`.
