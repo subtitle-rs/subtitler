@@ -81,6 +81,14 @@ impl SubtitleBuilder {
     self.file = self.file.filter(f);
     self
   }
+
+  /// Remove consecutive duplicate subtitles (same `text` after trim),
+  /// keeping the first occurrence's timing.
+  pub fn remove_duplicates(mut self) -> Self {
+    let subs = self.file.subtitles_mut();
+    subs.dedup_by(|a, b| a.text.trim() == b.text.trim());
+    self
+  }
 }
 
 /// A single pipeline operation.
@@ -97,6 +105,7 @@ pub enum PipelineOp {
   EnforceMaxDuration { max_ms: u64 },
   AutoExtendCps { max_cps: f64 },
   FilterEmpty,
+  RemoveDuplicates,
 }
 
 /// A declarative pipeline of subtitle transformation operations.
@@ -189,6 +198,11 @@ impl Pipeline {
     self
   }
 
+  pub fn remove_duplicates(mut self) -> Self {
+    self.operations.push(PipelineOp::RemoveDuplicates);
+    self
+  }
+
   pub fn apply(&self, file: SubtitleFile) -> SubtitleFile {
     let mut builder = SubtitleBuilder::from(file);
     for op in &self.operations {
@@ -206,6 +220,7 @@ impl Pipeline {
           builder = builder.filter(|sub| !sub.text.trim().is_empty());
           builder
         }
+        PipelineOp::RemoveDuplicates => builder.remove_duplicates(),
       };
     }
     builder.build()
@@ -323,5 +338,42 @@ mod tests {
     let pipeline = Pipeline::new();
     let result = pipeline.apply(test_file());
     assert_eq!(result.subtitles().len(), 3);
+  }
+
+  #[test]
+  fn test_remove_duplicates_consecutive() {
+    let file = SubtitleFile::Srt(vec![
+      make_sub(1000, 2000, "hello"),
+      make_sub(3000, 4000, "hello"), // dup text, consecutive → removed
+      make_sub(5000, 6000, "world"),
+      make_sub(7000, 8000, "hello"), // same text but NOT consecutive → kept
+    ]);
+    let result = SubtitleBuilder::from(file).remove_duplicates().build();
+    let subs = result.subtitles();
+    assert_eq!(subs.len(), 3);
+    assert_eq!(subs[0].text, "hello");
+    assert_eq!(subs[1].text, "world");
+    assert_eq!(subs[2].text, "hello"); // non-consecutive dup preserved
+  }
+
+  #[test]
+  fn test_remove_duplicates_via_pipeline() {
+    let pipeline = Pipeline::new().remove_duplicates();
+    let file = SubtitleFile::Srt(vec![
+      make_sub(1000, 2000, "dup"),
+      make_sub(3000, 4000, "dup"),
+      make_sub(5000, 6000, "unique"),
+    ]);
+    let result = pipeline.apply(file);
+    assert_eq!(result.subtitles().len(), 2);
+  }
+
+  #[test]
+  fn test_remove_duplicates_serialize_round_trip() {
+    let pipeline = Pipeline::new().remove_duplicates();
+    let json = serde_json::to_string(&pipeline).unwrap();
+    assert!(json.contains("RemoveDuplicates"));
+    let parsed: Pipeline = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.operations.len(), 1);
   }
 }
