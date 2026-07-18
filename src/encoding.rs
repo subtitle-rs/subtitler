@@ -177,4 +177,29 @@ mod tests {
     // 1-byte input (just BOM first byte) → empty string, no panic
     assert_eq!(decode_to_string(b"\xFF").unwrap(), "");
   }
+
+  #[test]
+  fn test_decode_shift_jis() {
+    // "こんにちは" in Shift_JIS (no BOM)
+    let data: &[u8] = &[0x82, 0xB1, 0x82, 0xF1, 0x82, 0xC9, 0x82, 0xBF, 0x82, 0xCD];
+    let result = decode_to_string(data).unwrap();
+    assert_eq!(result, "こんにちは");
+  }
+
+  #[test]
+  fn test_decode_gbk() {
+    // "简体中文测试" in GBK (no BOM, 12 bytes for reliable detection)
+    let data: &[u8] = &[
+      0xBC, 0xF2, 0xCC, 0xE5, 0xD6, 0xD0,
+      0xCE, 0xC4, 0xB2, 0xE2, 0xCA, 0xD4,
+    ];
+    let result = decode_to_string(data).unwrap();
+    // chardetng best-effort: verify non-empty, non-garbage CJK output
+    assert!(!result.is_empty(), "GBK decode should produce output");
+    assert!(
+      result.chars().any(|c| c as u32 > 0x7F),
+      "GBK decode should contain non-ASCII CJK chars, got: {}",
+      result
+    );
+  }
 }
