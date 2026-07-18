@@ -148,6 +148,93 @@ pub fn optimize_line_breaks(text: &str, max_chars: usize) -> String {
   result_parts.join("\n")
 }
 
+/// Filter text to keep only characters from a specified language Unicode block.
+///
+/// Supported `lang`: `"en"` (Latin), `"zh"` (CJK Unified), `"ja"` (CJK +
+/// Hiragana + Katakana), `"ko"` (CJK + Hangul), `"ar"` (Arabic), `"he"`
+/// (Hebrew). Unknown `lang` returns the input unchanged.
+pub fn filter_language(text: &str, lang: &str) -> String {
+  let keep = match lang {
+    "en" => |c: char| c.is_ascii_alphabetic() || c.is_ascii_digit() || c.is_ascii_punctuation() || c == ' ',
+    "zh" => |c: char| ('\u{4E00}'..='\u{9FFF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n',
+    "ja" => |c: char| {
+      ('\u{4E00}'..='\u{9FFF}').contains(&c)
+        || ('\u{3040}'..='\u{309F}').contains(&c)
+        || ('\u{30A0}'..='\u{30FF}').contains(&c)
+        || c.is_ascii_digit()
+        || c == ' '
+        || c == '\n'
+    },
+    "ko" => |c: char| {
+      ('\u{AC00}'..='\u{D7AF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
+    },
+    "ar" => |c: char| ('\u{0600}'..='\u{06FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n',
+    "he" => |c: char| ('\u{0590}'..='\u{05FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n',
+    _ => return text.to_string(),
+  };
+  text.chars().filter(|&c| keep(c)).collect()
+}
+
+/// Merge short lines (≤ `max_chars` characters) by removing newlines within
+/// each subtitle's text. Lines longer than `max_chars` or containing explicit
+/// breaks (double-newline) are preserved.
+pub fn merge_short_lines(text: &str, max_chars: usize) -> String {
+  let lines: Vec<&str> = text.lines().collect();
+  let mut result = Vec::new();
+  let mut buf = String::new();
+
+  for line in lines {
+    if line.is_empty() {
+      // Double newline — paragraph break, flush buffer
+      if !buf.is_empty() {
+        result.push(std::mem::take(&mut buf));
+      }
+      result.push(String::new());
+      continue;
+    }
+    if line.len() <= max_chars && !buf.is_empty() {
+      buf.push(' ');
+      buf.push_str(line);
+    } else if line.len() <= max_chars {
+      buf.push_str(line);
+    } else {
+      // Long line — keep as is
+      if !buf.is_empty() {
+        result.push(std::mem::take(&mut buf));
+      }
+      result.push(line.to_string());
+    }
+  }
+  if !buf.is_empty() {
+    result.push(buf);
+  }
+  result.join("\n")
+}
+
+/// Replace all newlines with spaces, collapsing multiple spaces.
+pub fn remove_all_newlines(text: &str) -> String {
+  let s = text.replace('\n', " ");
+  let mut result = String::with_capacity(s.len());
+  let mut prev_space = false;
+  for c in s.chars() {
+    if c == ' ' {
+      if !prev_space {
+        result.push(' ');
+        prev_space = true;
+      }
+    } else {
+      result.push(c);
+      prev_space = false;
+    }
+  }
+  result.trim().to_string()
+}
+
+/// Replace all newlines with a custom separator string.
+pub fn replace_newlines(text: &str, separator: &str) -> String {
+  text.lines().collect::<Vec<_>>().join(separator)
+}
+
 /// Find the best word boundary to split a sequence of words.
 /// Returns the index after the last word that fits in `max_chars`.
 fn find_best_split(words: &[&str], max_chars: usize) -> Option<usize> {
@@ -276,6 +363,37 @@ mod tests {
         word
       );
     }
+  }
+
+  #[test]
+  fn test_filter_language_english() {
+    let input = "Hello 你好 World 世界";
+    assert_eq!(filter_language(input, "en"), "Hello  World ");
+  }
+
+  #[test]
+  fn test_filter_language_chinese() {
+    let input = "Hello 你好 World 世界";
+    assert_eq!(filter_language(input, "zh"), " 你好  世界");
+  }
+
+  #[test]
+  fn test_merge_short_lines() {
+    let input = "short\nline\nhere\nLONG_LINE_EXCEEDS_TEN_CHARS";
+    let result = merge_short_lines(input, 10);
+    assert!(result.contains("short line here"));
+    assert!(result.contains("LONG_LINE_EXCEEDS_TEN_CHARS"));
+  }
+
+  #[test]
+  fn test_remove_all_newlines() {
+    assert_eq!(remove_all_newlines("a\nb\nc"), "a b c");
+    assert_eq!(remove_all_newlines("a\n\nb"), "a b"); // double newline → single space
+  }
+
+  #[test]
+  fn test_replace_newlines() {
+    assert_eq!(replace_newlines("a\nb\nc", "|"), "a|b|c");
   }
 }
 
