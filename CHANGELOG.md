@@ -4,6 +4,146 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
+
+## [2.0.1] - 2026-07-18
+
+### Fixed
+
+- `cargo clippy --all-targets -- -D warnings` no longer fails:
+  - `src/lrc.rs:268` `clippy::needless_borrow` removed.
+  - `tests/pipeline_integration.rs` cleaned up (unused `PipelineOp`
+    import, `len() >= 1` → `!is_empty()`, manual range containment →
+    `(1000..=5000).contains(&)`). These were masked behind the lrc.rs
+    failure during the 2.0.0 release.
+- `Cargo.toml` description now correctly states "13 formats" (was
+  "12 format families", contradicting the 13 features in `[features]`
+  default and the README).
+
+### Changed
+
+- README, SKILL.md, AGENTS.md updated to match the v2.0 API (see below).
+
+
+## [2.0.0] - 2026-07-17
+
+### Breaking Changes
+
+- All format modules (`srt`, `vtt`, `ass`, `ttml`, `sbv`, `lrc`, `sami`,
+  `microdvd`, `subviewer`, `mpl2`, `scc`, `ebu_stl`) now consistently return
+  `SubtitleFile` from `parse_content` / `parse_bytes` / `parse_file` / `parse_url`.
+  Previously some modules returned `Vec<Subtitle>`.
+- `utils::parse_timestamp` and `utils::parse_timestamps` now require a `Format`
+  parameter for format-specific error messages.
+- `encoding::decode_to_string` returns `Result<_, SubtitleError>` instead of
+  `anyhow::Result`.
+- `LrcData::to_string`, `SamiData::to_string`, `Mpl2Data::to_string`,
+  `SccData::to_string` renamed to `render()` (avoid shadowing `std::ToString`).
+- `SCC::to_string` now accepts `drop_frame: bool` parameter.
+
+### Added
+
+- Structured `SubtitleError` enum (11 variants) replacing `anyhow!()` macros
+  in all format internals. Format-aware error messages with `format` context.
+- `SubtitleFile` now derives `Deserialize` / `Serialize` for all variants.
+- `LrcData` strong type with `LrcLine` structs preserving multi-timestamp fidelity.
+- EBU STL `detect_format` strengthened: validates TTI block count matches
+  header metadata in addition to size/structure checks.
+- **Streaming parsers**: SRT `parse_stream` and VTT `parse_stream` yield
+  subtitles one at a time without allocating a full `Vec`. VttStream upgraded
+  from raw `u8` phases to proper enum with header tracking.
+- **`SubtitleBuilder`**: chainable builder API wrapping `SubtitleFile`.
+  Methods: `sort()`, `shift()`, `merge_adjacent()`, `split_long()`,
+  `transform_fps()`, `remove_overlaps()`, `enforce_min/max_duration()`,
+  `auto_extend_cps()`, `map()`, `filter()`.
+- **`Pipeline` DSL** (`subtitler::pipeline`): declarative transformation
+  pipeline with JSON serialization support. `Pipeline::new().sort().shift(500)`
+  `.apply(file)`; or deserialize from JSON config.
+- **CLI `pipeline` command**: `subtitler pipeline input.srt output.vtt --config ops.json`
+  supports 10 operation types via JSON config files.
+- Throughput benchmarks: 10k-subtitle SRT/VTT/ASS parse + round-trip.
+- **WASM compilation**: the library now compiles to `wasm32-unknown-unknown`.
+  `tokio`/`reqwest` gated behind `cfg(not(target_arch = "wasm32"))`. New
+  `src/wasm.rs` exposes 6 `wasm-bindgen` functions for browser use.
+  Complete browser demo in `examples/wasm/`.
+
+### Changed
+
+- `model.rs` split into `model/` sub-modules: `format.rs`, `trait.rs`,
+  `subtitle.rs`, `types.rs`, `convert.rs`, `builder.rs`, `streaming.rs`,
+  `validation.rs`, `mod.rs`.
+- `main.rs` format dispatch simplified: all arms delegate directly to
+  `format::parse_content`, removing duplicate `SubtitleFile` construction.
+- `split_text_chunks` optimized: avoids O(n²) intermediate `format!()`
+  allocations by pre-allocating `String::with_capacity` and byte-counting.
+- `cmd_edit` refactored to use `SubtitleBuilder` internally (was direct
+  `SubtitleFormat` method calls).
+
+### Performance
+
+- **Zero-copy parsing**: SRT/VTT parsers work directly on `&str` slices;
+  removed per-line `.to_string()` calls in both main and streaming paths.
+- All 12 format modules pre-allocate `Vec::with_capacity` based on content
+  size estimates; EBU STL uses exact TTI count from header.
+- VTT `header_lines` changed from `Vec<String>` to `Vec<&str>` with deferred
+  `.join("\n")`.
+
+### Fixed
+
+- SCC `to_string` no longer hardcodes `drop_frame: true`; inherited from
+  parsed input for round-trip correctness.
+- Removed EBU STL `tti_timecode_to_ms` no-op function (timecode values are
+  already in milliseconds from `parse_smpte_timecode`).
+
+### Performance
+
+- Lifted per-call regex compilation to `LazyLock` in `strip_tags`,
+  `plaintext`, VTT `extract_text_parts`, ASS `parse_ass_tags` /
+  `ass_to_plaintext`, `fix_ocr_errors`, and `srt::detect_format`.
+- Removed the redundant second pass of `extract_text_parts` over every
+  subtitle in the SRT and VTT parsers; parts are now extracted once at
+  finalization.
+- Trimmed `tokio` features from `full` to `["fs", "io-util",
+  "rt-multi-thread", "macros"]`.
+
+### Fixed
+
+- `SubtitleFile::validate()` no longer misses overlaps on unsorted input.
+  The overlap scan now sorts an index view by `(start, end)` and compares
+  adjacent pairs, reporting original indices. The previous early-`break`
+  produced false negatives when subtitles were out of order (and a
+  one-directional check produced false positives on some non-overlapping
+  pairs).
+- `Subtitle::chars_per_second()` now counts `plaintext()` characters
+  (excluding markup) instead of raw `text`. Fixes over-counting for tagged
+  subtitles; affects `validate_extended`, `auto_extend_for_cps`, and CLI
+  `info` output.
+- SRT and VTT `to_string` now emit 1-based positional cue indices instead of
+  echoing stored (potentially stale) indices. Fixes non-sequential cue
+  numbers after `merge_adjacent`, `split_long`, or `filter`.
+- Updated `chardetng` calls to the 1.0 API (`EncodingDetector::new` /
+  `guess`) and bumped the dependency to `^1.0.0` so the crate compiles
+  against the locked dependency.
+
+### Added (cont.)
+
+- `error` module with a typed `SubtitleError` enum (opt-in; existing
+  `AnyResult` signatures unchanged).
+- `ass::parse_bytes`, `ass::parse_file` (async), and `ass::parse_url`
+  (http-gated) entry points, bringing ASS to parity with SRT/VTT.
+- `regex_hotspots` criterion benchmark group for regression tracking.
+
+### Changed
+
+- **Breaking (within 0.x):** `validate()` overlap detection,
+  `chars_per_second` semantics, and SRT/VTT output indices are corrected as
+  described under Fixed. Consumers relying on the prior (buggy) behavior
+  should review.
+
 ## [1.4.0] - 2026-07-17
 
 ### Added
@@ -239,120 +379,3 @@ This release marks the first stable version with unified architecture, complete 
 ### See also
 
 - `MIGRATION.md` for a 0.1 → 1.0 upgrade guide.
-
-## [Unreleased] — v2.0.0
-
-### Breaking Changes
-
-- All format modules (`srt`, `vtt`, `ass`, `ttml`, `sbv`, `lrc`, `sami`,
-  `microdvd`, `subviewer`, `mpl2`, `scc`, `ebu_stl`) now consistently return
-  `SubtitleFile` from `parse_content` / `parse_bytes` / `parse_file` / `parse_url`.
-  Previously some modules returned `Vec<Subtitle>`.
-- `utils::parse_timestamp` and `utils::parse_timestamps` now require a `Format`
-  parameter for format-specific error messages.
-- `encoding::decode_to_string` returns `Result<_, SubtitleError>` instead of
-  `anyhow::Result`.
-- `LrcData::to_string`, `SamiData::to_string`, `Mpl2Data::to_string`,
-  `SccData::to_string` renamed to `render()` (avoid shadowing `std::ToString`).
-- `SCC::to_string` now accepts `drop_frame: bool` parameter.
-
-### Added
-
-- Structured `SubtitleError` enum (11 variants) replacing `anyhow!()` macros
-  in all format internals. Format-aware error messages with `format` context.
-- `SubtitleFile` now derives `Deserialize` / `Serialize` for all variants.
-- `LrcData` strong type with `LrcLine` structs preserving multi-timestamp fidelity.
-- EBU STL `detect_format` strengthened: validates TTI block count matches
-  header metadata in addition to size/structure checks.
-- **Streaming parsers**: SRT `parse_stream` and VTT `parse_stream` yield
-  subtitles one at a time without allocating a full `Vec`. VttStream upgraded
-  from raw `u8` phases to proper enum with header tracking.
-- **`SubtitleBuilder`**: chainable builder API wrapping `SubtitleFile`.
-  Methods: `sort()`, `shift()`, `merge_adjacent()`, `split_long()`,
-  `transform_fps()`, `remove_overlaps()`, `enforce_min/max_duration()`,
-  `auto_extend_cps()`, `map()`, `filter()`.
-- **`Pipeline` DSL** (`subtitler::pipeline`): declarative transformation
-  pipeline with JSON serialization support. `Pipeline::new().sort().shift(500)`
-  `.apply(file)`; or deserialize from JSON config.
-- **CLI `pipeline` command**: `subtitler pipeline input.srt output.vtt --config ops.json`
-  supports 10 operation types via JSON config files.
-- Throughput benchmarks: 10k-subtitle SRT/VTT/ASS parse + round-trip.
-- **WASM compilation**: the library now compiles to `wasm32-unknown-unknown`.
-  `tokio`/`reqwest` gated behind `cfg(not(target_arch = "wasm32"))`. New
-  `src/wasm.rs` exposes 6 `wasm-bindgen` functions for browser use.
-  Complete browser demo in `examples/wasm/`.
-
-### Changed
-
-- `model.rs` split into `model/` sub-modules: `format.rs`, `trait.rs`,
-  `subtitle.rs`, `types.rs`, `convert.rs`, `builder.rs`, `streaming.rs`,
-  `validation.rs`, `mod.rs`.
-- `main.rs` format dispatch simplified: all arms delegate directly to
-  `format::parse_content`, removing duplicate `SubtitleFile` construction.
-- `split_text_chunks` optimized: avoids O(n²) intermediate `format!()`
-  allocations by pre-allocating `String::with_capacity` and byte-counting.
-- `cmd_edit` refactored to use `SubtitleBuilder` internally (was direct
-  `SubtitleFormat` method calls).
-
-### Performance
-
-- **Zero-copy parsing**: SRT/VTT parsers work directly on `&str` slices;
-  removed per-line `.to_string()` calls in both main and streaming paths.
-- All 12 format modules pre-allocate `Vec::with_capacity` based on content
-  size estimates; EBU STL uses exact TTI count from header.
-- VTT `header_lines` changed from `Vec<String>` to `Vec<&str>` with deferred
-  `.join("\n")`.
-
-### Fixed
-
-- SCC `to_string` no longer hardcodes `drop_frame: true`; inherited from
-  parsed input for round-trip correctness.
-- Removed EBU STL `tti_timecode_to_ms` no-op function (timecode values are
-  already in milliseconds from `parse_smpte_timecode`).
-
-## [1.4.0] - 2026-07-15
-
-### Performance
-
-- Lifted per-call regex compilation to `LazyLock` in `strip_tags`,
-  `plaintext`, VTT `extract_text_parts`, ASS `parse_ass_tags` /
-  `ass_to_plaintext`, `fix_ocr_errors`, and `srt::detect_format`.
-- Removed the redundant second pass of `extract_text_parts` over every
-  subtitle in the SRT and VTT parsers; parts are now extracted once at
-  finalization.
-- Trimmed `tokio` features from `full` to `["fs", "io-util",
-  "rt-multi-thread", "macros"]`.
-
-### Fixed
-
-- `SubtitleFile::validate()` no longer misses overlaps on unsorted input.
-  The overlap scan now sorts an index view by `(start, end)` and compares
-  adjacent pairs, reporting original indices. The previous early-`break`
-  produced false negatives when subtitles were out of order (and a
-  one-directional check produced false positives on some non-overlapping
-  pairs).
-- `Subtitle::chars_per_second()` now counts `plaintext()` characters
-  (excluding markup) instead of raw `text`. Fixes over-counting for tagged
-  subtitles; affects `validate_extended`, `auto_extend_for_cps`, and CLI
-  `info` output.
-- SRT and VTT `to_string` now emit 1-based positional cue indices instead of
-  echoing stored (potentially stale) indices. Fixes non-sequential cue
-  numbers after `merge_adjacent`, `split_long`, or `filter`.
-- Updated `chardetng` calls to the 1.0 API (`EncodingDetector::new` /
-  `guess`) and bumped the dependency to `^1.0.0` so the crate compiles
-  against the locked dependency.
-
-### Added
-
-- `error` module with a typed `SubtitleError` enum (opt-in; existing
-  `AnyResult` signatures unchanged).
-- `ass::parse_bytes`, `ass::parse_file` (async), and `ass::parse_url`
-  (http-gated) entry points, bringing ASS to parity with SRT/VTT.
-- `regex_hotspots` criterion benchmark group for regression tracking.
-
-### Changed
-
-- **Breaking (within 0.x):** `validate()` overlap detection,
-  `chars_per_second` semantics, and SRT/VTT output indices are corrected as
-  described under Fixed. Consumers relying on the prior (buggy) behavior
-  should review.
