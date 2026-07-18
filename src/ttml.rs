@@ -19,6 +19,21 @@ use std::io::Cursor;
 fn ttml_to_ms(attr: &str) -> Option<u64> {
   let attr = attr.trim();
   if attr.contains(':') {
+    // Check for SMPTE frame format: HH:MM:SS:FF (3 colons, used by iTT)
+    let colons = attr.chars().filter(|&c| c == ':').count();
+    if colons == 3 {
+      // Parse HH:MM:SS:FF → assume 29.97fps non-drop (iTT/SMPTE)
+      let parts: Vec<&str> = attr.split(':').collect();
+      if parts.len() == 4 {
+        let h: u64 = parts[0].parse().ok()?;
+        let m: u64 = parts[1].parse().ok()?;
+        let s: u64 = parts[2].parse().ok()?;
+        let f: u64 = parts[3].parse().ok()?;
+        // frames → ms at 29.97fps
+        let total_frames = h * 3600 * 30 + m * 60 * 30 + s * 30 + f;
+        return Some(((total_frames as f64) / 29.97 * 1000.0).round() as u64);
+      }
+    }
     return parse_timestamp(attr, Format::Ttml).ok();
   }
   // Handle "123.456s" format (seconds with optional 's' suffix)
@@ -215,9 +230,7 @@ pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
 /// Detect if data looks like TTML (contains `<tt` root element).
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   let text = crate::encoding::try_decode_for_detection(data)?;
-  if text.contains("<tt")
-    && text.contains("http://www.w3.org/ns/ttml")
-  {
+  if text.contains("<tt") && text.contains("http://www.w3.org/ns/ttml") {
     return Some(crate::model::Format::Ttml);
   }
   None
@@ -537,5 +550,16 @@ mod tests {
       result.is_ok(),
       "malformed XML should not crash (current behavior)"
     );
+  }
+
+  #[test]
+  fn test_smpte_frame_timecode() {
+    // iTT-style SMPTE timecode: HH:MM:SS:FF at 29.97fps
+    // 00:00:13:07 → 13*30 + 7 = 397 frames; 397/29.97*1000 ≈ 13247ms
+    let ms = ttml_to_ms("00:00:13:07").unwrap();
+    assert!(ms > 13_000 && ms < 14_000, "got {}", ms);
+    // 01:00:00:00 → 3600*30 = 108000 frames = 3603604ms (non-drop)
+    let ms = ttml_to_ms("01:00:00:00").unwrap();
+    assert!(ms > 3_600_000 && ms < 3_610_000, "got {}", ms);
   }
 }

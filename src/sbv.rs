@@ -1,6 +1,8 @@
 //! SBV (YouTube subtitle format) parser and generator.
 //!
-//! Format: `time1,time2,text`  where time is `[hours:]minutes:seconds.milliseconds`.
+//! Supports two format variants:
+//!   1. `time1,time2,text` (text inline, comma-separated)
+//!   2. YouTube native format: timestamps on one line, text on the next line
 
 use crate::error::SubtitleError;
 use crate::model::{Format, Subtitle, SubtitleFile};
@@ -13,38 +15,52 @@ use tokio::io::AsyncWriteExt;
 pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 40).max(16));
 
-  for line in content.lines() {
-    let trimmed = line.trim();
+  let lines: Vec<&str> = content.lines().collect();
+  let mut i = 0;
+
+  while i < lines.len() {
+    let trimmed = lines[i].trim();
     if trimmed.is_empty() {
+      i += 1;
       continue;
     }
 
-    // Format: time1,time2,text  (three comma-separated parts)
+    // Try format: time1,time2[,text]
     let parts: Vec<&str> = trimmed.splitn(3, ',').collect();
-    if parts.len() == 3 {
-      let (t1, t2, text) = (parts[0], parts[1], parts[2]);
-      // Convert SBV time format (hh:mm:ss.mmm or mm:ss.mmm) to SRT-like
-      let t1_fixed = if t1.chars().filter(|&c| c == ':').count() == 1 {
-        format!("00:{}", t1)
-      } else {
-        t1.to_string()
-      };
-      let t2_fixed = if t2.chars().filter(|&c| c == ':').count() == 1 {
-        format!("00:{}", t2)
-      } else {
-        t2.to_string()
-      };
-
+    if parts.len() >= 2 {
+      let t1 = parts[0];
+      let t2 = parts[1];
+      let text_or_empty = if parts.len() > 2 { parts[2] } else { "" };
       if let (Ok(start), Ok(end)) = (
-        parse_timestamp(&t1_fixed, Format::Sbv),
-        parse_timestamp(&t2_fixed, Format::Sbv),
+        parse_timestamp(&fix_sbv_time(t1), Format::Sbv),
+        parse_timestamp(&fix_sbv_time(t2), Format::Sbv),
       ) {
-        subtitles.push(Subtitle::new(start, end, text.trim()));
+        if !text_or_empty.trim().is_empty() {
+          // Format 1: text is inline
+          subtitles.push(Subtitle::new(start, end, text_or_empty.trim()));
+        } else if i + 1 < lines.len() && !lines[i + 1].trim().is_empty() {
+          // Format 2: timestamps on this line, text on next line
+          subtitles.push(Subtitle::new(start, end, lines[i + 1].trim()));
+          i += 1; // skip the text line
+        }
+        i += 1;
+        continue;
       }
     }
+
+    i += 1;
   }
 
   Ok(SubtitleFile::Sbv(subtitles))
+}
+
+/// Fix SBV time format (allows single-digit hours: `mm:ss.mmm` → `00:mm:ss.mmm`).
+fn fix_sbv_time(t: &str) -> String {
+  if t.chars().filter(|&c| c == ':').count() == 1 {
+    format!("00:{}", t)
+  } else {
+    t.to_string()
+  }
 }
 
 /// Parse SBV from a byte slice.
@@ -235,5 +251,26 @@ mod tests {
   fn test_detect() {
     assert!(detect_format(b"0:00:01.000,0:00:03.500,test").is_some());
     assert!(detect_format(b"WEBVTT").is_none());
+  }
+
+  #[test]
+  fn test_two_line_format() {
+    // Real YouTube SBV: timestamps on one line, text on the next
+    let content = "0:00:01.000,0:00:04.000\nHello world\n\n0:00:05.000,0:00:09.000\nSecond subtitle\n";
+    let file = parse_content(content).unwrap();
+    let subs = file.subtitles();
+    assert_eq!(subs.len(), 2);
+    assert_eq!(subs[0].text, "Hello world");
+    assert_eq!(subs[0].start, 1000);
+    assert_eq!(subs[0].end, 4000);
+    assert_eq!(subs[1].text, "Second subtitle");
+  }
+
+  #[test]
+  fn test_inline_format_still_works() {
+    // Original comma-separated-on-one-line format
+    let content = "0:00:01.000,0:00:04.000,Hello world\n0:00:05.000,0:00:09.000,Second subtitle\n";
+    let file = parse_content(content).unwrap();
+    assert_eq!(file.subtitles().len(), 2);
   }
 }
