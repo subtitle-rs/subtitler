@@ -266,7 +266,7 @@ mod tests {
     let content = "00:00:01.00,00:00:03.50\nHello\n\n00:00:04.00,00:00:06.50\nWorld\n";
     let file = parse_content(content).unwrap();
     let subs = file.subtitles().to_vec();
-    let output = to_string(subs, None);
+    let output = to_string(&subs, None);
     let reparsed_file = parse_content(&output).unwrap();
     let reparsed = reparsed_file.subtitles();
     assert_eq!(subs.len(), reparsed.len());
