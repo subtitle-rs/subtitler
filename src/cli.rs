@@ -127,7 +127,9 @@ impl From<&subtitler::model::Format> for Format {
       M::Scc => Format::Scc,
       #[cfg(feature = "ebu_stl")]
       M::EbuStl => Format::EbuStl,
+      #[cfg(feature = "dfxp")]
       M::Dfxp => Format::Dfxp,
+      #[cfg(feature = "whisper")]
       M::Whisper => Format::Whisper,
     }
   }
