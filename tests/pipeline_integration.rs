@@ -2,7 +2,7 @@
 //! correctly across multiple operations and edge cases.
 
 use subtitler::model::{Subtitle, SubtitleFile, SubtitleFormat};
-use subtitler::pipeline::{Pipeline, PipelineOp, SubtitleBuilder};
+use subtitler::pipeline::{Pipeline, SubtitleBuilder};
 
 fn make_sub(start: u64, end: u64, text: &str) -> Subtitle {
   Subtitle::new(start, end, text)
@@ -166,7 +166,7 @@ fn pipeline_applies_all_ops() {
 
   let result = pipeline.apply(test_file_unsorted());
   let subs = result.subtitles();
-  assert!(subs.len() >= 1);
+  assert!(!subs.is_empty());
   assert_eq!(subs[0].start, 1500); // 1000 + 500
 }
 
@@ -228,5 +228,5 @@ fn pipeline_enforce_duration_chain() {
     .enforce_max_duration(5000);
   let result = pipeline.apply(file);
   let dur = result.subtitles()[0].duration_ms();
-  assert!(dur >= 1000 && dur <= 5000, "duration should be clamped");
+  assert!((1000..=5000).contains(&dur), "duration should be clamped");
 }
