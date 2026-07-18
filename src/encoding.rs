@@ -20,6 +20,13 @@ pub fn detect_encoding(data: &[u8]) -> &'static str {
 }
 
 pub fn decode_to_string(data: &[u8]) -> Result<String, SubtitleError> {
+  // A single byte that is a UTF-16 BOM prefix (FE or FF) is a truncated
+  // BOM — there is no meaningful content to decode. Return empty rather
+  // than letting chardetng fabricate a character (e.g. "ÿ" for 0xFF).
+  if data.len() == 1 && (data[0] == 0xFE || data[0] == 0xFF) {
+    return Ok(String::new());
+  }
+
   let encoding = detect_encoding(data);
 
   match encoding {
@@ -30,25 +37,35 @@ pub fn decode_to_string(data: &[u8]) -> Result<String, SubtitleError> {
       })?;
       Ok(text.trim_start_matches('\u{FEFF}').to_string())
     }
-    "UTF-16BE" => {
-      let u16: Vec<u16> = data
+    "UTF-16BE" | "UTF-16LE" => {
+      // Guard against too-short inputs (BOM is 2 bytes)
+      if data.len() < 2 {
+        return Ok(String::new());
+      }
+      // Skip the 2-byte BOM (FF FE for LE, FE FF for BE) before decoding.
+      // detect_encoding already confirmed the BOM bytes match.
+      let body = &data[2..];
+      let u16: Vec<u16> = body
         .chunks_exact(2)
-        .map(|c| u16::from_be_bytes([c[0], c[1]]))
+        .map(|c| {
+          if encoding == "UTF-16BE" {
+            u16::from_be_bytes([c[0], c[1]])
+          } else {
+            u16::from_le_bytes([c[0], c[1]])
+          }
+        })
         .collect();
-      String::from_utf16(&u16).map_err(|e| SubtitleError::InvalidEncoding {
-        encoding: "UTF-16BE".to_string(),
+      // Note: any trailing odd byte after body[2..] is silently dropped
+      // by chunks_exact(2). This is intentional — UTF-16 is strictly
+      // 2-byte aligned; a trailing odd byte indicates a corrupt file.
+      let s = String::from_utf16(&u16).map_err(|e| SubtitleError::InvalidEncoding {
+        encoding: encoding.to_string(),
         error: format!("{:?}", e),
-      })
-    }
-    "UTF-16LE" => {
-      let u16: Vec<u16> = data
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
-        .collect();
-      String::from_utf16(&u16).map_err(|e| SubtitleError::InvalidEncoding {
-        encoding: "UTF-16LE".to_string(),
-        error: format!("{:?}", e),
-      })
+      })?;
+      // Double-safety: trim a leading U+FEFF in case the BOM bytes were
+      // decoded as a character (shouldn't happen after skipping, but
+      // matches the UTF-8 path's behavior).
+      Ok(s.trim_start_matches('\u{FEFF}').to_string())
     }
     _ => {
       let label = encoding.as_bytes();
@@ -116,5 +133,48 @@ mod tests {
   fn test_decode_utf8() {
     let result = decode_to_string(b"hello world").unwrap();
     assert_eq!(result, "hello world");
+  }
+
+  #[test]
+  fn test_decode_utf16be_bom_stripped() {
+    // UTF-16BE BOM (FE FF) + 'h' (00 68) + 'i' (00 69)
+    let input = b"\xFE\xFF\x00\x68\x00\x69";
+    let result = decode_to_string(input).unwrap();
+    assert!(
+      !result.starts_with('\u{FEFF}'),
+      "UTF-16BE BOM not stripped: got {:?}",
+      result
+    );
+    assert_eq!(result, "hi");
+  }
+
+  #[test]
+  fn test_decode_utf16le_bom_stripped() {
+    // UTF-16LE BOM (FF FE) + 'h' (68 00) + 'i' (69 00)
+    let input = b"\xFF\xFE\x68\x00\x69\x00";
+    let result = decode_to_string(input).unwrap();
+    assert!(
+      !result.starts_with('\u{FEFF}'),
+      "UTF-16LE BOM not stripped: got {:?}",
+      result
+    );
+    assert_eq!(result, "hi");
+  }
+
+  #[test]
+  fn test_decode_utf16_odd_byte_ignored() {
+    // UTF-16LE BOM (FF FE) + 'h' (68 00) + 'i' (69 00) + 1 trailing byte (garbage)
+    let input = b"\xFF\xFE\x68\x00\x69\x00\xAB";
+    let result = decode_to_string(input).unwrap();
+    // Must not panic; trailing odd byte is dropped by chunks_exact(2)
+    assert_eq!(result, "hi");
+  }
+
+  #[test]
+  fn test_decode_utf16_empty_and_short_input() {
+    // 0-byte input → empty string, no panic
+    assert_eq!(decode_to_string(b"").unwrap(), "");
+    // 1-byte input (just BOM first byte) → empty string, no panic
+    assert_eq!(decode_to_string(b"\xFF").unwrap(), "");
   }
 }
