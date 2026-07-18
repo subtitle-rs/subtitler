@@ -226,10 +226,10 @@ pub fn parse_content_full(content: &str) -> AnyResult<(Option<String>, Vec<Subti
 }
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
-  if let Some(text) = crate::encoding::try_decode_for_detection(data)
-    && text.trim().starts_with("WEBVTT")
-  {
-    return Some(crate::model::Format::Vtt);
+  if let Some(text) = crate::encoding::try_decode_for_detection(data) {
+    if text.trim().starts_with("WEBVTT") {
+      return Some(crate::model::Format::Vtt);
+    }
   }
   None
 }
