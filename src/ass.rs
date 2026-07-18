@@ -211,6 +211,32 @@ fn format_ass_color(color: &str) -> String {
   }
 }
 
+/// Write subtitles to a file in ASS format.
+///
+/// `policy` controls overwrite behavior (None = default Overwrite).
+/// Uses an empty `[Script Info]` and a single default style — for
+/// custom info/styles, call `to_string` directly and write the result
+/// with `tokio::fs::write`.
+///
+/// This also serves SSA output: ASS and SSA share the same body
+/// syntax; the only difference is the `ScriptType` line in
+/// `[Script Info]`, which `to_string` handles.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn generate(
+  subtitles: &[Subtitle],
+  file_path: impl AsRef<std::path::Path>,
+  policy: Option<crate::model::WritePolicy>,
+) -> AnyResult<String> {
+  let content = to_string(
+    &HashMap::new(),
+    &[AssStyle::default_style()],
+    subtitles,
+  );
+  let path = file_path.as_ref();
+  crate::io::write_with_policy(path, content.as_bytes(), policy).await?;
+  Ok(path.to_string_lossy().into_owned())
+}
+
 pub fn to_string(
   info: &HashMap<String, String>,
   styles: &[AssStyle],
