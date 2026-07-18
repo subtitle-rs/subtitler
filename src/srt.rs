@@ -8,8 +8,6 @@ use reqwest;
 use smallvec::SmallVec;
 use std::sync::LazyLock;
 #[cfg(not(target_arch = "wasm32"))]
-use tokio::fs;
-#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
 
 static RE_SRT_TAG: LazyLock<Regex> =
@@ -439,31 +437,10 @@ pub async fn generate(
   let path = file_path.as_ref();
   let policy = policy.unwrap_or_default();
 
-  if policy == crate::model::WritePolicy::RefuseIfExists && path.exists() {
-    return Err(
-      SubtitleError::FileExists {
-        path: path.to_path_buf(),
-      }
-      .into(),
-    );
-  }
-
-  let mut open_opts = fs::OpenOptions::new();
-  let is_append = policy == crate::model::WritePolicy::Append;
-  let mut dest = match policy {
-    crate::model::WritePolicy::Append => open_opts.create(true).append(true).open(path).await,
-    _ => {
-      open_opts
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)
-        .await
-    }
-  }?;
+  let mut dest = crate::io::open_with_policy(path, Some(policy)).await?;
   // Append 模式下若目标已有内容，先补一个空行做 cue 分隔，
   // 否则追加的 cue 会与原末尾 cue 粘连导致再解析时丢字幕。
-  if is_append {
+  if policy == crate::model::WritePolicy::Append {
     let existing_len = tokio::fs::metadata(path)
       .await
       .map(|m| m.len())

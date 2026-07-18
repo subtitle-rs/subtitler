@@ -8,8 +8,6 @@ use reqwest;
 use smallvec::SmallVec;
 use std::sync::LazyLock;
 #[cfg(not(target_arch = "wasm32"))]
-use tokio::fs;
-#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
 
 static RE_VTT_TAG: LazyLock<Regex> = LazyLock::new(|| {
@@ -274,34 +272,9 @@ pub async fn generate(
   file_path: impl AsRef<std::path::Path>,
   policy: Option<crate::model::WritePolicy>,
 ) -> AnyResult<String> {
-  let path = file_path.as_ref();
-  let policy = policy.unwrap_or_default();
-
-  if policy == crate::model::WritePolicy::RefuseIfExists && path.exists() {
-    return Err(
-      SubtitleError::FileExists {
-        path: path.to_path_buf(),
-      }
-      .into(),
-    );
-  }
-
-  let mut open_opts = fs::OpenOptions::new();
-  let mut dest = match policy {
-    crate::model::WritePolicy::Append => open_opts.create(true).append(true).open(path).await,
-    _ => {
-      open_opts
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)
-        .await
-    }
-  }?;
   let content = to_string(subtitles, None);
-  dest.write_all(content.as_bytes()).await?;
-  dest.flush().await?;
-
+  let path = file_path.as_ref();
+  crate::io::write_with_policy(path, content.as_bytes(), policy).await?;
   Ok(path.to_string_lossy().into_owned())
 }
 
