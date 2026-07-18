@@ -60,10 +60,10 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| microdvd::detect_format(data));
   #[cfg(feature = "subviewer")]
   let f = f.or_else(|| subviewer::detect_format(data));
-  #[cfg(feature = "ttml")]
-  let f = f.or_else(|| ttml::detect_format(data));
   #[cfg(feature = "dfxp")]
   let f = f.or_else(|| dfxp::detect_format(data));
+  #[cfg(feature = "ttml")]
+  let f = f.or_else(|| ttml::detect_format(data));
   #[cfg(feature = "whisper")]
   let f = f.or_else(|| whisper::detect_format(data));
   #[cfg(feature = "sbv")]

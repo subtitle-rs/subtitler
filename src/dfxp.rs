@@ -7,10 +7,16 @@
 use crate::model::{Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 
-/// Detect DFXP by the TT AF 1.0 namespace (`xmlns="http://www.w3.org/2006/04/ttaf1"`).
+/// Detect DFXP by the TT AF 1.0 namespace.
+///
+/// DFXP has two namespace variants:
+/// - `http://www.w3.org/2006/04/ttaf1` (DFXP 0.4, older)
+/// - `http://www.w3.org/2006/10/ttaf1` (DFXP 1.0, newer)
 pub fn detect_format(data: &[u8]) -> Option<Format> {
   let text = crate::encoding::try_decode_for_detection(data)?;
-  if text.contains("http://www.w3.org/2006/04/ttaf1") {
+  if text.contains("http://www.w3.org/2006/04/ttaf1")
+    || text.contains("http://www.w3.org/2006/10/ttaf1")
+  {
     return Some(Format::Dfxp);
   }
   None
@@ -78,6 +84,20 @@ mod tests {
   <body>
     <div>
       <p begin="00:00:01.000" end="00:00:03.500">Hello DFXP</p>
+    </div>
+  </body>
+</tt>"#;
+    assert_eq!(detect_format(data), Some(Format::Dfxp));
+  }
+
+  #[test]
+  fn test_detect_dfxp_v10() {
+    // DFXP 1.0 namespace (http://www.w3.org/2006/10/ttaf1)
+    let data = br#"<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/2006/10/ttaf1">
+  <body>
+    <div>
+      <p begin="00:00:01.000" end="00:00:04.000">Hello, this is a test.</p>
     </div>
   </body>
 </tt>"#;

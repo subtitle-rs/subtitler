@@ -216,8 +216,7 @@ pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   let text = crate::encoding::try_decode_for_detection(data)?;
   if text.contains("<tt")
-    && (text.contains("http://www.w3.org/ns/ttml")
-      || text.contains("http://www.w3.org/2006/10/ttaf1"))
+    && text.contains("http://www.w3.org/ns/ttml")
   {
     return Some(crate::model::Format::Ttml);
   }
