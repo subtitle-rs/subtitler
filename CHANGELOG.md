@@ -10,6 +10,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
 
+## [2.6.1] - 2026-07-18
+
+### Fixed
+
+- **MSRV 1.85**: 4 more `let`-chain usages in `ass.rs`, `vtt.rs`, `microdvd.rs`
+  refactored to nested `if let`. These were missed in v2.6.0.
+
 ## [2.6.0] - 2026-07-18
 
 ### Changed
