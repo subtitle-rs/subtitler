@@ -1,5 +1,32 @@
 # Migration Guide
 
+## 2.1 → 2.2
+
+### Additions (non-breaking)
+
+- 11 more formats now expose `generate(subs, path, policy)`. Existing
+  SRT/VTT users see no change.
+- 7 more formats now expose `parse_stream(content)`.
+- SAMI/MPL2/SCC now have `write_stream`.
+
+### Deprecation
+
+- `ttml::write_stream` (sync) is deprecated. Migrate to
+  `ttml::write_stream_async`:
+  ```rust
+  // Before
+  ttml::write_stream(&subs, &mut file)?;
+  // After
+  ttml::write_stream_async(&subs, &mut file).await?;
+  ```
+  The sync version remains until 3.0.
+
+### Behavior change (TTML)
+
+- `ttml::to_string(subs, header)` no longer ignores `header`. If you
+  were passing `Some("...")` expecting it to be dropped, the output
+  will now contain a `<head>` block.
+
 ## 2.0 → 2.1
 
 ### Behavior changes

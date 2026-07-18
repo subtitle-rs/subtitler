@@ -1,8 +1,8 @@
 # Subtitler Code Wiki
 
-> 版本: v2.1.0 · Rust Edition 2024 · MSRV 1.85
+> 版本: v2.2.0 · Rust Edition 2024 · MSRV 1.85
 > 一个用于解析、转换、校验、编辑和生成 13 种字幕格式的高性能 Rust 库 + CLI 工具。
-> 286 tests passing · 13 formats · WASM-ready · Pipeline DSL
+> ~293 tests passing · 13 formats · WASM-ready · Pipeline DSL · API-unified (v2.2)
 
 ---
 
@@ -926,7 +926,7 @@ console.log(result.subtitle_count, result.format, result.output);
   - [streaming_tests.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/streaming_tests.rs) — 流式解析（16 tests）
   - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests，v2.1+）
   - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（2 tests，仅 SRT/VTT）
-- **总测试数**: **286**（v1.4 时 216 → v2.0 时 273 → v2.1 时 286）。
+- **总测试数**: **293**（v1.4 时 216 → v2.0 时 273 → v2.1 时 286 → v2.2 时 293）。
 
 ### 14.2 运行
 
@@ -1007,8 +1007,8 @@ cargo build --examples                       # 示例仍工作
 |------|------|------|
 | **2.0.1** | ✅ 已发布 | hotfix：clippy/CHANGELOG/README/Cargo.toml 文档对齐 |
 | **2.1.0** | ✅ 已发布 | 6 项 P1 正确性修复（SCC drop-frame、EBU STL round-trip、UTF-16 BOM、CLI 二进制、split_long、main.rs unwrap）+ dependabot。13 新测试，总 286 |
-| **2.2** | ⏳ 待开始 | API 拉齐：13 格式补 generate/parse_stream/异步 write_stream/统一返回类型 |
-| **2.3** | ⏳ 待开始 | 测试/CI 大补：WASM 测试、cross-format 矩阵、CI 加 WASM/MSRV/clippy 矩阵、CODE_WIKI 重写（本文件持续滚动更新） |
+| **2.2** | ✅ 已发布 | API 拉齐：13 格式补 generate/parse_stream/write_stream + TTML write_stream_async + header 保留。新增 5 编译期 API 一致性测试，总 293 |
+| **2.3** | ⏳ 待开始 | 测试/CI 大补：WASM 测试、cross-format 矩阵、CI 加 WASM/MSRV/clippy 矩阵、CODE_WIKI 深度更新 |
 | **3.0** | ⏳ 待开始 | 综合前进：IMSC/CEA-708/SMPTE-TT + AI 集成（translate CLI + LLM 适配器）+ zero-copy + npm/PyO3/C 绑定 |
 
 ---

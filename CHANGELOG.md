@@ -10,6 +10,47 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
 
+## [2.2.0] - 2026-07-18
+
+### Added
+
+- **`generate(subs, path, policy)` for all 13 formats** — previously only
+  SRT and VTT had this file-write helper. ASS, SSA, MicroDVD, SubViewer,
+  TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL now expose the same signature
+  with format-appropriate defaults. For format-specific options (fps,
+  drop_frame, header), call `to_string` directly and write with
+  `tokio::fs::write`.
+- **`parse_stream(content)` factory for 7 more formats** — MicroDVD,
+  SubViewer, SBV, LRC, SAMI, MPL2, SCC now expose a public `parse_stream`
+  constructor matching the SRT/VTT pattern (previously users had to call
+  `XxxStream::new` directly).
+- **`write_stream` for SAMI, MPL2, SCC** — these three had `StreamingParser`
+  reads but no streaming write; now symmetric.
+- **TTML `write_stream_async`** — async alternative to the deprecated
+  sync `write_stream`. Bridges quick-xml's sync Writer via an in-memory
+  buffer.
+- **TTML header preservation** — `to_string(subs, header)` now writes the
+  header into a `<head>` block instead of silently dropping it. Parameter
+  renamed `_header` → `header`.
+- **Shared `io` module** (`src/io.rs`) — `open_with_policy` and
+  `write_with_policy` centralize the `WritePolicy` → file-open mapping.
+  SRT/VTT `generate` now use these helpers.
+
+### Deprecated
+
+- `ttml::write_stream` (sync) — replaced by `write_stream_async`.
+  Scheduled removal in 3.0.
+
+### Changed
+
+- **Compile-time API surface test** (`tests/api_surface.rs`) — verifies
+  every format module exposes `parse_content`, `parse_bytes`, `parse_stream`,
+  `to_string`, and `detect_format`. Future formats must pass this gate.
+
+### See also
+
+- `MIGRATION.md` "2.1 → 2.2" section: TTML `write_stream` deprecation.
+
 ## [2.1.0] - 2026-07-18
 
 ### Fixed
