@@ -77,14 +77,8 @@ impl SccData {
 
         drop_frame = separator == ";";
 
-        let timecode_ms = scc_timecode_to_ms(
-          hours,
-          minutes,
-          seconds,
-          frames,
-          DEFAULT_FPS,
-          drop_frame,
-        );
+        let timecode_ms =
+          scc_timecode_to_ms(hours, minutes, seconds, frames, DEFAULT_FPS, drop_frame);
 
         // Decode hex data to text
         let decoded_text = decode_scc_hex(hex_data);
@@ -189,10 +183,7 @@ fn scc_timecode_to_ms(h: u64, m: u64, s: u64, f: u64, fps: f64, drop_frame: bool
   // Use integer frame counts at the NOMINAL frame rate (30 for NTSC).
   // Going via f64 here would lose precision (29.97 × 3600 ≠ integer).
   let nominal_fps = fps.round() as u64;
-  let mut total_frames = h * 3600 * nominal_fps
-    + m * 60 * nominal_fps
-    + s * nominal_fps
-    + f;
+  let mut total_frames = h * 3600 * nominal_fps + m * 60 * nominal_fps + s * nominal_fps + f;
 
   if drop_frame {
     // SMPTE 12M-1-2014 §3.3: drop 2 frames per minute, except every 10th minute.
@@ -249,10 +240,7 @@ fn ms_to_scc_timecode(ms: u64, fps: f64, drop_frame: bool) -> String {
     }
     let seconds = frames_within_hour / nominal_fps;
     let frames = frames_within_hour % nominal_fps;
-    return format!(
-      "{:02}:{:02}:{:02};{:02}",
-      hours, minutes, seconds, frames
-    );
+    return format!("{:02}:{:02}:{:02};{:02}", hours, minutes, seconds, frames);
   }
 
   // Non-drop: simple division.
@@ -260,10 +248,7 @@ fn ms_to_scc_timecode(ms: u64, fps: f64, drop_frame: bool) -> String {
   let remaining = frames_within_hour % frames_per_minute;
   let seconds = remaining / nominal_fps;
   let frames = remaining % nominal_fps;
-  format!(
-    "{:02}:{:02}:{:02}:{:02}",
-    hours, minutes, seconds, frames
-  )
+  format!("{:02}:{:02}:{:02}:{:02}", hours, minutes, seconds, frames)
 }
 
 /// Decode SCC hexadecimal data to text.
@@ -576,10 +561,22 @@ mod tests {
     let tc = ms_to_scc_timecode(ms, 29.97, true);
     // Re-parse the rendered timecode (format is HH:MM:SS;FF).
     let bytes = tc.as_bytes();
-    let h = std::str::from_utf8(&bytes[0..2]).unwrap().parse::<u64>().unwrap();
-    let m = std::str::from_utf8(&bytes[3..5]).unwrap().parse::<u64>().unwrap();
-    let s = std::str::from_utf8(&bytes[6..8]).unwrap().parse::<u64>().unwrap();
-    let f = std::str::from_utf8(&bytes[9..11]).unwrap().parse::<u64>().unwrap();
+    let h = std::str::from_utf8(&bytes[0..2])
+      .unwrap()
+      .parse::<u64>()
+      .unwrap();
+    let m = std::str::from_utf8(&bytes[3..5])
+      .unwrap()
+      .parse::<u64>()
+      .unwrap();
+    let s = std::str::from_utf8(&bytes[6..8])
+      .unwrap()
+      .parse::<u64>()
+      .unwrap();
+    let f = std::str::from_utf8(&bytes[9..11])
+      .unwrap()
+      .parse::<u64>()
+      .unwrap();
     let ms_back = scc_timecode_to_ms(h, m, s, f, 29.97, true);
     // Allow 1-frame tolerance (33ms) for rounding in both directions.
     assert!(

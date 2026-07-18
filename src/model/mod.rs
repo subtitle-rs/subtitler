@@ -156,15 +156,15 @@ mod tests {
     // duration = 1003 - 1000 = 3ms; integer division 3/8 = 0 per chunk.
     // Before the fix: middle chunks got start == end (zero duration),
     // which validate() reports as ZeroDuration.
-    let mut file = SubtitleFile::Srt(vec![Subtitle::new(
-      1000,
-      1003,
-      "a b c d e f g h",
-    )]);
+    let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 1003, "a b c d e f g h")]);
     file.split_long(1);
     let subs = file.subtitles();
     // Sanity: the split actually produced multiple chunks
-    assert!(subs.len() > 1, "split_long did not split: {} subs", subs.len());
+    assert!(
+      subs.len() > 1,
+      "split_long did not split: {} subs",
+      subs.len()
+    );
     // Every produced subtitle must have positive duration
     for (i, sub) in subs.iter().enumerate() {
       assert!(

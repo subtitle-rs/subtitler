@@ -10,6 +10,47 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
 
+## [2.1.0] - 2026-07-18
+
+### Fixed
+
+- **SCC drop-frame timecode correctness**: implement standard SMPTE 12M-1-2014
+  drop-frame algorithm. Previously NTSC long-form SCC files (`;` separator)
+  drifted ~3.6 seconds per hour because non-drop and drop-frame timecodes
+  used the same formula. Also fixed `fps as u64` truncating 29.97 → 29.
+  Numerical invariant: `01:00:00;00` (drop) now equals exactly 3600000ms.
+- **EBU STL round-trip**: `ebu_stl::to_string` previously wrote corrupted TTI
+  timecodes (`ms / 40` instead of milliseconds). Now round-trips correctly
+  through `parse_bytes` (tolerance 80ms = 2 PAL frames).
+- **UTF-16 BOM handling**: `encoding::decode_to_string` UTF-16BE/LE branches
+  now strip the U+FEFF BOM (matching the UTF-8 path), skip the 2-byte BOM
+  before decoding, and return empty string for inputs under 2 bytes.
+- **CLI binary-format dispatch**: `subtitler parse`/`convert` no longer run
+  text decoding on EBU STL binary input (previously raised InvalidEncoding
+  or silently produced garbage via chardetng).
+- **`split_long` zero-duration**: `chunk_duration` now forced `>= 1ms` with
+  effective-end stretching, avoiding `start == end` subtitles when splitting
+  very short subtitles (e.g. 3ms split into 8 chunks).
+
+### Changed
+
+- **Internal hardening**: `main.rs::cmd_info` `durations.iter().min().unwrap()`
+  switched to `.copied().unwrap_or(0)` for local safety.
+- **SCC streaming parser** now extracts the timecode separator from regex
+  captures and threads `drop_frame` through `scc_timecode_to_ms` (previously
+  the streaming path ignored drop-frame entirely).
+
+### Dependencies
+
+- `cargo update` for security: aws-lc-rs 1.17.1 → 1.17.3, aws-lc-sys
+  0.42.0 → 0.43.0, cfg_aliases 0.2.1 → 0.2.2, tokio 1.52.3 → 1.53.0
+  (all within existing Cargo.toml ranges, SemVer-compatible).
+
+### See also
+
+- `MIGRATION.md` "2.0 → 2.1" section: behavior changes for SCC drop-frame,
+  EBU STL serialization, and UTF-16 decoding may require consumer action.
+
 ## [2.0.1] - 2026-07-18
 
 ### Fixed

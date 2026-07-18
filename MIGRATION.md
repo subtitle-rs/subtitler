@@ -1,3 +1,38 @@
+# Migration Guide
+
+## 2.0 → 2.1
+
+### Behavior changes
+
+- **SCC drop-frame timecodes**: previously SCC used the non-drop formula for
+  all timecodes, causing NTSC long-form video (`;` separator) to drift ~3.6
+  seconds per hour. 2.1 correctly implements SMPTE 12M-1-2014 drop-frame.
+  If you relied on the (incorrect) numerical values, re-parse your SCC files.
+  Key invariant: `01:00:00;00` (drop) now equals exactly 3600000ms (was
+  ~3603604ms under the buggy non-drop handling).
+
+- **EBU STL serialization**: previously `ebu_stl::to_string` wrote corrupted
+  TTI timecodes (`ms / 40` instead of milliseconds). 2.1 produces correct
+  files that round-trip through `parse_bytes`. Old corrupted files are not
+  parseable by 2.1, but were unusable anyway.
+
+- **UTF-16 decoding**: UTF-16-encoded subtitle files now correctly strip the
+  U+FEFF BOM (matching UTF-8 path behavior). Downstream code that depended
+  on a leading BOM character must be adjusted.
+
+- **`split_long` duration**: when a subtitle's duration is shorter than the
+  number of chunks it splits into, the effective end is now stretched so
+  every chunk has at least 1ms duration. Subtitles that previously had
+  `start == end` (zero-duration, failing `validate()`) are now valid.
+
+### Additions
+
+- `encoding::decode_to_string` now skips the 2-byte BOM before UTF-16 decoding
+  and returns an empty string (not a panic/error) for inputs under 2 bytes.
+- `scc_timecode_to_ms` now takes a `drop_frame: bool` 6th argument.
+
+---
+
 # Migrating from 1.x to 2.0.0
 
 2.0.0 completes the v2 API unification — all `parse_*` functions now return
