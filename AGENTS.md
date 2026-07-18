@@ -162,7 +162,11 @@ patch       patch        minor       patch        minor  major  minor/major
 
 **检查命令**：
 ```bash
-grep -rn \"13 格式\\|13 formats\\|13 subtitle\\|13 种\" README.md SKILL.md docs/CODE_WIKI.md AGENTS.md Cargo.toml
+grep -rn "13 格式\|13 formats\|13 subtitle\|13 种" README.md SKILL.md docs/CODE_WIKI.md AGENTS.md Cargo.toml
+# 验证最小构建（新增 feature flag 后必须做）
+cargo build --no-default-features --features srt
+cargo build --no-default-features --features dfxp,ttml
+cargo build --no-default-features --features whisper
 ```
 
 > 反面教材：v2.4.0 crates.io 展示的 description 曾写\"13 formats\"。
