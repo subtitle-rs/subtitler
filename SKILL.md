@@ -1,11 +1,11 @@
 ---
 name: subtitler
-description: Parse, convert, validate, edit, and generate subtitles using the subtitler CLI. Supports 9 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML/IMSC, SBV, LRC).
+description: Parse, convert, validate, edit, and generate subtitles using the subtitler CLI. Supports 13 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML/IMSC, SBV, LRC, SAMI, MPL2, SCC, EBU STL).
 ---
 
 # subtitler CLI
 
-Process subtitles from the command line — parse, convert, validate, edit, detect, and generate quality reports across 9 subtitle formats.
+Process subtitles from the command line — parse, convert, validate, edit, detect, and generate quality reports across 13 subtitle formats.
 
 ## Basic Commands
 
@@ -130,10 +130,14 @@ subtitler detect unknown.sub
 | ASS | `.ass` | ✅ | `ass` |
 | SSA | `.ssa` | ✅ | `ssa` |
 | MicroDVD | `.sub` | ✅ | `microdvd` |
-| SubViewer | (none) | ✅ | `subviewer` |
+| SubViewer | `.sub` | ✅ | `subviewer` |
 | TTML/IMSC | `.ttml`, `.xml` | ✅ | `ttml` |
 | YouTube SBV | `.sbv` | ✅ | `sbv` |
 | LRC Lyrics | `.lrc` | ✅ | `lrc` |
+| SAMI | `.smi`, `.sami` | ✅ | `sami` |
+| MPL2 | `.mpl`, `.txt` | ✅ | `mpl2` |
+| SCC | `.scc` | ✅ | `scc` |
+| EBU STL | `.stl` | ✅ | `ebu_stl` |
 
 ## stdin/stdout Support
 
