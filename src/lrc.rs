@@ -108,7 +108,7 @@ impl LrcData {
 }
 
 /// Parse LRC content into a `SubtitleFile`.
-pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let data = LrcData::parse(content)?;
   let subtitles = data.to_subtitles();
   Ok(SubtitleFile::Lrc { data, subtitles })
@@ -117,14 +117,14 @@ pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
 /// Parse LRC from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  Ok(parse_content(&text)?)
+  parse_content(&text)
 }
 
 /// Parse an LRC file asynchronously.
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  Ok(parse_content(&text)?)
+  parse_content(&text)
 }
 
 /// Parse an LRC file from a URL (requires `http` feature).
@@ -132,7 +132,7 @@ pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Subtitle
 pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  Ok(parse_content(&content)?)
+  parse_content(&content)
 }
 
 /// Detect if data looks like LRC.

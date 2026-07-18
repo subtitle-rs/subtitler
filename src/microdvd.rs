@@ -26,7 +26,7 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   None
 }
 
-pub fn parse_content(content: &str, fps: Option<f64>) -> Result<SubtitleFile, SubtitleError> {
+pub fn parse_content(content: &str, fps: Option<f64>) -> AnyResult<SubtitleFile> {
   let fps = fps.unwrap_or(DEFAULT_FPS);
   let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 30).max(16));
   let mut saved_fps = fps;
@@ -81,7 +81,7 @@ pub fn parse_content(content: &str, fps: Option<f64>) -> Result<SubtitleFile, Su
 /// Decode bytes to UTF-8 then parse, returning a `SubtitleFile`.
 pub fn parse_bytes(data: &[u8], fps: Option<f64>) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  Ok(parse_content(&text, fps)?)
+  parse_content(&text, fps)
 }
 
 /// Parse a MicroDVD file asynchronously.
@@ -91,7 +91,7 @@ pub async fn parse_file(
   fps: Option<f64>,
 ) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  Ok(parse_content(&text, fps)?)
+  parse_content(&text, fps)
 }
 
 /// Parse a MicroDVD file from a URL (requires `http` feature).
@@ -99,7 +99,7 @@ pub async fn parse_file(
 pub async fn parse_url(url: &str, fps: Option<f64>) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  Ok(parse_content(&content, fps)?)
+  parse_content(&content, fps)
 }
 
 /// Write subtitles to a file in MicroDVD format.

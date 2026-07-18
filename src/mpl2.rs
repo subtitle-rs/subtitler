@@ -97,7 +97,7 @@ fn ms_to_frame(ms: u64, fps: f64) -> u64 {
 }
 
 /// Parse MPL2 content into a SubtitleFile.
-pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let data = Mpl2Data::parse(content, None)?;
   Ok(SubtitleFile::Mpl2(data.subtitles))
 }
@@ -105,20 +105,20 @@ pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
 /// Parse MPL2 from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  Ok(parse_content(&text)?)
+  parse_content(&text)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  Ok(parse_content(&text)?)
+  parse_content(&text)
 }
 
 #[cfg(feature = "http")]
 pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  Ok(parse_content(&content)?)
+  parse_content(&content)
 }
 
 /// Detect if data looks like MPL2.

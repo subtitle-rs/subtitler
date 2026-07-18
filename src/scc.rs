@@ -342,7 +342,7 @@ fn encode_scc_hex(text: &str) -> String {
 }
 
 /// Parse SCC content into a SubtitleFile.
-pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let data = SccData::parse(content)?;
   Ok(SubtitleFile::Scc(data))
 }
@@ -350,14 +350,14 @@ pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
 /// Parse SCC from a byte slice.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  Ok(parse_content(&text)?)
+  parse_content(&text)
 }
 
 /// Parse an SCC file asynchronously.
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  Ok(parse_content(&text)?)
+  parse_content(&text)
 }
 
 /// Parse an SCC file from a URL (requires `http` feature).
@@ -365,7 +365,7 @@ pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Subtitle
 pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  Ok(parse_content(&content)?)
+  parse_content(&content)
 }
 
 /// Detect if data looks like SCC.

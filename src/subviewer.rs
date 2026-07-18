@@ -83,7 +83,7 @@ fn parse_subviewer_time(ts: &str) -> Result<u64, SubtitleError> {
   Ok(h * 3600000 + m * 60000 + s * 1000 + ms)
 }
 
-pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
+pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 60).max(16));
   let mut pending_timestamp: Option<(u64, u64)> = None;
   let mut header_lines: Vec<String> = Vec::new();
@@ -125,14 +125,14 @@ pub fn parse_content(content: &str) -> Result<SubtitleFile, SubtitleError> {
 /// Decode bytes to UTF-8 then parse, returning a `SubtitleFile`.
 pub fn parse_bytes(data: &[u8]) -> AnyResult<SubtitleFile> {
   let text = crate::encoding::decode_to_string(data)?;
-  Ok(parse_content(&text)?)
+  parse_content(&text)
 }
 
 /// Parse a SubViewer file asynchronously.
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<SubtitleFile> {
   let text = tokio::fs::read_to_string(path).await?;
-  Ok(parse_content(&text)?)
+  parse_content(&text)
 }
 
 /// Parse a SubViewer file from a URL (requires `http` feature).
@@ -140,7 +140,7 @@ pub async fn parse_file(path: impl AsRef<std::path::Path>) -> AnyResult<Subtitle
 pub async fn parse_url(url: &str) -> AnyResult<SubtitleFile> {
   let response = reqwest::get(url).await?;
   let content = response.text().await?;
-  Ok(parse_content(&content)?)
+  parse_content(&content)
 }
 
 /// Write subtitles to a file in SubViewer format.
