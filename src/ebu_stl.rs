@@ -389,16 +389,17 @@ pub fn to_string(subtitles: &[Subtitle]) -> Vec<u8> {
     .iter()
     .enumerate()
     .map(|(i, sub)| {
-      let start_timecode = (sub.start / 40) as u32; // Simplified conversion
-      let end_timecode = (sub.end / 40) as u32;
-
+      // Store milliseconds directly — matches parse_smpte_timecode's
+      // output contract. The previous (sub.start / 40) was incorrect:
+      // encode_smpte_timecode re-encoded this value as if it were ms,
+      // producing garbage on round-trip (10000ms → 250 → ~250ms).
       TtiBlock {
         subtitle_group: 0,
         subtitle_number: (i + 1) as u16,
         extension_block: 0,
         cumulative_status: 0,
-        timecode_start: start_timecode,
-        timecode_end: end_timecode,
+        timecode_start: sub.start as u32,
+        timecode_end: sub.end as u32,
         vertical_position: 20,
         justification: 0,
         comment_flag: false,
@@ -419,6 +420,7 @@ pub fn to_string(subtitles: &[Subtitle]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::model::SubtitleFormat;
 
   #[test]
   fn test_timecode_conversion() {
@@ -443,5 +445,59 @@ mod tests {
     // Invalid structure
     let data = vec![0u8; 100];
     assert!(detect_format(&data).is_none());
+  }
+
+  #[test]
+  fn test_ebu_stl_round_trip() {
+    // Single subtitle at 1000ms-3500ms — clearly distinguishable from
+    // the buggy /40 conversion (which would yield ~25ms-~87ms).
+    let subs = vec![Subtitle::new(1000, 3500, "Hello STL")];
+    let bytes = to_string(&subs);
+    let reparsed = parse_bytes(&bytes).unwrap();
+    let re_subs = reparsed.subtitles();
+    assert_eq!(re_subs.len(), 1);
+    // 25fps PAL: 1 frame = 40ms; allow 2-frame (80ms) tolerance.
+    assert!(
+      (re_subs[0].start as i64 - 1000).abs() <= 80,
+      "start round-trip drift: got {}, expected ~1000",
+      re_subs[0].start
+    );
+    assert!(
+      (re_subs[0].end as i64 - 3500).abs() <= 80,
+      "end round-trip drift: got {}, expected ~3500",
+      re_subs[0].end
+    );
+    assert_eq!(re_subs[0].text, "Hello STL");
+  }
+
+  #[test]
+  fn test_ebu_stl_round_trip_multiple() {
+    let subs = vec![
+      Subtitle::new(1000, 2000, "first"),
+      Subtitle::new(3000, 4500, "second"),
+      Subtitle::new(5000, 7000, "third"),
+      Subtitle::new(8000, 9500, "fourth"),
+      Subtitle::new(10000, 12000, "fifth"),
+    ];
+    let bytes = to_string(&subs);
+    let reparsed = parse_bytes(&bytes).unwrap();
+    let re_subs = reparsed.subtitles();
+    assert_eq!(re_subs.len(), subs.len());
+    for (orig, re) in subs.iter().zip(re_subs.iter()) {
+      assert!(
+        (re.start as i64 - orig.start as i64).abs() <= 80,
+        "start drift on {:?}: got {}, expected ~{}",
+        orig.text,
+        re.start,
+        orig.start
+      );
+      assert!(
+        (re.end as i64 - orig.end as i64).abs() <= 80,
+        "end drift on {:?}: got {}, expected ~{}",
+        orig.text,
+        re.end,
+        orig.end
+      );
+    }
   }
 }
