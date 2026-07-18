@@ -70,11 +70,11 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
         italic = true;
       } else if tag.starts_with("<u") {
         underline = true;
-      } else if tag.starts_with("<font")
-        && let Some(c) = tag.split("color=").nth(1)
-      {
-        let color_val = c.trim_matches(|c: char| c == '"' || c == '\'' || c == '>' || c == '/');
-        color = Some(color_val.to_string());
+      } else if tag.starts_with("<font") {
+        if let Some(c) = tag.split("color=").nth(1) {
+          let color_val = c.trim_matches(|c: char| c == '"' || c == '\'' || c == '>' || c == '/');
+          color = Some(color_val.to_string());
+        }
       }
     }
 
@@ -335,32 +335,33 @@ impl<'a> Iterator for SrtStream<'a> {
               is_comment: false,
             });
             self.phase = Phase::Timestamp;
-          } else if trimmed.contains("-->")
-            && let Some((start_str, end_str)) = trimmed.split_once(" --> ")
-          {
-            match (
-              parse_timestamp(start_str, Format::Srt),
-              parse_timestamp(end_str, Format::Srt),
-            ) {
-              (Ok(s), Ok(e)) => {
-                self.current_subtitle = Some(Subtitle::new(s, e, ""));
-                self.phase = Phase::Text;
+          } else if trimmed.contains("-->") {
+            if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
+              match (
+                parse_timestamp(start_str, Format::Srt),
+                parse_timestamp(end_str, Format::Srt),
+              ) {
+                (Ok(s), Ok(e)) => {
+                  self.current_subtitle = Some(Subtitle::new(s, e, ""));
+                  self.phase = Phase::Text;
+                }
+                (Err(e), _) | (_, Err(e)) => return Some(Err(e.into())),
               }
-              (Err(e), _) | (_, Err(e)) => return Some(Err(e.into())),
             }
           }
         }
         Phase::Timestamp => {
-          if let Some(sub) = &mut self.current_subtitle
-            && let Some((start_str, end_str)) = trimmed.split_once(" --> ")
-            && let (Ok(s), Ok(e)) = (
-              parse_timestamp(start_str, Format::Srt),
-              parse_timestamp(end_str, Format::Srt),
-            )
-          {
-            sub.start = s;
-            sub.end = e;
-            self.phase = Phase::Text;
+          if let Some(sub) = &mut self.current_subtitle {
+            if let Some((start_str, end_str)) = trimmed.split_once(" --> ") {
+              if let (Ok(s), Ok(e)) = (
+                parse_timestamp(start_str, Format::Srt),
+                parse_timestamp(end_str, Format::Srt),
+              ) {
+                sub.start = s;
+                sub.end = e;
+                self.phase = Phase::Text;
+              }
+            }
           }
         }
         Phase::Text => {

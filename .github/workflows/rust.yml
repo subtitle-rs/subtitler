@@ -70,17 +70,22 @@ jobs:
   clippy-matrix:
     strategy:
       matrix:
-        features:
-          - ""
-          - "--no-default-features --features srt"
-          - "--features ttml"
+        include:
+          # Full feature set: check all targets (lib, tests, examples, benches)
+          - features: ""
+            targets: "--all-targets"
+          # Minimal builds: only check lib (examples/tests reference multi-format modules)
+          - features: "--no-default-features --features srt"
+            targets: "--lib"
+          - features: "--no-default-features --features dfxp,ttml"
+            targets: "--lib"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
+      - run: cargo clippy ${{ matrix.targets }} ${{ matrix.features }} -- -D warnings
 
   bench:
     if: github.event_name == 'schedule' || contains(github.event.head_commit.message, '[bench]')
