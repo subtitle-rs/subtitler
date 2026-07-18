@@ -5,7 +5,7 @@
 [![Crates.io](https://img.shields.io/crates/v/subtitler?style=flat-square)](https://crates.io/crates/subtitler)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
 
-- **13 subtitle formats**: SRT, WebVTT, ASS/SSA, MicroDVD, SubViewer, TTML/IMSC, SBV, LRC, SAMI, MPL2, SCC, EBU STL
+- **15 subtitle formats**: SRT, WebVTT, ASS/SSA, MicroDVD, SubViewer, TTML/IMSC, SBV, LRC, SAMI, MPL2, SCC, EBU STL, DFXP, Whisper JSON
 - Rich text extraction (bold, italic, underline, color, voice tags)
 - Encoding detection and auto-decoding (UTF-8, UTF-16, BOM, chardetng fallback)
 - Format detection, conversion, and validation

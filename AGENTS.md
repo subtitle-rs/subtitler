@@ -6,7 +6,7 @@
 ## 0. 项目快速画像
 
 - **单 crate** 在 `subtitler/`（仓库根只是 git 容器，根无 `Cargo.toml`）。
-- **13 种字幕格式**（SRT, VTT, ASS, SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL），每个一个 feature flag。
+- **15 种字幕格式**（SRT, VTT, ASS, SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL, DFXP, Whisper JSON），每个一个 feature flag。
 - 时间戳统一用**毫秒 (`u64`)**，不是秒。
 - `src/lib.rs` = 库根，`src/main.rs` = CLI 二进制。
 - 当前 MSRV: **1.85**（Edition 2024）。
@@ -57,7 +57,7 @@ cargo bench
 ### CI 矩阵
 
 `.github/workflows/rust.yml` 跑两个 feature 组合：
-- `""`（default features，13 格式 + http）
+- `""`（default features，15 格式 + http）
 - `--no-default-features --features srt`（最小构建）
 
 **注意**：当前 CI 的 clippy job **只跑 default features**，最小构建的 `#[cfg]` 代码未被 lint。这是已知缺口（路线图 2.3 修）。
@@ -145,6 +145,27 @@ patch       patch        minor       patch        minor  major  minor/major
 ```
 
 每次开始工作前先看 `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` 确定当前版本范围，避免范围蔓延。当前进度详见 §8。
+
+### 3.15 新增/删除格式时，必须更新所有文档中的格式列表和计数
+
+**经历**：v2.4 新增 DFXP + Whisper JSON（13→15），commit 了功能代码，但 Cargo.toml `description`、README、SKILL.md、CODE_WIKI、AGENTS.md 五处仍写\"13 格式\"。
+
+**涉及文件清单**（新增格式时，逐文件检查）：
+
+| 文件 | 要更新的内容 |
+|------|------------|
+| `Cargo.toml` | `description` 字段的格式列表 + 计数 |
+| `README.md` | 第 8 行 \"X subtitle formats\" 列表 |
+| `SKILL.md` | frontmatter `description` + line 8 intro + Supported Formats 表 |
+| `docs/CODE_WIKI.md` | §1 格式列表 + 计数 |
+| `AGENTS.md`（本文件） | §0 格式列表 + 计数 |
+
+**检查命令**：
+```bash
+grep -rn \"13 格式\\|13 formats\\|13 subtitle\\|13 种\" README.md SKILL.md docs/CODE_WIKI.md AGENTS.md Cargo.toml
+```
+
+> 反面教材：v2.4.0 crates.io 展示的 description 曾写\"13 formats\"。
 
 ---
 
@@ -261,12 +282,19 @@ print(to_ms(1, 0, 0, 0, 29.97, True))  # 3600000
 - §16 路线图进度表（标 ✓/⏳）。
 - 任何新增模块（src/ 新文件、tests/ 新文件、新 feature flag）→ §3 目录结构、§5 模块职责、§14 测试体系。
 - 任何行为变更（如 SCC drop-frame、UTF-16 BOM 处理）→ §17 设计决策。
+- **格式计数**（若有新增/删除格式）→ 同步更新以下文件的格式列表和计数：`Cargo.toml` description、`README.md`、`SKILL.md`、`AGENTS.md` §0。详见 §3.15。
 
 **反面教材**：v2.0.0/v2.0.1/v2.1.0 连发三版期间 CODE_WIKI 一直停在 v1.4.0（216 测试、无 Pipeline/WASM、还把"v2.0 计划做零拷贝"当未来工作）。这种积压让 Wiki 失去参考价值，新人会被误导。**禁止跨版本积压**。
 
 **文档一致性自检**（每次发版前）：
 ```bash
-# 三处版本号必须一致
+# 版本号一致
+grep '^version' Cargo.toml
+grep '^> 版本:' docs/CODE_WIKI.md
+grep -m 1 '^## \[' CHANGELOG.md
+# 格式计数一致（见 §3.15）
+grep -rn "15 格式\|15 formats\|15 subtitle\|15 种" README.md SKILL.md docs/CODE_WIKI.md AGENTS.md Cargo.toml
+```
 grep '^version' Cargo.toml
 grep '^> 版本:' docs/CODE_WIKI.md
 grep -m 1 '^## \[' CHANGELOG.md   # 应为 Unreleased 或最新已发版本
