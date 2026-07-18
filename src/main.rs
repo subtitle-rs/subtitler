@@ -385,8 +385,8 @@ async fn cmd_info(args: cli::InfoArgs) -> AnyResult<()> {
   let total_duration = last.end.saturating_sub(first.start);
   let durations: Vec<u64> = subs.iter().map(|s| s.duration_ms()).collect();
   let avg_dur = durations.iter().sum::<u64>() / subs.len() as u64;
-  let min_dur = durations.iter().min().unwrap();
-  let max_dur = durations.iter().max().unwrap();
+  let min_dur = durations.iter().min().copied().unwrap_or(0);
+  let max_dur = durations.iter().max().copied().unwrap_or(0);
   let total_chars: usize = subs.iter().map(|s| s.text.chars().count()).sum();
   let max_cps = subs
     .iter()
