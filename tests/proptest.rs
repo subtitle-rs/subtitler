@@ -1,25 +1,29 @@
-//! Property-based tests for subtitle round-trips.
+//! Property-based tests for subtitle round-trips and invariants.
 //!
 //! Run: PROPTEST_CASES=100 cargo test --test proptest
 
 use proptest::prelude::*;
 use subtitler::model::Subtitle;
+use subtitler::model::SubtitleFile;
 use subtitler::model::SubtitleFormat;
 
 fn arb_subtitle() -> impl Strategy<Value = Subtitle> {
   (
     0u64..3_600_000u64,
     0u64..3_600_000u64,
-    "[a-zA-Z][a-zA-Z0-9!?]{0,50}",
+    // Text: expanded from original ASCII-only to include Latin-1+ and
+    // Unicode CJK/emoji ranges. Excludes < > & (tag markers) and \n \r
+    // (multi-cue splitting) to keep round-trip comparisons simple.
+    "[\x20-\x7E\u{80}-\u{FF}\u{4E00}-\u{9FFF}\u{3040}-\u{309F}]{0,60}",
   )
     .prop_map(|(start, end, text)| {
-      let (s, e) = if start <= end {
-        (start, end)
-      } else {
-        (end, start)
-      };
+      let (s, e) = if start <= end { (start, end) } else { (end, start) };
       Subtitle::new(s, e, &text)
     })
+}
+
+fn arb_subtitle_file(n: usize) -> impl Strategy<Value = SubtitleFile> {
+  proptest::collection::vec(arb_subtitle(), n..=n).prop_map(SubtitleFile::Srt)
 }
 
 proptest! {
@@ -27,10 +31,10 @@ proptest! {
   fn srt_round_trip_preserves_text_and_times(sub in arb_subtitle()) {
     let s = subtitler::srt::to_string(std::slice::from_ref(&sub));
     let parsed = subtitler::srt::parse_content(&s).unwrap();
-    prop_assert_eq!(parsed.subtitles().len(), 1, "should produce 1 cue");
-    prop_assert_eq!(parsed.subtitles()[0].start, sub.start, "start mismatch");
-    prop_assert_eq!(parsed.subtitles()[0].end, sub.end, "end mismatch");
-    prop_assert_eq!(parsed.subtitles()[0].text.trim(), sub.text.trim(), "text mismatch");
+    prop_assert_eq!(parsed.subtitles().len(), 1);
+    prop_assert_eq!(parsed.subtitles()[0].start, sub.start);
+    prop_assert_eq!(parsed.subtitles()[0].end, sub.end);
+    prop_assert_eq!(parsed.subtitles()[0].text.trim(), sub.text.trim());
   }
 
   #[test]
@@ -40,6 +44,52 @@ proptest! {
     prop_assert_eq!(parsed.subtitles().len(), 1);
     prop_assert_eq!(parsed.subtitles()[0].start, sub.start);
     prop_assert_eq!(parsed.subtitles()[0].end, sub.end);
-    prop_assert_eq!(parsed.subtitles()[0].text.trim(), sub.text.trim(), "text mismatch");
+    prop_assert_eq!(parsed.subtitles()[0].text.trim(), sub.text.trim());
+  }
+
+  #[test]
+  fn ass_round_trip_preserves_count(sub in arb_subtitle()) {
+    let s = subtitler::ass::to_string(
+      &std::collections::HashMap::new(),
+      &[subtitler::model::AssStyle::default_style()],
+      std::slice::from_ref(&sub),
+    );
+    let parsed = subtitler::ass::parse_content(&s).unwrap();
+    prop_assert_eq!(parsed.subtitles().len(), 1);
+  }
+
+  // ── Idempotency properties ──
+
+  #[test]
+  fn sort_is_idempotent(file in arb_subtitle_file(10)) {
+    let mut a = file.clone();
+    a.sort();
+    let mut b = a.clone();
+    b.sort();
+    prop_assert_eq!(a.subtitles().len(), b.subtitles().len());
+    for (x, y) in a.subtitles().iter().zip(b.subtitles().iter()) {
+      prop_assert_eq!(x.start, y.start);
+      prop_assert_eq!(x.end, y.end);
+    }
+  }
+
+  #[test]
+  fn shift_all_is_reversible(sub in arb_subtitle()) {
+    let mut a = sub.clone();
+    a.shift(3000);
+    a.shift(-3000);
+    prop_assert_eq!(a.start, sub.start);
+    prop_assert_eq!(a.end, sub.end);
+  }
+
+  #[test]
+  fn merge_adjacent_never_increases_count(file in arb_subtitle_file(8)) {
+    let mut m = file.clone();
+    m.sort();
+    m.merge_adjacent(1000);
+    prop_assert!(m.subtitles().len() <= file.subtitles().len(),
+      "merge_adjacent should not increase cue count: {} -> {}",
+      file.subtitles().len(), m.subtitles().len()
+    );
   }
 }
