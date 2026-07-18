@@ -94,6 +94,13 @@ fn resolve_output_format(output: &str, hint: Option<CliFormat>) -> AnyResult<Cli
 }
 
 async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
+  // Binary formats (EBU STL) take raw bytes; skip text decoding which
+  // would fail on arbitrary binary content with InvalidEncoding.
+  #[cfg(feature = "ebu_stl")]
+  if matches!(format, CliFormat::EbuStl) {
+    return ebu_stl::parse_content(data);
+  }
+
   let text = subtitler::encoding::decode_to_string(data)?;
   match format {
     #[cfg(feature = "srt")]
@@ -121,18 +128,16 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     #[cfg(feature = "scc")]
     CliFormat::Scc => Ok(scc::parse_content(&text)?),
     #[cfg(feature = "ebu_stl")]
-    CliFormat::EbuStl => Ok(ebu_stl::parse_content(data)?),
+    CliFormat::EbuStl => unreachable!("EBU STL handled above to skip text decoding"),
   }
 }
 
 // ── Commands ──
 
-async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
-  let (data, ext) = read_input(&args.input).await?;
-  let format = resolve_format(&data, args.format.or(ext))
-    .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format. Use --format to specify."))?;
-
-  let content = subtitler::encoding::decode_to_string(&data)?;
+/// Parse text-based formats. EBU STL (binary) is handled separately in
+/// the callers to skip `decode_to_string`. See `cmd_parse` and `parse_to_file`.
+fn cmd_parse_text(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
+  let content = subtitler::encoding::decode_to_string(data)?;
   let file = match format {
     #[cfg(feature = "srt")]
     CliFormat::Srt => srt::parse_content(&content)?,
@@ -159,8 +164,28 @@ async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
     #[cfg(feature = "scc")]
     CliFormat::Scc => subtitler::scc::parse_content(&content)?,
     #[cfg(feature = "ebu_stl")]
-    CliFormat::EbuStl => subtitler::ebu_stl::parse_bytes(&data)?,
+    CliFormat::EbuStl => unreachable!("EBU STL is binary; handled by callers"),
   };
+  Ok(file)
+}
+
+async fn cmd_parse(args: cli::ParseArgs) -> AnyResult<()> {
+  let (data, ext) = read_input(&args.input).await?;
+  let format = resolve_format(&data, args.format.or(ext))
+    .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format. Use --format to specify."))?;
+
+  // Binary formats (EBU STL) take raw bytes; skip text decoding which
+  // would fail on arbitrary binary content with InvalidEncoding.
+  // `format` is cloned into cmd_parse_text because it's still needed
+  // for the eprintln! at the end of this function.
+  #[cfg(feature = "ebu_stl")]
+  let file = if matches!(format, CliFormat::EbuStl) {
+    subtitler::ebu_stl::parse_bytes(&data)?
+  } else {
+    cmd_parse_text(&data, format.clone())?
+  };
+  #[cfg(not(feature = "ebu_stl"))]
+  let file = cmd_parse_text(&data, format.clone())?;
   let subs = file.subtitles();
 
   if args.json {
