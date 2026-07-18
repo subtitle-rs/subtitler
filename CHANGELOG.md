@@ -10,6 +10,37 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
 
+## [2.3.0] - 2026-07-18
+
+### Added
+
+- **WASM tests**: 6 inline `#[wasm_bindgen_test]` functions covering all browser
+  API entry points (parse_subtitles, convert_format, validate_subtitles, detect,
+  get_info, normalize_text). Library compiles and tests for `wasm32-unknown-unknown`.
+- **WASM CI job**: `cargo build --lib --target wasm32-unknown-unknown` on every
+  push (full `wasm-pack test --node` deferred until binary/examples are gated).
+- **MSRV CI job**: build + test on Rust 1.85 (`Cargo.toml` rust-version).
+- **Clippy feature matrix**: now runs across default, `--no-default-features
+  --features srt`, and `--features ttml` to catch `#[cfg]`-gated issues.
+- **Cross-format conversion matrix** (23 pairs): every format has identity
+  round-trip + at least 1 cross-format conversion verified (parse → serialize
+  → reparse).
+- **Chardetng fallback tests**: Shift_JIS and GBK fixtures for
+  `encoding::decode_to_string`.
+- **Proptest expansion**: `arb_subtitle` generator expanded to Unicode CJK;
+  idempotency properties for sort, shift, and merge_adjacent; ASS round-trip.
+- **Error-path tests**: graceful-degradation tests for malformed XML (TTML)
+  and non-numeric frames (MPL2/MicroDVD).
+- **Compile-time API surface test** (`tests/api_surface.rs`): verifies every
+  format module exposes parse_content, parse_bytes, parse_stream, to_string,
+  detect_format, generate, and write_stream (v2.2).
+
+### Changed
+
+- `wasm32` target: `criterion` and `proptest` dev-dependencies gated to
+  non-wasm32 targets to enable library compilation on `wasm32-unknown-unknown`.
+- All integration test files gated with `#![cfg(not(target_arch = "wasm32"))]`.
+
 ## [2.2.0] - 2026-07-18
 
 ### Added

@@ -1,8 +1,8 @@
 # Subtitler Code Wiki
 
-> 版本: v2.2.0 · Rust Edition 2024 · MSRV 1.85
+> 版本: v2.3.0 · Rust Edition 2024 · MSRV 1.85
 > 一个用于解析、转换、校验、编辑和生成 13 种字幕格式的高性能 Rust 库 + CLI 工具。
-> ~293 tests passing · 13 formats · WASM-ready · Pipeline DSL · API-unified (v2.2)
+> ~325 tests passing · 13 formats · WASM-ready · Pipeline DSL · API-unified · CI-hardened (v2.3)
 
 ---
 

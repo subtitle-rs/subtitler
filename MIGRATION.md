@@ -1,5 +1,20 @@
 # Migration Guide
 
+## 2.2 → 2.3
+
+### No breaking changes
+
+2.3 is a test/CI hardening release. No public API changes. All existing
+2.2 code compiles and behaves identically.
+
+### Developer-facing changes
+
+- `criterion` and `proptest` are now gated to non-wasm32 targets; if your
+  downstream project depends on these dev-dependencies for wasm32, add them
+  explicitly.
+- Integration test files now carry `#![cfg(not(target_arch = "wasm32"))]`;
+  custom test runners for wasm32 must set up their own entrypoints.
+
 ## 2.1 → 2.2
 
 ### Additions (non-breaking)
