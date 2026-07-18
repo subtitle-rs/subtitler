@@ -171,11 +171,19 @@ cargo build --no-default-features --features whisper
 
 > 反面教材：v2.4.0 crates.io 展示的 description 曾写"13 formats"。
 
-### 3.16 新增格式时，必须验证最小构建（`--no-default-features --features srt`）
+### 3.16 新增格式时，必须验证最小构建 + 最小测试
 
-**经历**：v2.4 新增 DFXP 和 Whisper 两个 feature，但 cli.rs 的 `From<&model::Format>` impl 里漏了 `#[cfg(feature)]` gate，导致 `cargo build --no-default-features --features srt` 失败（缺少变体）。
+**经历 v2.4**：新增 DFXP 和 Whisper，但 cli.rs 漏了 `#[cfg(feature)]` gate → `cargo build --no-default-features --features srt` 失败。
 
-**规则**：每次添加 feature flag 后，跑 `cargo build --no-default-features --features srt` 验证。以及 `--features dfxp,ttml` 和 `--features whisper` 独立构建。
+**经历 v2.5**：`cargo build` 通过但 `cargo test --lib` 失败 —— `utils.rs` 里 `test_parse_timestamp_vtt` 用了 `Format::Vtt` 无 `#[cfg(feature = "vtt")]`。build 只编代码不编测试，**所以 build 过了不代表 CI 过**。
+
+**规则**：每次添加 feature flag 或新增格式后，跑：
+```bash
+cargo build --no-default-features --features srt
+cargo test --no-default-features --features srt --lib     # ★ 必须加，build 通过不等于 test 通过
+cargo build --no-default-features --features dfxp,ttml
+cargo build --no-default-features --features whisper
+```
 
 ---
 
