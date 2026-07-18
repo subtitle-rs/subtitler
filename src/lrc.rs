@@ -265,7 +265,7 @@ mod tests {
     let content = "[00:01.50]Hello\n[00:03.20]World\n";
     let file = parse_content(content).unwrap();
     let subs = file.subtitles();
-    let output = to_string(&subs);
+    let output = to_string(subs);
     assert!(output.contains("Hello"));
     let reparsed = parse_content(&output).unwrap();
     assert_eq!(subs.len(), reparsed.subtitles().len());
