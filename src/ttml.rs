@@ -243,9 +243,18 @@ pub async fn generate(
   Ok(path.to_string_lossy().into_owned())
 }
 
-/// Note: `_header` is reserved for metadata preservation (not yet implemented;
-/// the `<head>` block is currently omitted).
-pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
+/// Serialize subtitles to TTML format.
+///
+/// `header`, if provided, is injected verbatim into a `<head>` block
+/// between `<tt>` and `<body>`. The caller is responsible for ensuring
+/// `header` is well-formed XML fragment (e.g. `<metadata>...</metadata>`).
+/// `None` omits the `<head>` block entirely.
+///
+/// **Note**: the parse path does not yet round-trip the header back into
+/// `SubtitleFile::Ttml { header, .. }` (it stays `None`). Round-trip
+/// preservation is planned for a future release. For now, `header` is
+/// write-only.
+pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
   let _ = writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)));
@@ -255,6 +264,16 @@ pub fn to_string(subtitles: &[Subtitle], _header: Option<&str>) -> String {
     ("xml:lang", "en"),
   ]);
   let _ = writer.write_event(Event::Start(tt));
+
+  // Optional <head> block — inject header verbatim as escaped XML text.
+  // BytesText::from_escaped prevents double-escaping of the caller's
+  // already-formed XML fragment (e.g. "<metadata>...</metadata>").
+  if let Some(h) = header.filter(|s| !s.is_empty()) {
+    let _ = writer.write_event(Event::Start(BytesStart::new("head")));
+    let _ = writer.write_event(Event::Text(BytesText::from_escaped(h)));
+    let _ = writer.write_event(Event::End(BytesEnd::new("head")));
+  }
+
   let _ = writer.write_event(Event::Start(BytesStart::new("body")));
   let _ = writer.write_event(Event::Start(BytesStart::new("div")));
 
@@ -440,5 +459,47 @@ mod tests {
     assert_eq!(ttml_to_ms("5s"), Some(5000));
     assert_eq!(ttml_to_ms("2.5s"), Some(2500));
     assert_eq!(ttml_to_ms("00:00:05.000"), Some(5000));
+  }
+
+  #[test]
+  fn test_ttml_header_preserved_in_output() {
+    let subs = vec![Subtitle::new(1000, 2000, "hi")];
+    // No header: output has no <head> block
+    let no_hdr = to_string(&subs, None);
+    assert!(
+      !no_hdr.contains("<head>"),
+      "expected no <head> when header=None, got: {}",
+      no_hdr
+    );
+    // With header: output contains <head>...</head> wrapping the fragment
+    let with_hdr = to_string(&subs, Some("<metadata>title=Hello</metadata>"));
+    assert!(
+      with_hdr.contains("<head>") && with_hdr.contains("</head>"),
+      "expected <head> block in output, got: {}",
+      with_hdr
+    );
+    assert!(
+      with_hdr.contains("<metadata>title=Hello</metadata>"),
+      "expected header fragment verbatim in output, got: {}",
+      with_hdr
+    );
+    // Header placement: <head> comes after <tt> and before <body>
+    let tt_idx = with_hdr.find("<tt").unwrap();
+    let head_idx = with_hdr.find("<head>").unwrap();
+    let body_idx = with_hdr.find("<body").unwrap();
+    assert!(tt_idx < head_idx, "<head> must come after <tt>");
+    assert!(head_idx < body_idx, "<head> must come before <body>");
+  }
+
+  #[test]
+  fn test_ttml_empty_header_omitted() {
+    let subs = vec![Subtitle::new(1000, 2000, "hi")];
+    // Empty string header is treated as None
+    let out = to_string(&subs, Some(""));
+    assert!(
+      !out.contains("<head>"),
+      "empty header should be omitted, got: {}",
+      out
+    );
   }
 }
