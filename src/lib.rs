@@ -5,6 +5,8 @@ pub mod config;
 pub mod ebu_stl;
 pub mod encoding;
 pub mod error;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod io;
 #[cfg(feature = "lrc")]
 pub mod lrc;
 #[cfg(feature = "microdvd")]
