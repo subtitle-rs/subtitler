@@ -19,7 +19,7 @@
 | 顺序 | 文档 | 何时读 |
 |------|------|--------|
 | 1 | **本文（AGENTS.md）** | 每次开始工作前 |
-| 2 | `docs/CODE_WIKI.md` | 需要理解架构 / API 全貌时（注意：可能滞后于最新版本，参考源码为准） |
+| 2 | `docs/CODE_WIKI.md` | 需要理解架构 / API 全貌时（每版本同步，见 §6.7） |
 | 3 | `CHANGELOG.md` | 需要知道某版本做了什么 / 写新 changelog 时 |
 | 4 | `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` | 决定下一个版本做什么时 |
 | 5 | `MIGRATION.md` | 涉及跨版本 API 变更时 |
@@ -244,6 +244,34 @@ print(to_ms(1, 0, 0, 0, 29.97, True))  # 3600000
 - **绝不**用 `## [Unreleased] — vX.Y.Z` 这种把版本号塞进 Unreleased 头的写法（v2.0.0 发布时就犯了这错，导致 crates.io 把 1.4.0 当成最新 release notes）。
 - 删除看似重复的版本头前，**先读内容**确认是不是真的重复（参考 §3.3）。
 
+### 6.7 文档维护节奏（README / AGENTS / CODE_WIKI / MIGRATION）
+
+四份文档各有职责，更新时机不同：
+
+| 文档 | 职责 | 何时更新 |
+|------|------|---------|
+| `README.md` | 用户面向（入门、API 示例、格式表） | **每次公共 API 变更**或格式数变化时 |
+| `AGENTS.md` | 开发者/AI 协作者手册（踩坑、流程、runbook） | **踩到新坑 / 新流程经验**时滚动更新 |
+| `MIGRATION.md` | 跨版本升级指南 | **有行为变更 / API 变更**的版本（minor/major）发版前 |
+| `docs/CODE_WIKI.md` | 架构百科（17 章 API 全貌） | **发版前**强制同步到当前版本（见 §7.2 第 7 项） |
+
+**CODE_WIKI 的"发版前强制更新"清单**：
+- 头部版本号（`> 版本: vX.Y.Z`）。
+- 测试数（§14.1）—— 跑 `cargo test --all-targets 2>&1 | grep 'test result' | awk '{s+=$4} END {print s}'` 得当前数。
+- §16 路线图进度表（标 ✓/⏳）。
+- 任何新增模块（src/ 新文件、tests/ 新文件、新 feature flag）→ §3 目录结构、§5 模块职责、§14 测试体系。
+- 任何行为变更（如 SCC drop-frame、UTF-16 BOM 处理）→ §17 设计决策。
+
+**反面教材**：v2.0.0/v2.0.1/v2.1.0 连发三版期间 CODE_WIKI 一直停在 v1.4.0（216 测试、无 Pipeline/WASM、还把"v2.0 计划做零拷贝"当未来工作）。这种积压让 Wiki 失去参考价值，新人会被误导。**禁止跨版本积压**。
+
+**文档一致性自检**（每次发版前）：
+```bash
+# 三处版本号必须一致
+grep '^version' Cargo.toml
+grep '^> 版本:' docs/CODE_WIKI.md
+grep -m 1 '^## \[' CHANGELOG.md   # 应为 Unreleased 或最新已发版本
+```
+
 ---
 
 ## 7. 发布流程（SemVer）
@@ -261,7 +289,17 @@ print(to_ms(1, 0, 0, 0, 29.97, True))  # 3600000
 3. **`Cargo.toml` 的 `version` 已 bump 到目标版本**。
 4. **`Cargo.lock` 的 version 同步更新**（参考 §3.4，单独 commit）。
 5. **CHANGELOG 顶部已有对应 `## [x.y.z] - YYYY-MM-DD` 条目**。
-6. **`cargo publish --dry-run` 通过**（见 §7.4 网络注意）。
+6. **MIGRATION.md 已更新**（若有行为变更、API 变更、或 minor/major 版本）。
+7. **`docs/CODE_WIKI.md` 已更新到当前版本**（见 §6.7）。**禁止跨版本积压**——2.0/2.0.1/2.1.0 三版没更新 Wiki 是反面教材。
+8. **`cargo publish --dry-run` 通过**（见 §7.4 网络注意）。
+
+> **自查命令**（发布前快速核对版本一致性）：
+> ```bash
+> grep '^version' Cargo.toml                                      # 期望版本号
+> grep -n '版本:' docs/CODE_WIKI.md                                # Wiki 头部版本
+> grep -nE "^## \[(Unreleased|x\.y\.z)\]" CHANGELOG.md | head -3  # CHANGELOG 顶部
+> ```
+> 三处的版本号必须一致（或 Wiki 是最新已发布版本）。
 
 ### 7.3 发布步骤（顺序很重要）
 
