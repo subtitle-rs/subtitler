@@ -1154,7 +1154,10 @@ mod tests {
     });
     let out = file.to_string_with_format(&Format::Ttml);
     assert!(out.contains("<layout>"), "got: {out}");
-    assert!(out.contains("tts:origin=\"50% 50%\""), "got: {out}");
+    // \pos(192,144) @384x288 = anchor (50%, 50%), \an9-style right/top:
+    // region ends at the anchor — origin "0% 50%", extent "50% 50%".
+    assert!(out.contains("tts:origin=\"0% 50%\""), "got: {out}");
+    assert!(out.contains("tts:extent=\"50% 50%\""), "got: {out}");
     assert!(out.contains("tts:displayAlign=\"before\""), "got: {out}");
     assert!(out.contains("tts:textAlign=\"right\""), "got: {out}");
   }

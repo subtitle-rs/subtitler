@@ -72,6 +72,8 @@ struct RawStyle {
 struct RawRegion {
   x: Option<f64>,
   y: Option<f64>,
+  w: Option<f64>,
+  h: Option<f64>,
   display_align: Option<VerticalAlign>,
   text_align: Option<HorizontalAlign>,
 }
@@ -94,7 +96,11 @@ fn parse_display_align(val: &str) -> Option<VerticalAlign> {
   }
 }
 
-fn parse_origin(val: &str) -> (Option<f64>, Option<f64>) {
+fn round2(v: f64) -> f64 {
+  (v * 100.0).round() / 100.0
+}
+
+fn parse_pct_pair(val: &str) -> (Option<f64>, Option<f64>) {
   let pct = |s: Option<&str>| {
     s.and_then(|s| s.strip_suffix('%'))
       .and_then(|n| n.parse::<f64>().ok())
@@ -112,9 +118,14 @@ fn parse_region_tag(e: &BytesStart, regions: &mut HashMap<String, RawRegion>) {
     match key {
       b"id" => id = Some(val.into_owned()),
       b"origin" => {
-        let (x, y) = parse_origin(&val);
+        let (x, y) = parse_pct_pair(&val);
         region.x = x;
         region.y = y;
+      }
+      b"extent" => {
+        let (w, h) = parse_pct_pair(&val);
+        region.w = w;
+        region.h = h;
       }
       b"displayAlign" => region.display_align = parse_display_align(&val),
       b"textAlign" => region.text_align = parse_text_align(&val),
@@ -324,11 +335,27 @@ fn read_paragraph_attrs(
     .or(style_text_align)
     .or(region.and_then(|r| r.text_align));
   if region.is_some() || h_align.is_some() {
+    let h = h_align.unwrap_or_default();
+    let v = region.and_then(|r| r.display_align).unwrap_or_default();
+    let h_frac = match h {
+      HorizontalAlign::Left => 0.0,
+      HorizontalAlign::Center => 0.5,
+      HorizontalAlign::Right => 1.0,
+    };
+    let v_frac = match v {
+      VerticalAlign::Top => 0.0,
+      VerticalAlign::Center => 0.5,
+      VerticalAlign::Bottom => 1.0,
+    };
+    let anchor = |origin: Option<f64>, size: Option<f64>, frac: f64| match (origin, size) {
+      (Some(o), Some(s)) => Some(round2(o + s * frac)),
+      (o, _) => o,
+    };
     out.position = Some(CuePosition {
-      x: region.and_then(|r| r.x),
-      y: region.and_then(|r| r.y),
-      h_align: h_align.unwrap_or_default(),
-      v_align: region.and_then(|r| r.display_align).unwrap_or_default(),
+      x: region.and_then(|r| anchor(r.x, r.w, h_frac)),
+      y: region.and_then(|r| anchor(r.y, r.h, v_frac)),
+      h_align: h,
+      v_align: v,
     });
   }
   out
@@ -591,6 +618,28 @@ fn text_align_str(h: HorizontalAlign) -> &'static str {
   }
 }
 
+fn pos_region_geometry(pos: &CuePosition) -> (String, String) {
+  let x = pos.x.unwrap_or(50.0);
+  let y = pos.y.unwrap_or(50.0);
+  let (ox, w) = match pos.h_align {
+    HorizontalAlign::Left => (x, 100.0 - x),
+    HorizontalAlign::Right => (0.0, x),
+    HorizontalAlign::Center => {
+      let m = x.min(100.0 - x);
+      (x - m, 2.0 * m)
+    }
+  };
+  let (oy, h) = match pos.v_align {
+    VerticalAlign::Top => (y, 100.0 - y),
+    VerticalAlign::Bottom => (0.0, y),
+    VerticalAlign::Center => {
+      let m = y.min(100.0 - y);
+      (y - m, 2.0 * m)
+    }
+  };
+  (format!("{ox}% {oy}%"), format!("{w}% {h}%"))
+}
+
 /// Region assignment result: per-subtitle region id, band-region usage
 /// flags (Top/Center/Bottom), and the deduplicated explicit pos regions.
 struct RegionAssignments {
@@ -602,8 +651,9 @@ struct RegionAssignments {
 /// Assign a region id to each positioned subtitle.
 ///
 /// Cues with explicit coordinates share deduplicated `posN` regions keyed by
-/// (x, y, vertical align); cues with only an alignment share one of the
-/// three band regions.
+/// (x, y, horizontal align, vertical align) — all four feed the region
+/// geometry; cues with only an alignment share one of the three band
+/// regions.
 fn assign_regions(subtitles: &[Subtitle]) -> RegionAssignments {
   let mut band_used = [false; 3];
   let mut pos_regions: Vec<(String, CuePosition)> = Vec::new();
@@ -614,11 +664,10 @@ fn assign_regions(subtitles: &[Subtitle]) -> RegionAssignments {
       sub_regions.push(None);
       continue;
     };
-    let id = if let (Some(x), Some(y)) = (pos.x, pos.y) {
-      match pos_regions
-        .iter()
-        .find(|(_, p)| p.x == Some(x) && p.y == Some(y) && p.v_align == pos.v_align)
-      {
+    let id = if pos.x.is_some() && pos.y.is_some() {
+      match pos_regions.iter().find(|(_, p)| {
+        p.x == pos.x && p.y == pos.y && p.h_align == pos.h_align && p.v_align == pos.v_align
+      }) {
         Some((id, _)) => id.clone(),
         None => {
           let id = format!("pos{}", pos_regions.len() + 1);
@@ -777,10 +826,11 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
         let _ = writer.write_event(Event::Empty(region));
       }
       for (id, pos) in &regions.pos_regions {
-        let origin = format!("{}% {}%", pos.x.unwrap_or(0.0), pos.y.unwrap_or(0.0));
+        let (origin, extent) = pos_region_geometry(pos);
         let region = BytesStart::new("region").with_attributes([
           ("xml:id", id.as_str()),
           ("tts:origin", origin.as_str()),
+          ("tts:extent", extent.as_str()),
           ("tts:displayAlign", display_align_str(pos.v_align)),
         ]);
         let _ = writer.write_event(Event::Empty(region));
@@ -1462,9 +1512,11 @@ mod tests {
     assert_eq!(p0.y, Some(25.0));
     assert_eq!(p0.h_align, HorizontalAlign::Left);
     assert_eq!(p0.v_align, VerticalAlign::Top);
+    // Region with extent: the anchor is reconstructed from origin + extent
+    // + alignment — center of "10% 80%" + "80% 15%" is (50%, 95%).
     let p1 = subs.subtitles()[1].position.as_ref().unwrap();
-    assert_eq!(p1.x, Some(10.0));
-    assert_eq!(p1.y, Some(80.0));
+    assert_eq!(p1.x, Some(50.0));
+    assert_eq!(p1.y, Some(95.0));
     assert_eq!(p1.h_align, HorizontalAlign::Center);
     assert_eq!(p1.v_align, VerticalAlign::Bottom);
   }
@@ -1497,6 +1549,54 @@ mod tests {
       v_align: VerticalAlign::Top,
     });
     let out = to_string(std::slice::from_ref(&sub), None);
+    let reparsed = parse_content(&out).unwrap();
+    assert_eq!(
+      reparsed.subtitles()[0].position.as_ref().unwrap(),
+      sub.position.as_ref().unwrap()
+    );
+  }
+
+  #[test]
+  fn test_center_anchor_region_is_symmetric() {
+    // Regression: a top-center anchored cue (ASS \an8 \pos(320,40)
+    // @640x360 → 50%, 11.11%) was emitted as origin="50% 11.11%" with no
+    // extent, so the region ran from the anchor to the screen corner and
+    // textAlign centered text within the bottom-right quadrant instead of
+    // the top middle. The region must be symmetric about the anchor:
+    // origin "0% 11.11%", extent "100% 88.89%" (verified with python3).
+    let sub = Subtitle::new(1000, 2000, "x").with_position(CuePosition {
+      x: Some(50.0),
+      y: Some(11.11),
+      h_align: HorizontalAlign::Center,
+      v_align: VerticalAlign::Top,
+    });
+    let out = to_string(std::slice::from_ref(&sub), None);
+    assert!(out.contains("tts:origin=\"0% 11.11%\""), "got: {out}");
+    assert!(out.contains("tts:extent=\"100% 88.89%\""), "got: {out}");
+    assert!(out.contains("tts:displayAlign=\"before\""), "got: {out}");
+    assert!(out.contains("tts:textAlign=\"center\""), "got: {out}");
+
+    // And the inverse mapping recovers the anchor exactly.
+    let reparsed = parse_content(&out).unwrap();
+    assert_eq!(
+      reparsed.subtitles()[0].position.as_ref().unwrap(),
+      sub.position.as_ref().unwrap()
+    );
+  }
+
+  #[test]
+  fn test_center_anchor_off_center_clamps_to_frame() {
+    // \pos at 30% width, center-anchored: mirror half is min(30, 70) = 30,
+    // so origin "0%", extent "60%" (verified with python3).
+    let sub = Subtitle::new(1000, 2000, "x").with_position(CuePosition {
+      x: Some(30.0),
+      y: Some(20.0),
+      h_align: HorizontalAlign::Center,
+      v_align: VerticalAlign::Top,
+    });
+    let out = to_string(std::slice::from_ref(&sub), None);
+    assert!(out.contains("tts:origin=\"0% 20%\""), "got: {out}");
+    assert!(out.contains("tts:extent=\"60% 80%\""), "got: {out}");
     let reparsed = parse_content(&out).unwrap();
     assert_eq!(
       reparsed.subtitles()[0].position.as_ref().unwrap(),
