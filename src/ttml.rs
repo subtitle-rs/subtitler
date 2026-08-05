@@ -179,10 +179,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut current_text = String::new();
   let mut parts: SmallVec<[TextPart; 4]> = SmallVec::new();
   let mut in_span = false;
-  let mut span_bold = false;
-  let mut span_italic = false;
-  let mut span_underline = false;
-  let mut span_color: Option<String> = None;
+  let mut span_props = StyleProps::default();
 
   loop {
     match reader.read_event_into(&mut buf) {
@@ -202,22 +199,11 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           b"style" => parse_style_tag(e, &mut styles),
           b"span" => {
             in_span = true;
-            span_bold = false;
-            span_italic = false;
-            span_underline = false;
-            span_color = None;
+            span_props = StyleProps::default();
             for attr in e.attributes().flatten() {
               let key = local_name(attr.key.as_ref());
               let val = String::from_utf8_lossy(&attr.value);
-              match key {
-                b"color" => span_color = Some(val.to_string()),
-                b"fontWeight" => span_bold = val == "bold",
-                b"fontStyle" => span_italic = val == "italic",
-                b"textDecoration" => {
-                  span_underline = val.split_whitespace().any(|t| t == "underline")
-                }
-                _ => {}
-              }
+              merge_style_attribute(&mut span_props, key, &val);
             }
           }
           b"br" if in_p => {
@@ -252,9 +238,14 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
         if in_p && !text.trim().is_empty() {
           let segment = text.to_string();
           current_text.push_str(&segment);
-          if in_span || span_bold || span_italic || span_underline || span_color.is_some() {
-            let mut part = TextPart::new(&segment, span_bold, span_italic, span_underline);
-            part.color = span_color.clone();
+          if in_span || !span_props.is_default() {
+            let mut part = TextPart::new(
+              &segment,
+              span_props.bold,
+              span_props.italic,
+              span_props.underline,
+            );
+            part.color = span_props.color.clone();
             parts.push(part);
           }
         }
@@ -279,10 +270,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           }
           b"span" => {
             in_span = false;
-            span_bold = false;
-            span_italic = false;
-            span_underline = false;
-            span_color = None;
+            span_props = StyleProps::default();
           }
           _ => {}
         }
