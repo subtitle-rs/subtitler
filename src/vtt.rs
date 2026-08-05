@@ -489,6 +489,7 @@ mod tests {
       actor: None,
       is_comment: false,
       style_props: None,
+      position: None,
     }
   }
 

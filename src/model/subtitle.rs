@@ -45,6 +45,9 @@ pub struct Subtitle {
   /// Resolved cue-level style properties (font family, size, color, …)
   #[serde(skip_serializing_if = "Option::is_none", default)]
   pub style_props: Option<StyleProps>,
+  /// Cue placement (alignment band or explicit position).
+  #[serde(skip_serializing_if = "Option::is_none", default)]
+  pub position: Option<CuePosition>,
 }
 
 impl Subtitle {
@@ -60,6 +63,7 @@ impl Subtitle {
       actor: None,
       is_comment: false,
       style_props: None,
+      position: None,
     }
   }
 
@@ -78,6 +82,12 @@ impl Subtitle {
   /// Builder-style: set the resolved style properties.
   pub fn with_style_props(mut self, props: StyleProps) -> Self {
     self.style_props = Some(props);
+    self
+  }
+
+  /// Builder-style: set the cue position.
+  pub fn with_position(mut self, position: CuePosition) -> Self {
+    self.position = Some(position);
     self
   }
 
@@ -229,6 +239,53 @@ impl StyleProps {
 
   pub fn is_default(&self) -> bool {
     self == &StyleProps::default()
+  }
+}
+
+/// Horizontal alignment of cue text within its region, format-neutral.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HorizontalAlign {
+  Left,
+  #[default]
+  Center,
+  Right,
+}
+
+/// Vertical placement of the cue within the video frame, format-neutral.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VerticalAlign {
+  Top,
+  Center,
+  #[default]
+  Bottom,
+}
+
+/// Cue placement as a percentage of the video frame (0-100).
+///
+/// `x`/`y` locate the cue's anchor point (which point of the cue box is
+/// anchored is given by `h_align`/`v_align`). `None` means "use the
+/// alignment band" — the writer picks a region for the edge indicated by
+/// `v_align` instead of explicit coordinates (ASS style alignment without
+/// a `\pos` override lands here).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
+pub struct CuePosition {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub x: Option<f64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub y: Option<f64>,
+  #[serde(default)]
+  pub h_align: HorizontalAlign,
+  #[serde(default)]
+  pub v_align: VerticalAlign,
+}
+
+impl CuePosition {
+  /// A position carrying only the default alignment (bottom-center, no
+  /// coordinates) — writers may skip emitting layout for it.
+  pub fn is_default(&self) -> bool {
+    self == &CuePosition::default()
   }
 }
 

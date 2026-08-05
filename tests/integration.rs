@@ -521,6 +521,7 @@ fn test_subtitle_serde_round_trip() {
     actor: None,
     is_comment: false,
     style_props: None,
+    position: None,
   };
   let json = serde_json::to_string(&sub).unwrap();
   let parsed: Subtitle = serde_json::from_str(&json).unwrap();
