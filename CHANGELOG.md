@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Resolved cue-level styling (`StyleProps`)**: `Subtitle` gains
+  `style_props: Option<StyleProps>` (font family, font size, color, bold,
+  italic, underline) alongside the existing `style` name. The TTML parser
+  resolves `<style>` definitions (including `style`-attribute inheritance
+  chains) and direct `tts:*` attributes on `<p>` into it; the ASS parser
+  resolves each subtitle's style name against the document's styles
+  (converting `&HAABBGGRR` colors to `#RRGGBB`).
 - **ASS/SSA `[Fonts]` section support**: embedded fonts (uuencoded TTF/OTF
   payloads) are now parsed into the new public `AssData.fonts` field
   (`Vec<AssFont>`, name + decoded binary data) and written back by
@@ -19,6 +26,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking**: `ass::to_string` and `ass::write_stream` gained a
   `fonts: &[AssFont]` parameter to emit the `[Fonts]` section. Pass `&[]` if
   you don't use embedded fonts. See MIGRATION.md for before/after.
+- **TTML styling output**: `ttml::to_string` now emits a `<head><styling>`
+  block with one `<style>` element per unique `StyleProps` set and
+  references it from each `<p>`, so TTML styles survive a roundtrip.
+  ASS → TTML conversion now carries font family and friends. TTML span
+  output also writes `tts:fontWeight`/`tts:fontStyle`/`tts:textDecoration`
+  (previously only `tts:color` was emitted).
+
+### Fixed
+
+- **VTT cue text escaping**: `vtt::to_string`/`write_stream` escape `&`,
+  `<`, `>` as `&amp;`/`&lt;`/`&gt;`, and the parser unescapes them.
+  Previously a literal cue text like `<u>一` reparsed as `一` (found by
+  proptest). Note: SRT has the same latent issue but no standard entity
+  escaping, so it is intentionally left as-is.
 
 ## [2.6.1] - 2026-07-18
 
