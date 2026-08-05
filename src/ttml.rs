@@ -230,7 +230,6 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut current_props = StyleProps::default();
   let mut current_text = String::new();
   let mut parts: SmallVec<[TextPart; 4]> = SmallVec::new();
-  let mut in_span = false;
   let mut span_props = StyleProps::default();
 
   loop {
@@ -250,7 +249,6 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           }
           b"style" => parse_style_tag(e, &mut styles),
           b"span" => {
-            in_span = true;
             span_props = StyleProps::default();
             for attr in e.attributes().flatten() {
               let key = local_name(attr.key.as_ref());
@@ -260,6 +258,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           }
           b"br" if in_p => {
             current_text.push('\n');
+            parts.push(TextPart::plain("\n"));
           }
           _ => {}
         }
@@ -268,6 +267,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
         let tag = local_name(e.name().as_ref()).to_vec();
         if tag.as_slice() == b"br" && in_p {
           current_text.push('\n');
+          parts.push(TextPart::plain("\n"));
         } else if tag.as_slice() == b"style" {
           parse_style_tag(e, &mut styles);
         } else if tag.as_slice() == b"p" {
@@ -290,16 +290,14 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
         if in_p && !text.trim().is_empty() {
           let segment = text.to_string();
           current_text.push_str(&segment);
-          if in_span || !span_props.is_default() {
-            let mut part = TextPart::new(
-              &segment,
-              span_props.bold,
-              span_props.italic,
-              span_props.underline,
-            );
-            part.color = span_props.color.clone();
-            parts.push(part);
-          }
+          let mut part = TextPart::new(
+            &segment,
+            span_props.bold,
+            span_props.italic,
+            span_props.underline,
+          );
+          part.color = span_props.color.clone();
+          parts.push(part);
         }
       }
       Ok(Event::GeneralRef(ref e)) => {
@@ -322,16 +320,14 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           };
           if !resolved.trim().is_empty() {
             current_text.push_str(&resolved);
-            if in_span || !span_props.is_default() {
-              let mut part = TextPart::new(
-                &resolved,
-                span_props.bold,
-                span_props.italic,
-                span_props.underline,
-              );
-              part.color = span_props.color.clone();
-              parts.push(part);
-            }
+            let mut part = TextPart::new(
+              &resolved,
+              span_props.bold,
+              span_props.italic,
+              span_props.underline,
+            );
+            part.color = span_props.color.clone();
+            parts.push(part);
           }
         }
       }
@@ -354,7 +350,6 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
             current_end = None;
           }
           b"span" => {
-            in_span = false;
             span_props = StyleProps::default();
           }
           _ => {}
@@ -695,11 +690,35 @@ mod tests {
     assert_eq!(subs.subtitles()[1].start, 4000);
     assert_eq!(subs.subtitles()[1].end, 6500);
     assert_eq!(subs.subtitles()[1].text, "Colored text");
-    assert_eq!(subs.subtitles()[1].text_parts.len(), 1);
+    // Both the styled span and the unstyled segment are kept, so parts
+    // always concatenate back to the full cue text.
+    assert_eq!(subs.subtitles()[1].text_parts.len(), 2);
     assert_eq!(
       subs.subtitles()[1].text_parts[0].color,
       Some("yellow".to_string())
     );
+    assert_eq!(subs.subtitles()[1].text_parts[1].text, " text");
+  }
+
+  #[test]
+  fn test_mixed_content_round_trip() {
+    // Unstyled text between spans must survive regeneration (previously
+    // `<p><span>red</span> plain <span>bold</span></p>` came back `redbold`).
+    let xml = r##"<?xml version="1.0"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling"><body><div>
+<p begin="00:00:01.000" end="00:00:02.000"><span tts:color="#FF0000">red</span> plain <span tts:fontWeight="bold">bold</span></p>
+</div></body></tt>"##;
+    let subs = parse_content(xml).unwrap();
+    let joined: String = subs.subtitles()[0]
+      .text_parts
+      .iter()
+      .map(|p| p.text.as_str())
+      .collect();
+    assert_eq!(joined, subs.subtitles()[0].text);
+
+    let output = to_string(subs.subtitles(), None);
+    let reparsed = parse_content(&output).unwrap();
+    assert_eq!(reparsed.subtitles()[0].text, "red plain bold");
   }
 
   #[test]

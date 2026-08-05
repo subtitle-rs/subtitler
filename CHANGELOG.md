@@ -35,6 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **TTML unstyled text lost on regeneration**: the parser only recorded
+  `<span>` content into `text_parts`, so mixed-content cues like
+  `<p><span>red</span> plain <span>bold</span></p>` regenerated as
+  `redbold`. All text segments (and `<br>`) are now recorded, so
+  `text_parts` always concatenates back to the full cue text.
 - **TTML/DFXP parser dropped all XML entities**: quick-xml emits `&amp;`,
   `&lt;`, `&gt;`, `&quot;`, `&apos;` and numeric character references as
   separate `GeneralRef` events, which the parse loop ignored — so
