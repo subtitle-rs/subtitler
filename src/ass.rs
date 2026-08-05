@@ -1,6 +1,9 @@
 use crate::error::SubtitleError;
 use crate::model::convert::{MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND};
-use crate::model::{AssData, AssFont, AssStyle, Format, StyleProps, Subtitle, SubtitleFile};
+use crate::model::{
+  AssData, AssFont, AssStyle, CuePosition, Format, HorizontalAlign, StyleProps, Subtitle,
+  SubtitleFile, VerticalAlign,
+};
 use crate::types::AnyResult;
 use regex::Regex;
 use std::collections::HashMap;
@@ -246,6 +249,74 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
   Some(subtitle)
 }
 
+/// Scan ASS override tags for layout info: the first `\pos(x,y)` or
+/// `\move(x1,y1,…)` (collapsed to its start point — animation is not
+/// modeled) gives pixel coordinates, the first `\anN` gives a numpad
+/// alignment override. Tags inside `\t(...)` transforms are ignored,
+/// matching `parse_ass_tags`.
+fn scan_ass_layout(text: &str) -> (Option<(f64, f64)>, Option<u32>) {
+  let mut pos = None;
+  let mut an = None;
+  let mut in_transform = false;
+
+  for caps in RE_ASS_TAG_INLINE.captures_iter(text) {
+    for tag in caps[1].split('\\') {
+      let tag = tag.trim();
+      if in_transform {
+        if tag.contains(')') {
+          in_transform = false;
+        }
+        continue;
+      }
+      if let Some(rest) = tag.strip_prefix("t(") {
+        in_transform = !rest.contains(')');
+        continue;
+      }
+      if pos.is_none() {
+        let args = tag
+          .strip_prefix("pos(")
+          .or_else(|| tag.strip_prefix("move("));
+        if let Some(args) = args {
+          let mut nums = args
+            .trim_end_matches(')')
+            .split(',')
+            .filter_map(|n| n.trim().parse::<f64>().ok());
+          if let (Some(x), Some(y)) = (nums.next(), nums.next()) {
+            pos = Some((x, y));
+          }
+          continue;
+        }
+      }
+      let an_candidate = tag
+        .strip_prefix("an")
+        .and_then(|d| d.parse::<u32>().ok())
+        .filter(|n| (1..=9).contains(n));
+      if an.is_none() && an_candidate.is_some() {
+        an = an_candidate;
+      }
+    }
+  }
+  (pos, an)
+}
+
+fn ass_alignment_to_align(an: u32) -> (HorizontalAlign, VerticalAlign) {
+  let h = match an {
+    1 | 4 | 7 => HorizontalAlign::Left,
+    3 | 6 | 9 => HorizontalAlign::Right,
+    _ => HorizontalAlign::Center,
+  };
+  let v = match an {
+    7..=9 => VerticalAlign::Top,
+    4..=6 => VerticalAlign::Center,
+    _ => VerticalAlign::Bottom,
+  };
+  (h, v)
+}
+
+fn round2(v: f64) -> f64 {
+  (v * 100.0).round() / 100.0
+}
+
 pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut info = HashMap::new();
   let estimated_subs = (content.len() / 300).max(32);
@@ -325,19 +396,51 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 
   flush_font(&mut font_name, &mut font_lines);
 
+  // PlayRes defaults per the ASS spec (384x288) when [Script Info] omits them;
+  // \pos coordinates are converted to % of the play resolution.
+  let play_res_x = info
+    .get("PlayResX")
+    .and_then(|v| v.trim().parse::<f64>().ok())
+    .filter(|v| *v > 0.0)
+    .unwrap_or(384.0);
+  let play_res_y = info
+    .get("PlayResY")
+    .and_then(|v| v.trim().parse::<f64>().ok())
+    .filter(|v| *v > 0.0)
+    .unwrap_or(288.0);
+
   let style_map: HashMap<&str, &AssStyle> = styles.iter().map(|s| (s.name.as_str(), s)).collect();
   for sub in &mut subtitles {
-    let Some(style) = sub.style.as_deref().and_then(|name| style_map.get(name)) else {
-      continue;
-    };
-    sub.style_props = Some(StyleProps {
-      font_family: Some(style.fontname.clone()),
-      font_size: Some(format!("{}px", style.fontsize)),
-      color: ass_color_to_ttml(&style.primary_color),
-      bold: style.bold,
-      italic: style.italic,
-      underline: style.underline,
-    });
+    let style = sub.style.as_deref().and_then(|name| style_map.get(name));
+    if let Some(style) = style {
+      sub.style_props = Some(StyleProps {
+        font_family: Some(style.fontname.clone()),
+        font_size: Some(format!("{}px", style.fontsize)),
+        color: ass_color_to_ttml(&style.primary_color),
+        bold: style.bold,
+        italic: style.italic,
+        underline: style.underline,
+      });
+    }
+
+    let (pos, an) = scan_ass_layout(&sub.text);
+    let alignment = an.or(style.map(|s| s.alignment));
+    if pos.is_some() || alignment.is_some() {
+      let (h_align, v_align) = ass_alignment_to_align(alignment.unwrap_or(2));
+      let (x, y) = match pos {
+        Some((px, py)) => (
+          Some(round2(px / play_res_x * 100.0)),
+          Some(round2(py / play_res_y * 100.0)),
+        ),
+        None => (None, None),
+      };
+      sub.position = Some(CuePosition {
+        x,
+        y,
+        h_align,
+        v_align,
+      });
+    }
   }
 
   Ok(SubtitleFile::Ass(AssData {
@@ -957,5 +1060,102 @@ mod tests {
     let out = file.to_string_with_format(&Format::Ttml);
     assert!(out.contains("tts:fontFamily=\"Arial\""), "got: {}", out);
     assert!(out.contains("style=\"Custom\""), "got: {}", out);
+  }
+
+  fn parse_positioned(content: &str) -> Vec<Subtitle> {
+    let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
+      panic!("expected ASS");
+    };
+    data.subtitles
+  }
+
+  const ASS_HEADER: &str = "[Script Info]\nScriptType: v4.00+\nPlayResX: 384\nPlayResY: 288\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\nStyle: TopRight,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,9,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
+
+  #[test]
+  fn test_position_from_style_alignment() {
+    // Style alignment 2 (bottom-center): band position, no coordinates.
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hi\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.x, None);
+    assert_eq!(pos.y, None);
+    assert_eq!(pos.h_align, HorizontalAlign::Center);
+    assert_eq!(pos.v_align, VerticalAlign::Bottom);
+  }
+
+  #[test]
+  fn test_position_style_alignment_9() {
+    // Alignment 9 → top-right.
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,TopRight,,0,0,0,,Hi\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.h_align, HorizontalAlign::Right);
+    assert_eq!(pos.v_align, VerticalAlign::Top);
+  }
+
+  #[test]
+  fn test_position_an_overrides_style() {
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{{\\an8}}Top\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.h_align, HorizontalAlign::Center);
+    assert_eq!(pos.v_align, VerticalAlign::Top);
+  }
+
+  #[test]
+  fn test_position_pos_converts_via_playres() {
+    // \pos(192,144) on PlayRes 384x288 → 50%, 50% (verified with python3).
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{{\\pos(192,144)}}Mid\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.x, Some(50.0));
+    assert_eq!(pos.y, Some(50.0));
+  }
+
+  #[test]
+  fn test_position_move_uses_start_point() {
+    // \move(96,48,…) start point → 25%, 16.67 (rounded 2dp; verified with python3).
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{{\\move(96,48,192,144)\\an7}}Go\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.x, Some(25.0));
+    assert_eq!(pos.y, Some(16.67));
+    assert_eq!(pos.h_align, HorizontalAlign::Left);
+    assert_eq!(pos.v_align, VerticalAlign::Top);
+  }
+
+  #[test]
+  fn test_position_default_playres_when_missing() {
+    // No PlayRes in [Script Info] → spec default 384x288.
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\pos(38,29)}Hi\n";
+    let subs = parse_positioned(content);
+    let pos = subs[0].position.as_ref().unwrap();
+    // 38/384 = 9.8958… → 9.9; 29/288 = 10.069… → 10.07 (verified with python3).
+    assert_eq!(pos.x, Some(9.9));
+    assert_eq!(pos.y, Some(10.07));
+  }
+
+  #[cfg(feature = "ttml")]
+  #[test]
+  fn test_ass_to_ttml_emits_layout() {
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,TopRight,,0,0,0,,{{\\pos(192,144)}}Mid\n"
+    ));
+    let file = SubtitleFile::Ass(AssData {
+      info: HashMap::new(),
+      styles: Vec::new(),
+      fonts: Vec::new(),
+      subtitles: subs,
+    });
+    let out = file.to_string_with_format(&Format::Ttml);
+    assert!(out.contains("<layout>"), "got: {out}");
+    assert!(out.contains("tts:origin=\"50% 50%\""), "got: {out}");
+    assert!(out.contains("tts:displayAlign=\"before\""), "got: {out}");
+    assert!(out.contains("tts:textAlign=\"right\""), "got: {out}");
   }
 }
