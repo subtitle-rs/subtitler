@@ -6,6 +6,7 @@ use regex::Regex;
 #[cfg(feature = "http")]
 use reqwest;
 use smallvec::SmallVec;
+use std::borrow::Cow;
 use std::sync::LazyLock;
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncWriteExt;
@@ -17,6 +18,30 @@ static RE_VTT_TAG: LazyLock<Regex> = LazyLock::new(|| {
   ))
   .unwrap()
 });
+
+fn escape_cue_text(text: &str) -> Cow<'_, str> {
+  if !text.bytes().any(|b| matches!(b, b'&' | b'<' | b'>')) {
+    return Cow::Borrowed(text);
+  }
+  Cow::Owned(
+    text
+      .replace('&', "&amp;")
+      .replace('<', "&lt;")
+      .replace('>', "&gt;"),
+  )
+}
+
+fn unescape_cue_text(text: &str) -> Cow<'_, str> {
+  if !text.contains('&') {
+    return Cow::Borrowed(text);
+  }
+  Cow::Owned(
+    text
+      .replace("&lt;", "<")
+      .replace("&gt;", ">")
+      .replace("&amp;", "&"),
+  )
+}
 
 #[derive(Debug, PartialEq)]
 enum Phase {
@@ -45,11 +70,11 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
     let end = caps.end();
 
     if start > last_end {
-      let segment = &text[last_end..start];
+      let segment = unescape_cue_text(&text[last_end..start]);
       if !segment.is_empty() {
-        plain.push_str(segment);
+        plain.push_str(&segment);
         if bold || italic || underline || voice.is_some() {
-          let mut part = TextPart::new(segment, bold, italic, underline);
+          let mut part = TextPart::new(segment.as_ref(), bold, italic, underline);
           part.voice = voice.clone();
           parts.push(part);
         }
@@ -78,17 +103,17 @@ fn extract_text_parts(text: &str) -> (String, SmallVec<[TextPart; 4]>) {
   }
 
   if last_end < text.len() {
-    let segment = &text[last_end..];
-    plain.push_str(segment);
+    let segment = unescape_cue_text(&text[last_end..]);
+    plain.push_str(&segment);
     if bold || italic || underline || voice.is_some() {
-      let mut part = TextPart::new(segment, bold, italic, underline);
+      let mut part = TextPart::new(segment.as_ref(), bold, italic, underline);
       part.voice = voice.clone();
       parts.push(part);
     }
   }
 
   if parts.is_empty() {
-    plain = text.to_string();
+    plain = unescape_cue_text(text).into_owned();
   }
 
   (plain, parts)
@@ -254,7 +279,7 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     }
     content.push_str(&timestamp);
     content.push('\n');
-    content.push_str(&subtitle.text);
+    content.push_str(&escape_cue_text(&subtitle.text));
     if i != subtitles.len() - 1 {
       content.push('\n');
       content.push('\n');
@@ -305,7 +330,9 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
     writer
       .write_all(format!("{} --> {}\n", start, end).as_bytes())
       .await?;
-    writer.write_all(sub.text.as_bytes()).await?;
+    writer
+      .write_all(escape_cue_text(&sub.text).as_bytes())
+      .await?;
     writer.write_all(b"\n\n").await?;
   }
   writer.flush().await?;
@@ -604,5 +631,36 @@ mod tests {
     let (header, subs) = parse_bytes_full(data.as_ref()).unwrap();
     assert!(header.as_deref().unwrap().contains("Kind: captions"));
     assert_eq!(subs.len(), 1);
+  }
+
+  #[test]
+  fn test_roundtrip_escapes_tag_like_text() {
+    // Found by proptest: literal "<u>一" previously reparsed as "一".
+    let sub = Subtitle::new(0, 1000, "<u>一 & <b>");
+    let s = to_string(std::slice::from_ref(&sub), None);
+    assert!(s.contains("&lt;u&gt;一 &amp; &lt;b&gt;"), "got: {}", s);
+    let parsed = parse_content(&s).unwrap();
+    assert_eq!(parsed.subtitles()[0].text, "<u>一 & <b>");
+  }
+
+  #[test]
+  fn test_parse_unescapes_entities() {
+    let content =
+      "WEBVTT\n\n1\n00:00:00.000 --> 00:00:01.000\n&lt;i&gt;not italic&lt;/i&gt; &amp; more\n\n";
+    let parsed = parse_content(content).unwrap();
+    let sub = &parsed.subtitles()[0];
+    assert_eq!(sub.text, "<i>not italic</i> & more");
+    assert!(sub.text_parts.is_empty());
+  }
+
+  #[test]
+  fn test_real_tags_still_parse_alongside_entities() {
+    let content = "WEBVTT\n\n1\n00:00:00.000 --> 00:00:01.000\n<i>real</i> &lt;fake&gt;\n\n";
+    let parsed = parse_content(content).unwrap();
+    let sub = &parsed.subtitles()[0];
+    assert_eq!(sub.text, "real <fake>");
+    assert_eq!(sub.text_parts.len(), 1);
+    assert!(sub.text_parts[0].italic());
+    assert_eq!(sub.text_parts[0].text, "real");
   }
 }
