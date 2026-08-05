@@ -8,6 +8,34 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Cue positioning model (`CuePosition`)**: `Subtitle` gains
+  `position: Option<CuePosition>` with `x`/`y` (percent of the video frame),
+  `h_align: HorizontalAlign` and `v_align: VerticalAlign`, plus a
+  `with_position` builder. Format-neutral: maps from ASS `\an`/`\pos` and
+  TTML regions/`tts:textAlign`/`tts:displayAlign`.
+- **ASS positioning parsing**: override tags `\pos(x,y)`, `\move` (collapsed
+  to its start point) and `\an1`-`\an9` are now mapped into
+  `Subtitle::position`; `\pos` pixel coordinates are converted via
+  `PlayResX`/`PlayResY` (spec default 384x288). Style-level Alignment is
+  honored, with cue-level `\an` taking precedence. Style margins are not
+  modeled (aligned cues land in the top/middle/bottom band).
+- **TTML layout output**: `ttml::to_string` now emits `<head><layout>` with
+  `<region>` elements — one band region per used vertical alignment, one
+  deduplicated `posN` region per explicit position — and references them
+  from each `<p>` together with `tts:textAlign`. ASS → TTML conversion now
+  preserves `\pos`/`\an` placement instead of dropping every cue to the
+  default region.
+- **TTML layout parsing**: the TTML parser reads `<layout><region>`
+  (`tts:origin` in `%`, `tts:displayAlign`, `tts:textAlign`) and
+  `tts:textAlign` on `<style>`/`<p>` back into `Subtitle::position`, so
+  TTML alignment survives a roundtrip.
+- **ASS shadow-color promotion**: `parse_ass_tags` now tracks `\alpha`/
+  `\1a` (primary alpha) and `\4c`/`\4a` (shadow color/alpha). When the
+  primary channel is effectively invisible (alpha >= 0xF0 — the common
+  typesetting trick where the visible color lives in the shadow channel),
+  the static shadow color is promoted to the text color instead of
+  rendering white. Colors inside `\t(...)` transforms remain skipped; the
+  initial keyframe is what gets promoted.
 - **Resolved cue-level styling (`StyleProps`)**: `Subtitle` gains
   `style_props: Option<StyleProps>` (font family, font size, color, bold,
   italic, underline) alongside the existing `style` name. The TTML parser
@@ -35,6 +63,36 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **TTML output dropped invisible/duplicate cues**: `ttml::to_string` now
+  skips cues with no visible text (ASS `\p1` vector-drawing events became
+  thousands of empty `<p></p>` elements) and keeps only the last of any
+  cues sharing identical (start, end, visible text, position) — ASS
+  glow/shadow passes are layered duplicates of one glyph, and TTML `<p>`s
+  in a region flow as stacked lines, so both copies rendered every line
+  twice.
+- **TTML output garbled ASS crossfades**: consecutive typeset lines
+  crossfade with `\fad` — the old line fades out while the new one fades
+  in at the same `\pos` row — but TTML has no fade and players hard-switch
+  cues, so both lines rendered opaque on top of each other for the whole
+  overlap window. Positioned cues are now time-deoverlapped per (style, y,
+  alignment) row: an earlier cue's end is trimmed to the next later start.
+  Glyphs within one line share identical start times and are never
+  trimmed; alignment-band cues still stack via normal block flow.
+- **TTML pos regions anchored at the wrong corner**: explicit positions
+  (ASS `\pos`/`\move`) were emitted as `tts:origin` with no `tts:extent`,
+  but TTML's origin is always the region's top-left corner while the model's
+  (x, y) is an anchor — center/right anchored cues rendered shifted
+  right-and-down (e.g. a top-center cue landed in the middle-right
+  quadrant). Pos regions are now sized so the anchor falls on their
+  edge/center (left/top: region starts at the point; right/bottom: region
+  ends at it; center: region symmetric about the point, clamped to the
+  frame), and the parser inverts this mapping from origin+extent+alignment,
+  so write → parse round-trips the anchor exactly.
+- **TTML writer emitted invalid `xml:id` for style names with spaces**: an
+  ASS style like `OP - Eng` was used verbatim as `xml:id`, which is not a
+  valid NCName — spec-compliant parsers read `style="OP - Eng"` as three
+  style references (`OP`, `-`, `Eng`), collapsing distinct styles into one
+  on round-trip. Style names are now sanitized to valid NCNames.
 - **TTML unstyled text lost on regeneration**: the parser only recorded
   `<span>` content into `text_parts`, so mixed-content cues like
   `<p><span>red</span> plain <span>bold</span></p>` regenerated as
