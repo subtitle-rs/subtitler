@@ -461,6 +461,7 @@ mod tests {
       style: None,
       actor: None,
       is_comment: false,
+      style_props: None,
     }
   }
 
