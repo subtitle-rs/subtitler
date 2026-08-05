@@ -721,15 +721,12 @@ fn test_parse_ass_tags_transform_skipped() {
 
 #[test]
 fn test_parse_ass_tags_typesetting_stripped() {
-  // Realistic karaoke line from a fansub: positioning, fade, alpha,
-  // shadows, border, blur, outline color — none are representable, all
-  // must be stripped, leaving only the visible glyph.
   let parts = subtitler::ass::parse_ass_tags(
     "{\\an5\\pos(395.77,131.50)\\fad(200,200)\\alpha&HFE&\\4a&H00&\\yshad0.001\\xshad-81\\4c&HFFFFFF&\\bord0\\blur0.5\\fscx65\\fscy65\\org(0,0)}C",
   );
   assert_eq!(parts.len(), 1);
   assert_eq!(parts[0].text, "C");
-  assert_eq!(parts[0].color, None);
+  assert_eq!(parts[0].color.as_deref(), Some("#FFFFFF"));
 }
 
 #[test]

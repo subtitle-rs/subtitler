@@ -633,6 +633,22 @@ fn parse_toggle(arg: &str, flag: &mut bool) {
   }
 }
 
+fn normalize_ass_color(arg: &str) -> Option<String> {
+  let c = arg.trim_end_matches('&');
+  let raw = if c.starts_with(['H', 'h']) {
+    format!("&{c}")
+  } else {
+    format!("&H{c}")
+  };
+  ass_color_to_ttml(&raw)
+}
+
+/// Parse a `\alpha&HXX&`-style argument (alpha byte, hex) into u8.
+fn parse_ass_alpha(arg: &str) -> Option<u8> {
+  let h = arg.trim_end_matches('&').trim_start_matches(['H', 'h']);
+  u8::from_str_radix(h, 16).ok()
+}
+
 /// Parse ASS override tags into styled `TextPart`s.
 pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
   let mut parts = Vec::new();
@@ -640,12 +656,31 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
   let mut italic = false;
   let mut underline = false;
   let mut color: Option<String> = None;
+  // Primary alpha (\alpha/\1a) and shadow channel (\4c/\4a): used to
+  // promote the shadow color when the primary is invisible.
+  let mut alpha: Option<u8> = None;
+  let mut shadow_color: Option<String> = None;
+  let mut shadow_alpha: Option<u8> = None;
   // \pN (N>=1): following text is vector drawing commands, not visible text.
   let mut drawing = false;
   // Inside \t(...): inner tags are animated, don't apply them as state.
   let mut in_transform = false;
   let mut saw_drawing = false;
   let mut current = String::new();
+
+  let effective_color = |color: &Option<String>,
+                         alpha: Option<u8>,
+                         shadow_color: &Option<String>,
+                         shadow_alpha: Option<u8>|
+   -> Option<String> {
+    const INVISIBLE: u8 = 0xF0;
+    if alpha.is_some_and(|a| a >= INVISIBLE) && shadow_alpha.is_none_or(|a| a < INVISIBLE) {
+      if let Some(sc) = shadow_color {
+        return Some(sc.clone());
+      }
+    }
+    color.clone()
+  };
 
   let re = &RE_ASS_TAG_INLINE;
   let mut last_end = 0usize;
@@ -667,7 +702,7 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
     if !current.is_empty() {
       let mut part =
         crate::model::TextPart::new(std::mem::take(&mut current), bold, italic, underline);
-      part.color = color.clone();
+      part.color = effective_color(&color, alpha, &shadow_color, shadow_alpha);
       parts.push(part);
     }
 
@@ -687,6 +722,9 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
           italic = false;
           underline = false;
           color = None;
+          alpha = None;
+          shadow_color = None;
+          shadow_alpha = None;
         }
         "b" => bold = true,
         "i" => italic = true,
@@ -700,6 +738,9 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
           italic = false;
           underline = false;
           color = None;
+          alpha = None;
+          shadow_color = None;
+          shadow_alpha = None;
         }
         // \b0/\b1/\b<weight>, \i0/\i1, \u0/\u1; non-numeric arguments
         // (\bord, \blur, \iclip, …) are ignored.
@@ -708,17 +749,16 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
         t if t.starts_with('u') => parse_toggle(&t[1..], &mut underline),
         // \c&HBBGGRR& / \1c&HBBGGRR& → primary text color.
         t if t.starts_with("c&") || t.starts_with("1c&") => {
-          let c = t
-            .strip_prefix("1c&")
-            .unwrap_or(&t[2..])
-            .trim_end_matches('&');
-          let raw = if c.starts_with(['H', 'h']) {
-            format!("&{c}")
-          } else {
-            format!("&H{c}")
-          };
-          color = ass_color_to_ttml(&raw);
+          let c = t.strip_prefix("1c&").unwrap_or(&t[2..]);
+          color = normalize_ass_color(c);
         }
+        // \4c&HBBGGRR&: shadow color — tracked for promotion when the
+        // primary channel is invisible (see effective_color).
+        t if t.starts_with("4c&") => shadow_color = normalize_ass_color(&t[3..]),
+        // \alpha&HXX& / \1a&HXX&: primary alpha; \4a&HXX&: shadow alpha.
+        t if t.starts_with("alpha&") => alpha = parse_ass_alpha(&t[6..]),
+        t if t.starts_with("1a&") => alpha = parse_ass_alpha(&t[3..]),
+        t if t.starts_with("4a&") => shadow_alpha = parse_ass_alpha(&t[3..]),
         // \pN toggles drawing mode; \pos(/\pbo) fails the int parse.
         t if t.starts_with('p') => {
           if let Ok(n) = t[1..].parse::<u32>() {
@@ -744,7 +784,7 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
 
   if !current.is_empty() {
     let mut part = crate::model::TextPart::new(current, bold, italic, underline);
-    part.color = color;
+    part.color = effective_color(&color, alpha, &shadow_color, shadow_alpha);
     parts.push(part);
   }
 
@@ -1138,6 +1178,31 @@ mod tests {
     // 38/384 = 9.8958… → 9.9; 29/288 = 10.069… → 10.07 (verified with python3).
     assert_eq!(pos.x, Some(9.9));
     assert_eq!(pos.y, Some(10.07));
+  }
+
+  #[test]
+  fn test_shadow_color_promoted_when_primary_invisible() {
+    // \alpha&HFE& hides the primary channel; the visible color lives in
+    // \4c (shadow) — promote it. &H4C7BD3& is BGR → #D37B4C (verified
+    // with python3).
+    let parts = parse_ass_tags("{\\alpha&HFE&\\4c&H4C7BD3&\\4a&H00&}X");
+    assert_eq!(parts.len(), 1);
+    assert_eq!(parts[0].text, "X");
+    assert_eq!(parts[0].color.as_deref(), Some("#D37B4C"));
+  }
+
+  #[test]
+  fn test_shadow_color_not_promoted_when_primary_visible() {
+    // Opaque primary (\alpha&H00&) keeps the \c color; \4c is ignored.
+    // &H112233& BGR → #332211 (verified with python3).
+    let parts = parse_ass_tags("{\\alpha&H00&\\c&H112233&\\4c&H445566&}X");
+    assert_eq!(parts[0].color.as_deref(), Some("#332211"));
+  }
+
+  #[test]
+  fn test_shadow_color_not_promoted_when_shadow_also_invisible() {
+    let parts = parse_ass_tags("{\\alpha&HFF&\\4a&HFF&\\4c&H4C7BD3&}X");
+    assert_eq!(parts[0].color, None);
   }
 
   #[cfg(feature = "ttml")]
