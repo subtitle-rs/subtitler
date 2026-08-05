@@ -6,7 +6,9 @@
 //! Uses `quick-xml` for streaming pull parsing — no DOM build.
 
 use crate::error::SubtitleError;
-use crate::model::{Format, StyleProps, Subtitle, SubtitleFile, TextPart};
+use crate::model::{
+  CuePosition, Format, HorizontalAlign, StyleProps, Subtitle, SubtitleFile, TextPart, VerticalAlign,
+};
 use crate::types::AnyResult;
 use crate::utils::parse_timestamp;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
@@ -62,6 +64,66 @@ struct RawStyle {
   bold: Option<bool>,
   italic: Option<bool>,
   underline: Option<bool>,
+  text_align: Option<HorizontalAlign>,
+}
+
+/// Raw `<region>` definition from `<layout>`.
+#[derive(Default)]
+struct RawRegion {
+  x: Option<f64>,
+  y: Option<f64>,
+  display_align: Option<VerticalAlign>,
+  text_align: Option<HorizontalAlign>,
+}
+
+fn parse_text_align(val: &str) -> Option<HorizontalAlign> {
+  match val {
+    "left" | "start" => Some(HorizontalAlign::Left),
+    "right" | "end" => Some(HorizontalAlign::Right),
+    "center" => Some(HorizontalAlign::Center),
+    _ => None,
+  }
+}
+
+fn parse_display_align(val: &str) -> Option<VerticalAlign> {
+  match val {
+    "before" => Some(VerticalAlign::Top),
+    "center" => Some(VerticalAlign::Center),
+    "after" => Some(VerticalAlign::Bottom),
+    _ => None,
+  }
+}
+
+fn parse_origin(val: &str) -> (Option<f64>, Option<f64>) {
+  let pct = |s: Option<&str>| {
+    s.and_then(|s| s.strip_suffix('%'))
+      .and_then(|n| n.parse::<f64>().ok())
+  };
+  let mut parts = val.split_whitespace();
+  (pct(parts.next()), pct(parts.next()))
+}
+
+fn parse_region_tag(e: &BytesStart, regions: &mut HashMap<String, RawRegion>) {
+  let mut id = None;
+  let mut region = RawRegion::default();
+  for attr in e.attributes().flatten() {
+    let key = local_name(attr.key.as_ref());
+    let val = String::from_utf8_lossy(&attr.value);
+    match key {
+      b"id" => id = Some(val.into_owned()),
+      b"origin" => {
+        let (x, y) = parse_origin(&val);
+        region.x = x;
+        region.y = y;
+      }
+      b"displayAlign" => region.display_align = parse_display_align(&val),
+      b"textAlign" => region.text_align = parse_text_align(&val),
+      _ => {}
+    }
+  }
+  if let Some(id) = id {
+    regions.insert(id, region);
+  }
 }
 
 fn merge_style_attribute(props: &mut StyleProps, key: &[u8], val: &str) {
@@ -88,6 +150,7 @@ fn parse_style_tag(e: &BytesStart, styles: &mut HashMap<String, RawStyle>) {
       b"fontWeight" => raw.bold = Some(val == "bold"),
       b"fontStyle" => raw.italic = Some(val == "italic"),
       b"textDecoration" => raw.underline = Some(val.split_whitespace().any(|t| t == "underline")),
+      b"textAlign" => raw.text_align = parse_text_align(&val),
       _ => merge_style_attribute(&mut raw.props, key, &val),
     }
   }
@@ -105,6 +168,7 @@ struct ResolvedStyle {
   bold: Option<bool>,
   italic: Option<bool>,
   underline: Option<bool>,
+  text_align: Option<HorizontalAlign>,
 }
 
 impl ResolvedStyle {
@@ -119,6 +183,9 @@ impl ResolvedStyle {
     }
     if other.underline.is_some() {
       self.underline = other.underline;
+    }
+    if other.text_align.is_some() {
+      self.text_align = other.text_align;
     }
   }
 
@@ -157,6 +224,9 @@ fn resolve_style(id: &str, styles: &HashMap<String, RawStyle>) -> ResolvedStyle 
       if raw.underline.is_some() {
         resolved.underline = raw.underline;
       }
+      if raw.text_align.is_some() {
+        resolved.text_align = raw.text_align;
+      }
     }
     visited.pop();
     resolved
@@ -165,22 +235,52 @@ fn resolve_style(id: &str, styles: &HashMap<String, RawStyle>) -> ResolvedStyle 
   recurse(id, styles, &mut Vec::new())
 }
 
+fn sanitize_style_id(name: &str) -> String {
+  let mut id: String = name
+    .chars()
+    .map(|c| {
+      if c.is_alphanumeric() || matches!(c, '.' | '_' | '-') {
+        c
+      } else {
+        '_'
+      }
+    })
+    .collect();
+  if id
+    .chars()
+    .next()
+    .is_none_or(|c| !(c.is_alphabetic() || c == '_'))
+  {
+    id.insert_str(0, "s_");
+  }
+  id
+}
+
 struct ParagraphAttrs {
   start: Option<u64>,
   end: Option<u64>,
   style: Option<String>,
   props: StyleProps,
+  position: Option<CuePosition>,
 }
 
 /// Read <p> attributes: timing, style references (resolved), and direct
 /// tts:* overrides (applied in a second pass so they win over references).
-fn read_paragraph_attrs(e: &BytesStart, styles: &HashMap<String, RawStyle>) -> ParagraphAttrs {
+/// Position comes from the referenced <region> plus textAlign, with
+/// precedence p-attr > style > region for horizontal alignment.
+fn read_paragraph_attrs(
+  e: &BytesStart,
+  styles: &HashMap<String, RawStyle>,
+  regions: &HashMap<String, RawRegion>,
+) -> ParagraphAttrs {
   let mut out = ParagraphAttrs {
     start: None,
     end: None,
     style: None,
     props: StyleProps::default(),
+    position: None,
   };
+  let mut style_text_align: Option<HorizontalAlign> = None;
 
   let mut resolved = ResolvedStyle::default();
   for attr in e.attributes().flatten() {
@@ -192,11 +292,16 @@ fn read_paragraph_attrs(e: &BytesStart, styles: &HashMap<String, RawStyle>) -> P
         }
 
         resolved.merge_from(&resolve_style(id, styles));
+        if style_text_align.is_none() {
+          style_text_align = resolved.text_align;
+        }
       }
     }
   }
   out.props = resolved.into_props();
 
+  let mut region_id: Option<String> = None;
+  let mut p_text_align: Option<HorizontalAlign> = None;
   for attr in e.attributes().flatten() {
     let key = local_name(attr.key.as_ref());
     let val = String::from_utf8_lossy(&attr.value);
@@ -208,8 +313,23 @@ fn read_paragraph_attrs(e: &BytesStart, styles: &HashMap<String, RawStyle>) -> P
           out.end = Some(s + d);
         }
       }
+      b"region" => region_id = Some(val.into_owned()),
+      b"textAlign" => p_text_align = parse_text_align(&val),
       _ => merge_style_attribute(&mut out.props, key, &val),
     }
+  }
+
+  let region = region_id.as_deref().and_then(|id| regions.get(id));
+  let h_align = p_text_align
+    .or(style_text_align)
+    .or(region.and_then(|r| r.text_align));
+  if region.is_some() || h_align.is_some() {
+    out.position = Some(CuePosition {
+      x: region.and_then(|r| r.x),
+      y: region.and_then(|r| r.y),
+      h_align: h_align.unwrap_or_default(),
+      v_align: region.and_then(|r| r.display_align).unwrap_or_default(),
+    });
   }
   out
 }
@@ -223,11 +343,13 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 300).max(16));
   // Assumes <head> precedes <body>, so style defs are known before <p> events.
   let mut styles: HashMap<String, RawStyle> = HashMap::new();
+  let mut regions: HashMap<String, RawRegion> = HashMap::new();
   let mut in_p = false;
   let mut current_start: Option<u64> = None;
   let mut current_end: Option<u64> = None;
   let mut current_style: Option<String> = None;
   let mut current_props = StyleProps::default();
+  let mut current_position: Option<CuePosition> = None;
   let mut current_text = String::new();
   let mut parts: SmallVec<[TextPart; 4]> = SmallVec::new();
   let mut span_props = StyleProps::default();
@@ -241,13 +363,15 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
             in_p = true;
             current_text.clear();
             parts.clear();
-            let attrs = read_paragraph_attrs(e, &styles);
+            let attrs = read_paragraph_attrs(e, &styles, &regions);
             current_start = attrs.start;
             current_end = attrs.end;
             current_style = attrs.style;
             current_props = attrs.props;
+            current_position = attrs.position;
           }
           b"style" => parse_style_tag(e, &mut styles),
+          b"region" => parse_region_tag(e, &mut regions),
           b"span" => {
             span_props = StyleProps::default();
             for attr in e.attributes().flatten() {
@@ -270,11 +394,14 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           parts.push(TextPart::plain("\n"));
         } else if tag.as_slice() == b"style" {
           parse_style_tag(e, &mut styles);
+        } else if tag.as_slice() == b"region" {
+          parse_region_tag(e, &mut regions);
         } else if tag.as_slice() == b"p" {
-          let attrs = read_paragraph_attrs(e, &styles);
+          let attrs = read_paragraph_attrs(e, &styles, &regions);
           if let (Some(s), Some(e)) = (attrs.start, attrs.end) {
             let mut sub = Subtitle::new(s, e, "");
             sub.style = attrs.style;
+            sub.position = attrs.position;
             if !attrs.props.is_default() {
               sub.style_props = Some(attrs.props);
             }
@@ -339,6 +466,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
               let mut sub = Subtitle::new(start, end, &current_text);
               sub.text_parts = std::mem::take(&mut parts);
               sub.style = current_style.take();
+              sub.position = current_position.take();
               let props = std::mem::take(&mut current_props);
               if !props.is_default() {
                 sub.style_props = Some(props);
@@ -428,6 +556,94 @@ pub async fn generate(
   Ok(path.to_string_lossy().into_owned())
 }
 
+/// Band regions for cues with alignment but no explicit coordinates.
+fn band_region_id(v: VerticalAlign) -> &'static str {
+  match v {
+    VerticalAlign::Top => "r_top",
+    VerticalAlign::Center => "r_mid",
+    VerticalAlign::Bottom => "r_bot",
+  }
+}
+
+/// (origin, extent) for a band region — thirds of the frame with a 10%
+/// horizontal inset, sized so displayAlign anchors text at the band edge.
+fn band_region_geometry(v: VerticalAlign) -> (&'static str, &'static str) {
+  match v {
+    VerticalAlign::Top => ("10% 10%", "80% 15%"),
+    VerticalAlign::Center => ("10% 40%", "80% 20%"),
+    VerticalAlign::Bottom => ("10% 80%", "80% 15%"),
+  }
+}
+
+fn display_align_str(v: VerticalAlign) -> &'static str {
+  match v {
+    VerticalAlign::Top => "before",
+    VerticalAlign::Center => "center",
+    VerticalAlign::Bottom => "after",
+  }
+}
+
+fn text_align_str(h: HorizontalAlign) -> &'static str {
+  match h {
+    HorizontalAlign::Left => "left",
+    HorizontalAlign::Center => "center",
+    HorizontalAlign::Right => "right",
+  }
+}
+
+/// Region assignment result: per-subtitle region id, band-region usage
+/// flags (Top/Center/Bottom), and the deduplicated explicit pos regions.
+struct RegionAssignments {
+  sub_regions: Vec<Option<String>>,
+  band_used: [bool; 3],
+  pos_regions: Vec<(String, CuePosition)>,
+}
+
+/// Assign a region id to each positioned subtitle.
+///
+/// Cues with explicit coordinates share deduplicated `posN` regions keyed by
+/// (x, y, vertical align); cues with only an alignment share one of the
+/// three band regions.
+fn assign_regions(subtitles: &[Subtitle]) -> RegionAssignments {
+  let mut band_used = [false; 3];
+  let mut pos_regions: Vec<(String, CuePosition)> = Vec::new();
+  let mut sub_regions: Vec<Option<String>> = Vec::with_capacity(subtitles.len());
+
+  for sub in subtitles {
+    let Some(pos) = &sub.position else {
+      sub_regions.push(None);
+      continue;
+    };
+    let id = if let (Some(x), Some(y)) = (pos.x, pos.y) {
+      match pos_regions
+        .iter()
+        .find(|(_, p)| p.x == Some(x) && p.y == Some(y) && p.v_align == pos.v_align)
+      {
+        Some((id, _)) => id.clone(),
+        None => {
+          let id = format!("pos{}", pos_regions.len() + 1);
+          pos_regions.push((id.clone(), pos.clone()));
+          id
+        }
+      }
+    } else {
+      let idx = match pos.v_align {
+        VerticalAlign::Top => 0,
+        VerticalAlign::Center => 1,
+        VerticalAlign::Bottom => 2,
+      };
+      band_used[idx] = true;
+      band_region_id(pos.v_align).to_string()
+    };
+    sub_regions.push(Some(id));
+  }
+  RegionAssignments {
+    sub_regions,
+    band_used,
+    pos_regions,
+  }
+}
+
 /// Serialize subtitles to TTML format.
 ///
 /// `header`, if provided, is injected verbatim into a `<head>` block
@@ -486,6 +702,7 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     let base = name
       .clone()
       .unwrap_or_else(|| format!("s{}", entries.len() + 1));
+    let base = sanitize_style_id(&base);
     let mut id = base.clone();
     let mut n = 2;
 
@@ -499,8 +716,11 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     sub_ids.push(Some(id));
   }
 
+  let regions = assign_regions(subtitles);
+  let has_regions = regions.band_used.iter().any(|u| *u) || !regions.pos_regions.is_empty();
+
   let header = header.filter(|s| !s.is_empty());
-  if header.is_some() || !entries.is_empty() {
+  if header.is_some() || !entries.is_empty() || has_regions {
     let _ = writer.write_event(Event::Start(BytesStart::new("head")));
     if let Some(h) = header {
       let _ = writer.write_event(Event::Text(BytesText::from_escaped(h)));
@@ -532,13 +752,48 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
       }
       let _ = writer.write_event(Event::End(BytesEnd::new("styling")));
     }
+    if has_regions {
+      let _ = writer.write_event(Event::Start(BytesStart::new("layout")));
+      for v in [
+        VerticalAlign::Top,
+        VerticalAlign::Center,
+        VerticalAlign::Bottom,
+      ] {
+        let idx = match v {
+          VerticalAlign::Top => 0,
+          VerticalAlign::Center => 1,
+          VerticalAlign::Bottom => 2,
+        };
+        if !regions.band_used[idx] {
+          continue;
+        }
+        let (origin, extent) = band_region_geometry(v);
+        let region = BytesStart::new("region").with_attributes([
+          ("xml:id", band_region_id(v)),
+          ("tts:origin", origin),
+          ("tts:extent", extent),
+          ("tts:displayAlign", display_align_str(v)),
+        ]);
+        let _ = writer.write_event(Event::Empty(region));
+      }
+      for (id, pos) in &regions.pos_regions {
+        let origin = format!("{}% {}%", pos.x.unwrap_or(0.0), pos.y.unwrap_or(0.0));
+        let region = BytesStart::new("region").with_attributes([
+          ("xml:id", id.as_str()),
+          ("tts:origin", origin.as_str()),
+          ("tts:displayAlign", display_align_str(pos.v_align)),
+        ]);
+        let _ = writer.write_event(Event::Empty(region));
+      }
+      let _ = writer.write_event(Event::End(BytesEnd::new("layout")));
+    }
     let _ = writer.write_event(Event::End(BytesEnd::new("head")));
   }
 
   let _ = writer.write_event(Event::Start(BytesStart::new("body")));
   let _ = writer.write_event(Event::Start(BytesStart::new("div")));
 
-  for (sub, style_id) in subtitles.iter().zip(&sub_ids) {
+  for ((sub, style_id), region_id) in subtitles.iter().zip(&sub_ids).zip(&regions.sub_regions) {
     let start = crate::utils::format_timestamp(sub.start, "WebVTT");
     let end = crate::utils::format_timestamp(sub.end, "WebVTT");
     // TTML uses '.' separator (same as WebVTT), no conversion needed
@@ -548,6 +803,12 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     p.push_attribute(("end", end.as_str()));
     if let Some(id) = style_id {
       p.push_attribute(("style", id.as_str()));
+    }
+    if let Some(rid) = region_id {
+      p.push_attribute(("region", rid.as_str()));
+    }
+    if let Some(pos) = &sub.position {
+      p.push_attribute(("tts:textAlign", text_align_str(pos.h_align)));
     }
     let _ = writer.write_event(Event::Start(p));
 
@@ -698,6 +959,42 @@ mod tests {
       Some("yellow".to_string())
     );
     assert_eq!(subs.subtitles()[1].text_parts[1].text, " text");
+  }
+
+  #[test]
+  fn test_style_id_sanitized() {
+    // ASS style names can contain spaces ("OP - Eng"); emitting them
+    // verbatim as xml:id is invalid TTML and reparses as multiple style
+    // references, collapsing distinct styles into one.
+    let props1 = StyleProps {
+      font_size: Some("66px".to_string()),
+      ..StyleProps::default()
+    };
+    let props2 = StyleProps {
+      font_size: Some("53px".to_string()),
+      ..StyleProps::default()
+    };
+    let mut sub1 = Subtitle::new(1000, 2000, "one");
+    sub1.style = Some("OP".to_string());
+    sub1.style_props = Some(props1);
+    let mut sub2 = Subtitle::new(3000, 4000, "two");
+    sub2.style = Some("OP - Eng".to_string());
+    sub2.style_props = Some(props2);
+
+    let output = to_string(&[sub1, sub2], None);
+    assert!(!output.contains("xml:id=\"OP - Eng\""));
+    assert!(output.contains("xml:id=\"OP_-_Eng\""));
+
+    let reparsed = parse_content(&output).unwrap();
+    let sizes: Vec<_> = reparsed
+      .subtitles()
+      .iter()
+      .map(|s| s.style_props.as_ref().unwrap().font_size.clone())
+      .collect();
+    assert_eq!(
+      sizes,
+      vec![Some("66px".to_string()), Some("53px".to_string())]
+    );
   }
 
   #[test]
@@ -1093,5 +1390,117 @@ mod tests {
     assert!(out.contains("<styling>"), "got: {}", out);
     let second = parse_content(&out).unwrap();
     assert_eq!(first.subtitles(), second.subtitles());
+  }
+
+  #[test]
+  fn test_write_band_region_for_alignment_only() {
+    let mut sub = Subtitle::new(1000, 2000, "title");
+    sub.position = Some(CuePosition {
+      x: None,
+      y: None,
+      h_align: HorizontalAlign::Center,
+      v_align: VerticalAlign::Top,
+    });
+    let out = to_string(&[sub], None);
+    assert!(out.contains("<layout>"), "got: {out}");
+    assert!(
+      out.contains(
+        "<region xml:id=\"r_top\" tts:origin=\"10% 10%\" tts:extent=\"80% 15%\" tts:displayAlign=\"before\"/>"
+      ),
+      "got: {out}"
+    );
+    assert!(out.contains("region=\"r_top\""), "got: {out}");
+    assert!(out.contains("tts:textAlign=\"center\""), "got: {out}");
+  }
+
+  #[test]
+  fn test_write_pos_region_dedup() {
+    let pos = CuePosition {
+      x: Some(50.0),
+      y: Some(25.0),
+      h_align: HorizontalAlign::Left,
+      v_align: VerticalAlign::Top,
+    };
+    let sub1 = Subtitle::new(1000, 2000, "one").with_position(pos.clone());
+    let sub2 = Subtitle::new(3000, 4000, "two").with_position(pos);
+    let out = to_string(&[sub1, sub2], None);
+    // One shared region for both cues.
+    assert_eq!(out.matches("<region ").count(), 1, "got: {out}");
+    assert!(out.contains("tts:origin=\"50% 25%\""), "got: {out}");
+    assert_eq!(out.matches("region=\"pos1\"").count(), 2, "got: {out}");
+    assert!(out.contains("tts:textAlign=\"left\""), "got: {out}");
+  }
+
+  #[test]
+  fn test_write_no_layout_without_position() {
+    // Plain cues (position = None) must produce byte-comparable output to
+    // before positioning support: no <head>, no <layout>, no region attr.
+    let out = to_string(&[Subtitle::new(1000, 2000, "plain")], None);
+    assert!(!out.contains("<head>"), "got: {out}");
+    assert!(!out.contains("region"), "got: {out}");
+    assert!(!out.contains("textAlign"), "got: {out}");
+  }
+
+  #[test]
+  fn test_parse_region_and_text_align() {
+    let xml = r#"<?xml version="1.0"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling">
+  <head>
+    <layout>
+      <region xml:id="pos1" tts:origin="50% 25%" tts:displayAlign="before"/>
+      <region xml:id="bot" tts:origin="10% 80%" tts:extent="80% 15%" tts:displayAlign="after"/>
+    </layout>
+  </head>
+  <body><div>
+    <p begin="00:00:01.000" end="00:00:02.000" region="pos1" tts:textAlign="left">A</p>
+    <p begin="00:00:03.000" end="00:00:04.000" region="bot">B</p>
+  </div></body>
+</tt>"#;
+    let subs = parse_content(xml).unwrap();
+    let p0 = subs.subtitles()[0].position.as_ref().unwrap();
+    assert_eq!(p0.x, Some(50.0));
+    assert_eq!(p0.y, Some(25.0));
+    assert_eq!(p0.h_align, HorizontalAlign::Left);
+    assert_eq!(p0.v_align, VerticalAlign::Top);
+    let p1 = subs.subtitles()[1].position.as_ref().unwrap();
+    assert_eq!(p1.x, Some(10.0));
+    assert_eq!(p1.y, Some(80.0));
+    assert_eq!(p1.h_align, HorizontalAlign::Center);
+    assert_eq!(p1.v_align, VerticalAlign::Bottom);
+  }
+
+  #[test]
+  fn test_parse_text_align_from_style() {
+    let xml = r#"<?xml version="1.0"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling">
+  <head><styling>
+    <style xml:id="righty" tts:textAlign="right"/>
+  </styling></head>
+  <body><div>
+    <p begin="00:00:01.000" end="00:00:02.000" style="righty">A</p>
+  </div></body>
+</tt>"#;
+    let subs = parse_content(xml).unwrap();
+    let pos = subs.subtitles()[0].position.as_ref().unwrap();
+    assert_eq!(pos.h_align, HorizontalAlign::Right);
+    assert_eq!(pos.x, None);
+    assert_eq!(pos.y, None);
+  }
+
+  #[test]
+  fn test_position_round_trip() {
+    // Explicit position + alignment survive a write → parse cycle.
+    let sub = Subtitle::new(1000, 2000, "x").with_position(CuePosition {
+      x: Some(50.0),
+      y: Some(25.0),
+      h_align: HorizontalAlign::Right,
+      v_align: VerticalAlign::Top,
+    });
+    let out = to_string(std::slice::from_ref(&sub), None);
+    let reparsed = parse_content(&out).unwrap();
+    assert_eq!(
+      reparsed.subtitles()[0].position.as_ref().unwrap(),
+      sub.position.as_ref().unwrap()
+    );
   }
 }
