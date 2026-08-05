@@ -35,6 +35,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **ASS override tags leaked into converted formats**: the ASS parser now
+  parses `{...}` override blocks into `Subtitle::text_parts` (bold, italic,
+  underline, `\c`/`\1c` primary color normalized to `#RRGGBB`, `\r` reset),
+  strips tags with no text representation (`\pos`, `\an`, `\fad`, `\alpha`,
+  `\t(...)` transforms, shadows, borders, `\fscx`/`\fscy`, …), and treats
+  `\p1+` drawing-mode cues as having no visible text. `Subtitle::text`
+  stays raw for ASS round-tripping. Previously every cue's raw override
+  syntax (including vector drawing commands) was emitted verbatim when
+  converting ASS to TTML and other formats.
 - **ASS style lines with float values silently dropped**: the `Style:` regex
   required integers for ScaleX/ScaleY/Spacing/Angle/Outline/Shadow, but the
   ASS spec allows floats (`Outline: 3.6`). Such styles were skipped

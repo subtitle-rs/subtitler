@@ -242,6 +242,7 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
   subtitle.style = style;
   subtitle.actor = actor;
   subtitle.is_comment = is_comment;
+  subtitle.text_parts = parse_ass_tags(text).into_iter().collect();
   Some(subtitle)
 }
 
@@ -518,12 +519,29 @@ pub fn to_string(
   buf
 }
 
+/// `\b`/`\i`/`\u` argument: empty means on, an integer means on, iff > 0
+/// (`\b700` is a bold weight). Non-numeric arguments (`ord3.6` from
+/// `\bord`, `lur5` from `\blur`, …) are ignored.
+fn parse_toggle(arg: &str, flag: &mut bool) {
+  if arg.is_empty() {
+    *flag = true;
+  } else if let Ok(n) = arg.parse::<u32>() {
+    *flag = n > 0;
+  }
+}
+
+/// Parse ASS override tags into styled `TextPart`s.
 pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
   let mut parts = Vec::new();
   let mut bold = false;
   let mut italic = false;
   let mut underline = false;
   let mut color: Option<String> = None;
+  // \pN (N>=1): following text is vector drawing commands, not visible text.
+  let mut drawing = false;
+  // Inside \t(...): inner tags are animated, don't apply them as state.
+  let mut in_transform = false;
+  let mut saw_drawing = false;
   let mut current = String::new();
 
   let re = &RE_ASS_TAG_INLINE;
@@ -534,7 +552,7 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
     let tag_start = m.start();
     let tag_end = m.end();
 
-    if tag_start > last_end {
+    if tag_start > last_end && !drawing {
       let segment = &text[last_end..tag_start];
       let cleaned = segment
         .replace("\\N", "\n")
@@ -552,32 +570,67 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
 
     let tag_content = &caps[1];
     for tag in tag_content.split('\\') {
-      if tag == "b1" || tag == "b" {
-        bold = true;
-      } else if tag == "b0" {
-        bold = false;
-      } else if tag == "i1" || tag == "i" {
-        italic = true;
-      } else if tag == "i0" {
-        italic = false;
-      } else if tag == "u1" || tag == "u" {
-        underline = true;
-      } else if tag == "u0" {
-        underline = false;
-      } else if let Some(c) = tag.strip_prefix("c&") {
-        color = Some(format!("&{}", c));
-      } else if tag == "r" {
-        bold = false;
-        italic = false;
-        underline = false;
-        color = None;
+      let tag = tag.trim();
+      if in_transform {
+        if tag.contains(')') {
+          in_transform = false;
+        }
+        continue;
+      }
+
+      match tag {
+        "r" => {
+          bold = false;
+          italic = false;
+          underline = false;
+          color = None;
+        }
+        "b" => bold = true,
+        "i" => italic = true,
+        "u" => underline = true,
+        // \t(...) transform; may be self-contained (\t(500,\bord1) splits
+        // into "t(500," and "bord1)").
+        t if t.starts_with("t(") => in_transform = !t[2..].contains(')'),
+        // \r<StyleName>: reset to the named style's defaults.
+        t if t.starts_with('r') && t[1..].starts_with(char::is_alphabetic) => {
+          bold = false;
+          italic = false;
+          underline = false;
+          color = None;
+        }
+        // \b0/\b1/\b<weight>, \i0/\i1, \u0/\u1; non-numeric arguments
+        // (\bord, \blur, \iclip, …) are ignored.
+        t if t.starts_with('b') => parse_toggle(&t[1..], &mut bold),
+        t if t.starts_with('i') => parse_toggle(&t[1..], &mut italic),
+        t if t.starts_with('u') => parse_toggle(&t[1..], &mut underline),
+        // \c&HBBGGRR& / \1c&HBBGGRR& → primary text color.
+        t if t.starts_with("c&") || t.starts_with("1c&") => {
+          let c = t
+            .strip_prefix("1c&")
+            .unwrap_or(&t[2..])
+            .trim_end_matches('&');
+          let raw = if c.starts_with(['H', 'h']) {
+            format!("&{c}")
+          } else {
+            format!("&H{c}")
+          };
+          color = ass_color_to_ttml(&raw);
+        }
+        // \pN toggles drawing mode; \pos(/\pbo) fails the int parse.
+        t if t.starts_with('p') => {
+          if let Ok(n) = t[1..].parse::<u32>() {
+            drawing = n >= 1;
+            saw_drawing |= drawing;
+          }
+        }
+        _ => {}
       }
     }
 
     last_end = tag_end;
   }
 
-  if last_end < text.len() {
+  if last_end < text.len() && !drawing {
     let segment = &text[last_end..];
     let cleaned = segment
       .replace("\\N", "\n")
@@ -588,8 +641,12 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
 
   if !current.is_empty() {
     let mut part = crate::model::TextPart::new(current, bold, italic, underline);
-    part.color = color.clone();
+    part.color = color;
     parts.push(part);
+  }
+
+  if parts.is_empty() && (saw_drawing || re.is_match(text)) {
+    parts.push(crate::model::TextPart::plain(""));
   }
 
   parts
