@@ -654,7 +654,7 @@ struct RegionAssignments {
 /// (x, y, horizontal align, vertical align) — all four feed the region
 /// geometry; cues with only an alignment share one of the three band
 /// regions.
-fn assign_regions(subtitles: &[&Subtitle]) -> RegionAssignments {
+fn assign_regions(subtitles: &[Subtitle]) -> RegionAssignments {
   let mut band_used = [false; 3];
   let mut pos_regions: Vec<(String, CuePosition)> = Vec::new();
   let mut sub_regions: Vec<Option<String>> = Vec::with_capacity(subtitles.len());
@@ -693,19 +693,6 @@ fn assign_regions(subtitles: &[&Subtitle]) -> RegionAssignments {
   }
 }
 
-/// Serialize subtitles to TTML format.
-///
-/// `header`, if provided, is injected verbatim into a `<head>` block
-/// between `<tt>` and `<body>`. The caller is responsible for ensuring
-/// `header` is well-formed XML fragment (e.g. `<metadata>...</metadata>`).
-/// The `<head>` block is also emitted when any subtitle carries
-/// `style_props` — a `<styling>` block is generated from them and each
-/// `<p>` references its style by id.
-///
-/// **Note**: the parse path does not yet round-trip the header back into
-/// `SubtitleFile::Ttml { header, .. }` (it stays `None`). Round-trip
-/// preservation is planned for a future release. For now, `header` is
-/// write-only.
 /// The text a writer would emit for this cue: concatenated parts when
 /// present, else the raw text.
 fn visible_text(sub: &Subtitle) -> String {
@@ -716,8 +703,8 @@ fn visible_text(sub: &Subtitle) -> String {
   }
 }
 
-/// Filter cues for TTML output.
-fn filter_for_output(subtitles: &[Subtitle]) -> Vec<&Subtitle> {
+/// Prepare cues for TTML output.
+fn filter_for_output(subtitles: &[Subtitle]) -> Vec<Subtitle> {
   let visible: Vec<&Subtitle> = subtitles
     .iter()
     .filter(|s| visible_text(s).chars().any(|c| !c.is_whitespace()))
@@ -743,9 +730,44 @@ fn filter_for_output(subtitles: &[Subtitle]) -> Vec<&Subtitle> {
     }
   }
   kept.reverse();
-  kept
+
+  let mut owned: Vec<Subtitle> = kept.into_iter().cloned().collect();
+  deoverlap_positioned(&mut owned);
+  owned
 }
 
+/// Trim time overlaps between cues pinned to the same position row.
+fn deoverlap_positioned(subs: &mut [Subtitle]) {
+  use std::collections::HashMap;
+  let mut groups: HashMap<(Option<String>, u64, VerticalAlign), Vec<usize>> = HashMap::new();
+  for (i, sub) in subs.iter().enumerate() {
+    let Some(pos) = &sub.position else { continue };
+    let (Some(_x), Some(y)) = (pos.x, pos.y) else {
+      continue;
+    };
+    groups
+      .entry((sub.style.clone(), y.to_bits(), pos.v_align))
+      .or_default()
+      .push(i);
+  }
+  for idx in groups.values_mut() {
+    idx.sort_by_key(|&i| subs[i].start);
+    for k in 0..idx.len() {
+      let (start, end) = (subs[idx[k]].start, subs[idx[k]].end);
+      for &j in &idx[k + 1..] {
+        let next_start = subs[j].start;
+        if next_start > start {
+          if next_start < end {
+            subs[idx[k]].end = next_start;
+          }
+          break;
+        }
+      }
+    }
+  }
+}
+
+/// Serialize subtitles to TTML format.
 pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   let subtitles = filter_for_output(subtitles);
   let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
@@ -1620,6 +1642,91 @@ mod tests {
     assert_eq!(out.matches("<p ").count(), 1, "got: {out}");
     assert!(out.contains("#D37B4C"), "got: {out}");
     assert!(!out.contains("#C6EAE8"), "got: {out}");
+  }
+
+  #[test]
+  fn test_deoverlap_trims_crossfade() {
+    // ASS \fad crossfade: line A fades out while line B fades in at the
+    // same \pos row (34.89-38.81 / 38.60-40.69 in the wild). TTML players
+    // hard-switch cues, so A must end when B starts.
+    let row = |x: f64| CuePosition {
+      x: Some(x),
+      y: Some(7.69),
+      h_align: HorizontalAlign::Center,
+      v_align: VerticalAlign::Center,
+    };
+    let mut a = Subtitle::new(34890, 38810, "aranu").with_position(row(30.0));
+    a.style = Some("OP".into());
+    let mut b = Subtitle::new(38600, 40690, "yume").with_position(row(40.0));
+    b.style = Some("OP".into());
+    let out = to_string(&[a, b], None);
+    assert!(
+      out.contains("begin=\"00:00:34.890\" end=\"00:00:38.600\""),
+      "got: {out}"
+    );
+    assert!(
+      out.contains("begin=\"00:00:38.600\" end=\"00:00:40.690\""),
+      "got: {out}"
+    );
+  }
+
+  #[test]
+  fn test_deoverlap_keeps_same_start_glyphs() {
+    // Glyphs of one typeset line share identical start times — never trim.
+    let row = |x: f64| CuePosition {
+      x: Some(x),
+      y: Some(7.69),
+      h_align: HorizontalAlign::Center,
+      v_align: VerticalAlign::Center,
+    };
+    let mut a = Subtitle::new(1000, 3000, "c").with_position(row(20.0));
+    a.style = Some("OP".into());
+    let mut b = Subtitle::new(1000, 3000, "h").with_position(row(30.0));
+    b.style = Some("OP".into());
+    let out = to_string(&[a, b], None);
+    assert_eq!(out.matches("end=\"00:00:03.000\"").count(), 2, "got: {out}");
+  }
+
+  #[test]
+  fn test_deoverlap_ignores_different_rows_and_styles() {
+    let pos = |y: f64| CuePosition {
+      x: Some(50.0),
+      y: Some(y),
+      h_align: HorizontalAlign::Center,
+      v_align: VerticalAlign::Center,
+    };
+    // Different y row: overlapping time is legitimate (two stacked lines).
+    let mut a = Subtitle::new(1000, 3000, "one").with_position(pos(7.69));
+    a.style = Some("OP".into());
+    let mut b = Subtitle::new(2000, 4000, "two").with_position(pos(12.18));
+    b.style = Some("OP - Eng".into());
+    let out = to_string(&[a, b], None);
+    assert!(
+      out.contains("begin=\"00:00:01.000\" end=\"00:00:03.000\""),
+      "got: {out}"
+    );
+  }
+
+  #[test]
+  fn test_deoverlap_ignores_band_cues() {
+    // Alignment-only cues stack via normal TTML block flow — no trimming.
+    let band = || CuePosition {
+      x: None,
+      y: None,
+      h_align: HorizontalAlign::Center,
+      v_align: VerticalAlign::Top,
+    };
+    let a = Subtitle::new(1000, 3000, "one").with_position(band());
+    let b = Subtitle::new(2000, 4000, "two").with_position(band());
+    let out = to_string(&[a, b], None);
+    assert!(
+      out.contains("begin=\"00:00:01.000\" end=\"00:00:03.000\""),
+      "got: {out}"
+    );
+    assert!(
+      out.contains("begin=\"00:00:02.000\" end=\"00:00:04.000\""),
+      "got: {out}"
+    );
   }
 
   #[test]
