@@ -1,6 +1,6 @@
 use crate::error::SubtitleError;
 use crate::model::convert::{MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND};
-use crate::model::{AssData, AssFont, AssStyle, Format, Subtitle, SubtitleFile};
+use crate::model::{AssData, AssFont, AssStyle, Format, StyleProps, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
 use std::collections::HashMap;
@@ -323,6 +323,22 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   }
 
   flush_font(&mut font_name, &mut font_lines);
+
+  let style_map: HashMap<&str, &AssStyle> = styles.iter().map(|s| (s.name.as_str(), s)).collect();
+  for sub in &mut subtitles {
+    let Some(style) = sub.style.as_deref().and_then(|name| style_map.get(name)) else {
+      continue;
+    };
+    sub.style_props = Some(StyleProps {
+      font_family: Some(style.fontname.clone()),
+      font_size: Some(format!("{}px", style.fontsize)),
+      color: ass_color_to_ttml(&style.primary_color),
+      bold: style.bold,
+      italic: style.italic,
+      underline: style.underline,
+    });
+  }
+
   Ok(SubtitleFile::Ass(AssData {
     info,
     styles,
@@ -365,6 +381,24 @@ fn format_ass_color(color: &str) -> String {
   } else {
     color.to_string()
   }
+}
+
+/// "&HAABBGGRR" (or SSA's "&HBBGGRR") → "#RRGGBB".
+/// Alpha is dropped: TTML1 tts:color has no alpha channel.
+fn ass_color_to_ttml(color: &str) -> Option<String> {
+  let hex = color
+    .strip_prefix("&H")
+    .or_else(|| color.strip_prefix("&h"))?;
+  if hex.len() != 8 && hex.len() != 6 {
+    return None;
+  }
+  let n = u32::from_str_radix(hex, 16).ok()?;
+  Some(format!(
+    "#{:02X}{:02X}{:02X}",
+    n & 0xFF,
+    (n >> 8) & 0xFF,
+    (n >> 16) & 0xFF
+  ))
 }
 
 /// Write subtitles to a file in ASS format.
@@ -819,5 +853,31 @@ mod tests {
     };
     assert_eq!(parsed.fonts.len(), 1);
     assert_eq!(parsed.fonts[0].data, data);
+  }
+
+  #[test]
+  fn test_parse_fills_style_props() {
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Custom,Arial,36,&H00463827,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Custom,,0,0,0,,Styled\nDialogue: 0,0:00:03.00,0:00:04.00,Missing,,0,0,0,,No such style\n";
+    let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
+      panic!("expected ASS");
+    };
+    let props = data.subtitles[0].style_props.as_ref().unwrap();
+    assert_eq!(props.font_family.as_deref(), Some("Arial"));
+    assert_eq!(props.font_size.as_deref(), Some("36px"));
+    assert_eq!(props.color.as_deref(), Some("#273846"));
+    assert!(props.bold);
+    assert!(!props.italic);
+    // Unknown style name: no props resolved.
+    assert!(data.subtitles[1].style_props.is_none());
+  }
+
+  #[cfg(feature = "ttml")]
+  #[test]
+  fn test_ass_to_ttml_conversion_emits_font_family() {
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Custom,Arial,36,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Custom,,0,0,0,,Styled\n";
+    let file = parse_content(content).unwrap();
+    let out = file.to_string_with_format(&Format::Ttml);
+    assert!(out.contains("tts:fontFamily=\"Arial\""), "got: {}", out);
+    assert!(out.contains("style=\"Custom\""), "got: {}", out);
   }
 }
