@@ -654,7 +654,7 @@ struct RegionAssignments {
 /// (x, y, horizontal align, vertical align) — all four feed the region
 /// geometry; cues with only an alignment share one of the three band
 /// regions.
-fn assign_regions(subtitles: &[Subtitle]) -> RegionAssignments {
+fn assign_regions(subtitles: &[&Subtitle]) -> RegionAssignments {
   let mut band_used = [false; 3];
   let mut pos_regions: Vec<(String, CuePosition)> = Vec::new();
   let mut sub_regions: Vec<Option<String>> = Vec::with_capacity(subtitles.len());
@@ -706,7 +706,48 @@ fn assign_regions(subtitles: &[Subtitle]) -> RegionAssignments {
 /// `SubtitleFile::Ttml { header, .. }` (it stays `None`). Round-trip
 /// preservation is planned for a future release. For now, `header` is
 /// write-only.
+/// The text a writer would emit for this cue: concatenated parts when
+/// present, else the raw text.
+fn visible_text(sub: &Subtitle) -> String {
+  if sub.text_parts.is_empty() {
+    sub.text.clone()
+  } else {
+    sub.text_parts.iter().map(|p| p.text.as_str()).collect()
+  }
+}
+
+/// Filter cues for TTML output.
+fn filter_for_output(subtitles: &[Subtitle]) -> Vec<&Subtitle> {
+  let visible: Vec<&Subtitle> = subtitles
+    .iter()
+    .filter(|s| visible_text(s).chars().any(|c| !c.is_whitespace()))
+    .collect();
+  let mut seen = std::collections::HashSet::new();
+  let mut kept: Vec<&Subtitle> = Vec::with_capacity(visible.len());
+  for sub in visible.iter().rev() {
+    let key = (
+      sub.start,
+      sub.end,
+      visible_text(sub),
+      sub.position.as_ref().map(|p| {
+        (
+          p.x.map(f64::to_bits),
+          p.y.map(f64::to_bits),
+          p.h_align,
+          p.v_align,
+        )
+      }),
+    );
+    if seen.insert(key) {
+      kept.push(sub);
+    }
+  }
+  kept.reverse();
+  kept
+}
+
 pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
+  let subtitles = filter_for_output(subtitles);
   let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
   let _ = writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)));
@@ -725,7 +766,7 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   // <style> elements.
   let mut entries: Vec<(String, StyleProps)> = Vec::new();
   let mut sub_ids: Vec<Option<String>> = Vec::with_capacity(subtitles.len());
-  for sub in subtitles {
+  for sub in &subtitles {
     let Some(props) = sub.style_props.as_ref().filter(|p| !p.is_default()) else {
       sub_ids.push(None);
       continue;
@@ -765,7 +806,7 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     sub_ids.push(Some(id));
   }
 
-  let regions = assign_regions(subtitles);
+  let regions = assign_regions(&subtitles);
   let has_regions = regions.band_used.iter().any(|u| *u) || !regions.pos_regions.is_empty();
 
   let header = header.filter(|s| !s.is_empty());
@@ -1537,6 +1578,65 @@ mod tests {
     assert_eq!(pos.h_align, HorizontalAlign::Right);
     assert_eq!(pos.x, None);
     assert_eq!(pos.y, None);
+  }
+
+  #[test]
+  fn test_write_drops_empty_cues() {
+    // ASS \p1 vector-drawing events produce a single empty part; the cue
+    // renders nothing and must not become an empty <p>.
+    let mut drawing = Subtitle::new(1000, 2000, "m 0 0 l 100 100");
+    drawing.text_parts.push(TextPart::plain(""));
+    let normal = Subtitle::new(3000, 4000, "hello");
+    let out = to_string(&[drawing, normal], None);
+    assert!(!out.contains("></p>"), "got: {out}");
+    assert_eq!(out.matches("<p ").count(), 1, "got: {out}");
+    assert!(out.contains("hello"), "got: {out}");
+  }
+
+  #[test]
+  fn test_write_dedupes_identical_layered_cues() {
+    // ASS glow/shadow passes: same text, timing and \pos, different colors.
+    // TTML <p>s in one region flow as stacked lines, so only the last
+    // (visually dominant) copy is kept.
+    let pos = CuePosition {
+      x: Some(27.11),
+      y: Some(7.69),
+      h_align: HorizontalAlign::Center,
+      v_align: VerticalAlign::Center,
+    };
+    let mut top = Subtitle::new(1000, 2000, "c").with_position(pos.clone());
+    top.text_parts.push({
+      let mut p = TextPart::plain("c");
+      p.color = Some("#C6EAE8".into());
+      p
+    });
+    let mut bottom = Subtitle::new(1000, 2000, "c").with_position(pos);
+    bottom.text_parts.push({
+      let mut p = TextPart::plain("c");
+      p.color = Some("#D37B4C".into());
+      p
+    });
+    let out = to_string(&[top, bottom], None);
+    assert_eq!(out.matches("<p ").count(), 1, "got: {out}");
+    assert!(out.contains("#D37B4C"), "got: {out}");
+    assert!(!out.contains("#C6EAE8"), "got: {out}");
+  }
+
+  #[test]
+  fn test_write_keeps_distinct_positions() {
+    // Same text/timing but different \pos: not duplicates.
+    let a = Subtitle::new(1000, 2000, "c").with_position(CuePosition {
+      x: Some(10.0),
+      y: Some(10.0),
+      ..CuePosition::default()
+    });
+    let b = Subtitle::new(1000, 2000, "c").with_position(CuePosition {
+      x: Some(20.0),
+      y: Some(10.0),
+      ..CuePosition::default()
+    });
+    let out = to_string(&[a, b], None);
+    assert_eq!(out.matches("<p ").count(), 2, "got: {out}");
   }
 
   #[test]

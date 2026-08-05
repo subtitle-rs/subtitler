@@ -243,7 +243,7 @@ impl StyleProps {
 }
 
 /// Horizontal alignment of cue text within its region, format-neutral.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HorizontalAlign {
   Left,
@@ -253,7 +253,7 @@ pub enum HorizontalAlign {
 }
 
 /// Vertical placement of the cue within the video frame, format-neutral.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum VerticalAlign {
   Top,
