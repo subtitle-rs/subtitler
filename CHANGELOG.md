@@ -35,6 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **ASS style lines with float values silently dropped**: the `Style:` regex
+  required integers for ScaleX/ScaleY/Spacing/Angle/Outline/Shadow, but the
+  ASS spec allows floats (`Outline: 3.6`). Such styles were skipped
+  entirely, leaving every cue that referenced them without `style_props`
+  (so e.g. ASS → TTML conversion lost all styling).
 - **VTT cue text escaping**: `vtt::to_string`/`write_stream` escape `&`,
   `<`, `>` as `&amp;`/`&lt;`/`&gt;`, and the parser unescapes them.
   Previously a literal cue text like `<u>一` reparsed as `一` (found by

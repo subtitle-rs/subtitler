@@ -13,7 +13,7 @@ static RE_DIALOGUE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static RE_STYLE: LazyLock<Regex> = LazyLock::new(|| {
-  Regex::new(r"^Style:\s*([^,]*),([^,]*),(\d+),([^,]*),([^,]*),([^,]*),([^,]*),(-?\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+)").unwrap()
+  Regex::new(r"^Style:\s*([^,]*),([^,]*),(\d+),([^,]*),([^,]*),([^,]*),([^,]*),(-?\d+),(-?\d+),(-?\d+),(-?\d+),(-?[\d.]+),(-?[\d.]+),(-?[\d.]+),(-?[\d.]+),(\d+),(-?[\d.]+),(-?[\d.]+),(\d+),(\d+),(\d+),(\d+),(\d+)").unwrap()
 });
 
 static RE_INFO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([^:]+):\s*(.*)").unwrap());
@@ -763,6 +763,27 @@ mod tests {
   fn test_detect_format_ass() {
     let data = b"[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\n";
     assert_eq!(detect_format(data), Some(crate::model::Format::Ass));
+  }
+
+  #[test]
+  fn test_parse_style_float_outline_shadow() {
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: OP,FOT-Rowdy Std EB,66,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3.9,0,8,30,30,69,1\nStyle: Default,LTFinnegan Medium,72,&H00FFFFFF,&H00FFFFFF,&H00000000,&HA0000000,0,0,0,0,100,100,0.5,0.5,1,3.6,1.5,2,200,200,60,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,OP,,0,0,0,,Hello\n";
+    let result = parse_content(content).unwrap();
+    let SubtitleFile::Ass(ass) = &result else {
+      panic!("expected ASS file");
+    };
+    assert_eq!(ass.styles.len(), 2);
+    assert_eq!(ass.styles[0].name, "OP");
+    assert_eq!(ass.styles[0].outline, 3.9);
+    assert_eq!(ass.styles[1].spacing, 0.5);
+    assert_eq!(ass.styles[1].shadow, 1.5);
+
+    // The dialogue's style_props must resolve against the parsed style.
+    let sub = &result.subtitles()[0];
+    let props = sub.style_props.as_ref().expect("style_props missing");
+    assert_eq!(props.font_family.as_deref(), Some("FOT-Rowdy Std EB"));
+    assert_eq!(props.font_size.as_deref(), Some("66px"));
+    assert_eq!(props.color.as_deref(), Some("#FFFFFF"));
   }
 
   #[test]
