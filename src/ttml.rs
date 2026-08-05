@@ -302,6 +302,39 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           }
         }
       }
+      Ok(Event::GeneralRef(ref e)) => {
+        if in_p {
+          let name = e.decode().map_err(|e| SubtitleError::Xml {
+            format: Format::Ttml,
+            error: e.to_string(),
+          })?;
+          let resolved = if let Ok(Some(ch)) = e.resolve_char_ref() {
+            ch.to_string()
+          } else {
+            match name.as_ref() {
+              "amp" => "&".to_string(),
+              "lt" => "<".to_string(),
+              "gt" => ">".to_string(),
+              "quot" => "\"".to_string(),
+              "apos" => "'".to_string(),
+              other => format!("&{other};"),
+            }
+          };
+          if !resolved.trim().is_empty() {
+            current_text.push_str(&resolved);
+            if in_span || !span_props.is_default() {
+              let mut part = TextPart::new(
+                &resolved,
+                span_props.bold,
+                span_props.italic,
+                span_props.underline,
+              );
+              part.color = span_props.color.clone();
+              parts.push(part);
+            }
+          }
+        }
+      }
       Ok(Event::End(ref e)) => {
         let tag = local_name(e.name().as_ref()).to_vec();
         match tag.as_slice() {
@@ -696,6 +729,20 @@ mod tests {
     let subs = parse_content(xml).unwrap();
     assert_eq!(subs.subtitles().len(), 1);
     assert_eq!(subs.subtitles()[0].text, "Line one\nLine two");
+  }
+
+  #[test]
+  fn test_parse_entities() {
+    // quick-xml emits entity references as GeneralRef events; they must be
+    // resolved, not dropped (previously `A &amp; B` parsed as `A  B`).
+    let xml = r#"<?xml version="1.0"?>
+<tt xmlns="http://www.w3.org/ns/ttml"><body><div>
+<p begin="00:00:01.000" end="00:00:02.000">A &amp; B &lt; C &gt; D &quot;E&quot; G&apos;H</p>
+<p begin="00:00:03.000" end="00:00:04.000">&#65;&#x42;c &amp;#38;</p>
+</div></body></tt>"#;
+    let subs = parse_content(xml).unwrap();
+    assert_eq!(subs.subtitles()[0].text, "A & B < C > D \"E\" G'H");
+    assert_eq!(subs.subtitles()[1].text, "ABc &#38;");
   }
 
   #[test]

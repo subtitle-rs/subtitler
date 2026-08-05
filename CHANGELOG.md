@@ -35,6 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **TTML/DFXP parser dropped all XML entities**: quick-xml emits `&amp;`,
+  `&lt;`, `&gt;`, `&quot;`, `&apos;` and numeric character references as
+  separate `GeneralRef` events, which the parse loop ignored — so
+  `A &amp; B` parsed as `A  B`, corrupting any round-trip containing
+  `& < > " '`. They are now resolved (unknown entities kept literal).
 - **ASS override tags leaked into converted formats**: the ASS parser now
   parses `{...}` override blocks into `Subtitle::text_parts` (bold, italic,
   underline, `\c`/`\1c` primary color normalized to `#RRGGBB`, `\r` reset),
