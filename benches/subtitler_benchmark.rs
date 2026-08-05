@@ -541,6 +541,7 @@ fn bench_srt_to_ass_convert(c: &mut Criterion) {
         &Default::default(),
         &[subtitler::model::AssStyle::default_style()],
         subs.subtitles(),
+        &[],
       ))
     })
   });
