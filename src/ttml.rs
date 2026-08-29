@@ -59,6 +59,9 @@ fn local_name(name: &[u8]) -> &[u8] {
 struct RawStyle {
   parents: Vec<String>,
   props: StyleProps,
+  bold: Option<bool>,
+  italic: Option<bool>,
+  underline: Option<bool>,
 }
 
 fn merge_style_attribute(props: &mut StyleProps, key: &[u8], val: &str) {
@@ -75,42 +78,88 @@ fn merge_style_attribute(props: &mut StyleProps, key: &[u8], val: &str) {
 
 fn parse_style_tag(e: &BytesStart, styles: &mut HashMap<String, RawStyle>) {
   let mut id = None;
-  let mut parents = Vec::new();
-  let mut props = StyleProps::default();
+  let mut raw = RawStyle::default();
   for attr in e.attributes().flatten() {
     let key = local_name(attr.key.as_ref());
     let val = String::from_utf8_lossy(&attr.value);
     match key {
       b"id" => id = Some(val.into_owned()),
-      b"style" => parents = val.split_whitespace().map(str::to_string).collect(),
-      _ => merge_style_attribute(&mut props, key, &val),
+      b"style" => raw.parents = val.split_whitespace().map(str::to_string).collect(),
+      b"fontWeight" => raw.bold = Some(val == "bold"),
+      b"fontStyle" => raw.italic = Some(val == "italic"),
+      b"textDecoration" => raw.underline = Some(val.split_whitespace().any(|t| t == "underline")),
+      _ => merge_style_attribute(&mut raw.props, key, &val),
     }
   }
   if let Some(id) = id {
-    styles.insert(id, RawStyle { parents, props });
+    styles.insert(id, raw);
+  }
+}
+
+/// Style with inheritance applied. Boolean flags stay tri-state during
+/// resolution so a later explicit `Some(false)` overrides an earlier
+/// `Some(true)`; they collapse to concrete bools only at the end.
+#[derive(Default)]
+struct ResolvedStyle {
+  props: StyleProps,
+  bold: Option<bool>,
+  italic: Option<bool>,
+  underline: Option<bool>,
+}
+
+impl ResolvedStyle {
+  /// `other` wins: `Some` fields overwrite, tri-state flags overwrite if set.
+  fn merge_from(&mut self, other: &ResolvedStyle) {
+    self.props.merge_from(&other.props);
+    if other.bold.is_some() {
+      self.bold = other.bold;
+    }
+    if other.italic.is_some() {
+      self.italic = other.italic;
+    }
+    if other.underline.is_some() {
+      self.underline = other.underline;
+    }
+  }
+
+  fn into_props(self) -> StyleProps {
+    let mut props = self.props;
+    props.bold = self.bold.unwrap_or(false);
+    props.italic = self.italic.unwrap_or(false);
+    props.underline = self.underline.unwrap_or(false);
+    props
   }
 }
 
 /// Resolve a style id to its effective props, walking parent references.
-fn resolve_style(id: &str, styles: &HashMap<String, RawStyle>) -> StyleProps {
+fn resolve_style(id: &str, styles: &HashMap<String, RawStyle>) -> ResolvedStyle {
   fn recurse(
     id: &str,
     styles: &HashMap<String, RawStyle>,
     visited: &mut Vec<String>,
-  ) -> StyleProps {
-    let mut props = StyleProps::default();
+  ) -> ResolvedStyle {
+    let mut resolved = ResolvedStyle::default();
     if visited.iter().any(|v| v == id) {
-      return props;
+      return resolved;
     }
     visited.push(id.to_string());
     if let Some(raw) = styles.get(id) {
       for parent in &raw.parents {
-        props.merge_from(&recurse(parent, styles, visited));
+        resolved.merge_from(&recurse(parent, styles, visited));
       }
-      props.merge_from(&raw.props);
+      resolved.props.merge_from(&raw.props);
+      if raw.bold.is_some() {
+        resolved.bold = raw.bold;
+      }
+      if raw.italic.is_some() {
+        resolved.italic = raw.italic;
+      }
+      if raw.underline.is_some() {
+        resolved.underline = raw.underline;
+      }
     }
     visited.pop();
-    props
+    resolved
   }
 
   recurse(id, styles, &mut Vec::new())
@@ -133,6 +182,7 @@ fn read_paragraph_attrs(e: &BytesStart, styles: &HashMap<String, RawStyle>) -> P
     props: StyleProps::default(),
   };
 
+  let mut resolved = ResolvedStyle::default();
   for attr in e.attributes().flatten() {
     if local_name(attr.key.as_ref()) == b"style" {
       let val = String::from_utf8_lossy(&attr.value);
@@ -141,10 +191,11 @@ fn read_paragraph_attrs(e: &BytesStart, styles: &HashMap<String, RawStyle>) -> P
           out.style = Some(id.to_string());
         }
 
-        out.props.merge_from(&resolve_style(id, styles));
+        resolved.merge_from(&resolve_style(id, styles));
       }
     }
   }
+  out.props = resolved.into_props();
 
   for attr in e.attributes().flatten() {
     let key = local_name(attr.key.as_ref());
@@ -801,6 +852,29 @@ mod tests {
     let props = file.subtitles()[0].style_props.as_ref().unwrap();
     assert_eq!(props.font_family.as_deref(), Some("Arial"));
     assert_eq!(props.font_size.as_deref(), Some("24px"));
+  }
+
+  #[test]
+  fn test_style_inheritance_child_resets_inherited_bold() {
+    // tts:fontWeight="normal" on a child style must unset the parent's bold,
+    // matching how direct <p tts:fontWeight="normal"> overrides behave.
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\">\
+      <head><styling>\
+      <style xml:id=\"base\" tts:fontWeight=\"bold\" tts:fontStyle=\"italic\" tts:color=\"#FF0000\"/>\
+      <style xml:id=\"plain\" style=\"base\" tts:fontWeight=\"normal\"/>\
+      </styling></head>\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\" style=\"plain\">Hi</p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    let props = file.subtitles()[0].style_props.as_ref().unwrap();
+    assert!(
+      !props.bold,
+      "child style reset must win over inherited bold"
+    );
+    // untouched inherited props still apply
+    assert!(props.italic);
+    assert_eq!(props.color.as_deref(), Some("#FF0000"));
   }
 
   #[test]
