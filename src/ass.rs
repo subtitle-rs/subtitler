@@ -28,49 +28,57 @@ mod uuencode {
     b.checked_sub(33).filter(|&v| v < 64)
   }
 
-  /// A trailing 2-char group encodes a single byte. None on invalid chars.
   pub fn decode(lines: &[String]) -> Option<Vec<u8>> {
     let mut data = Vec::new();
-    let mut group: [u8; 3] = [0; 3];
+    let mut src = [0u8; 4];
     let mut len = 0;
     for line in lines {
       for &b in line.as_bytes() {
-        group[len] = decode_char(b)?;
+        if b == 0 || b == b'\n' || b == b'\r' {
+          continue;
+        }
+        src[len] = decode_char(b)?;
         len += 1;
-        if len == 3 {
-          let val = ((group[0] as u32) << 12) | ((group[1] as u32) << 6) | group[2] as u32;
-          data.push((val >> 10) as u8);
-          data.push(((val >> 2) & 0xFF) as u8);
+        if len == 4 {
+          data.push((src[0] << 2) | (src[1] >> 4));
+          data.push(((src[1] & 0x0F) << 4) | (src[2] >> 2));
+          data.push(((src[2] & 0x03) << 6) | src[3]);
           len = 0;
         }
       }
     }
-    if len == 2 {
-      data.push((group[0] << 2) | (group[1] >> 4));
+    if len > 1 {
+      data.push((src[0] << 2) | (src[1] >> 4));
+    }
+    if len > 2 {
+      data.push(((src[1] & 0x0F) << 4) | (src[2] >> 2));
     }
     // len == 1 is stray padding; no byte is recoverable.
     Some(data)
   }
 
-  /// An odd trailing byte becomes a 2-char group, leaving a short final line.
   pub fn encode(data: &[u8]) -> String {
     let mut out = String::new();
-    let mut col = 0usize;
-    for chunk in data.chunks(2) {
-      let b0 = chunk[0];
-      let b1 = *chunk.get(1).unwrap_or(&0);
-      let group = [b0 >> 2, ((b0 & 0x03) << 4) | (b1 >> 4), (b1 & 0x0F) << 2];
-      for &v in group.iter().take(chunk.len() + 1) {
+    let mut written = 0usize;
+    for pos in (0..data.len()).step_by(3) {
+      let rem = data.len() - pos;
+      let b0 = data[pos];
+      let b1 = data.get(pos + 1).copied().unwrap_or(0);
+      let b2 = data.get(pos + 2).copied().unwrap_or(0);
+      let dst = [
+        b0 >> 2,
+        ((b0 & 0x03) << 4) | (b1 >> 4),
+        ((b1 & 0x0F) << 2) | (b2 >> 6),
+        b2 & 0x3F,
+      ];
+      for &v in dst.iter().take((rem + 1).min(4)) {
         out.push((v + 33) as char);
-        col += 1;
-        if col == CHARS_PER_LINE {
+        written += 1;
+        if written == CHARS_PER_LINE && pos + 3 < data.len() {
+          written = 0;
           out.push('\n');
-          col = 0;
         }
       }
-    }
-    if col > 0 {
-      out.push('\n');
     }
     out
   }
@@ -81,8 +89,23 @@ mod uuencode {
 
     #[test]
     fn test_decode_known_vector() {
-      let lines = vec!["!\"#".to_string(), "ABC".to_string()];
-      assert_eq!(decode(&lines).unwrap(), vec![0, 16, 130, 24]);
+      let lines = vec!["!\"#A".to_string(), "BC".to_string()];
+      assert_eq!(decode(&lines).unwrap(), vec![0, 16, 160, 134]);
+    }
+
+    #[test]
+    fn test_decode_ignores_cr_lf_and_nul() {
+      // Aegisub-style "\r\n" line breaks and NUL padding are skipped.
+      let lines = vec!["!\"#\r".to_string(), "\nA\x00".to_string()];
+      assert_eq!(decode(&lines).unwrap(), vec![0, 16, 160]);
+    }
+
+    #[test]
+    fn test_round_trip_two_byte_tail_uses_three_chars() {
+      let data = vec![0xAB, 0xCD];
+      let lines: Vec<String> = encode(&data).lines().map(str::to_string).collect();
+      assert_eq!(lines, vec!["K]U".to_string()]);
+      assert_eq!(decode(&lines).unwrap(), data);
     }
 
     #[test]
@@ -430,6 +453,7 @@ pub fn to_string(
     for font in fonts {
       buf.push_str(&format!("fontname: {}\n", font.name));
       buf.push_str(&uuencode::encode(&font.data));
+      buf.push('\n');
     }
     buf.push('\n');
   }
@@ -627,6 +651,7 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
       writer
         .write_all(uuencode::encode(&font.data).as_bytes())
         .await?;
+      writer.write_all(b"\n").await?;
     }
     writer.write_all(b"\n").await?;
   }
@@ -751,22 +776,22 @@ mod tests {
     };
     assert_eq!(data.fonts.len(), 1);
     assert_eq!(data.fonts[0].name, "tiny.ttf");
-    assert_eq!(data.fonts[0].data, vec![0, 16, 130, 24]);
+    assert_eq!(data.fonts[0].data, vec![0, 16, 160, 134]);
     assert_eq!(data.subtitles.len(), 1);
   }
 
   #[test]
   fn test_parse_fonts_multiple_and_odd_byte_tail() {
-    // Second font exercises the 2-char group encoding a single byte.
-    let content = "[Script Info]\nScriptType: v4.00+\n\n[Fonts]\nfontname: a.ttf\n!\"#\nABC\nfontname: b.ttf\n!!!\n!!\n\n[Events]\n";
+    // Second font exercises the 2-char group encoding a single byte (0xAB).
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[Fonts]\nfontname: a.ttf\n!\"#\nABC\nfontname: b.ttf\nKQ\n\n[Events]\n";
     let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
       panic!("expected ASS");
     };
     assert_eq!(data.fonts.len(), 2);
     assert_eq!(data.fonts[0].name, "a.ttf");
-    assert_eq!(data.fonts[0].data, vec![0, 16, 130, 24]);
+    assert_eq!(data.fonts[0].data, vec![0, 16, 160, 134]);
     assert_eq!(data.fonts[1].name, "b.ttf");
-    assert_eq!(data.fonts[1].data, vec![0, 0, 0]);
+    assert_eq!(data.fonts[1].data, vec![0xAB]);
   }
 
   #[test]
