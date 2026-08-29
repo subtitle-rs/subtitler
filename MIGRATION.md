@@ -1,5 +1,27 @@
 # Migration Guide
 
+## 2.6 → 2.7
+
+### Breaking: `ass::to_string` / `ass::write_stream` gain a `fonts` parameter
+
+Embedded-font support (the ASS/SSA `[Fonts]` section) was added. Both
+serializers now take the font list to emit:
+
+```rust
+// Before
+ass::to_string(&info, &styles, &subs);
+ass::write_stream(&info, &styles, &subs, &mut writer).await?;
+
+// After
+ass::to_string(&info, &styles, &subs, &[]);
+ass::write_stream(&info, &styles, &subs, &[], &mut writer).await?;
+```
+
+- Pass `&[]` if you don't use embedded fonts.
+- Round-trip: `ass::parse_*` populates `AssData.fonts`; pass
+  `&data.fonts` to preserve them on output (empty fonts emit no
+  `[Fonts]` section, matching pre-2.7 output).
+
 ## 2.3 → 2.4
 
 ### Additions (non-breaking)
