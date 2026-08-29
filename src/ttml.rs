@@ -109,6 +109,7 @@ fn resolve_style(id: &str, styles: &HashMap<String, RawStyle>) -> StyleProps {
       }
       props.merge_from(&raw.props);
     }
+    visited.pop();
     props
   }
 
@@ -765,6 +766,25 @@ mod tests {
     // own props
     assert!(props.italic);
     assert!(!props.bold);
+    assert_eq!(props.color.as_deref(), Some("#FF0000"));
+  }
+
+  #[test]
+  fn test_diamond_style_inheritance_resolves_shared_parent_on_each_branch() {
+    // A -> [B, C], B -> [D], C -> [D]; D sets red, B overrides green.
+    // Each branch must re-resolve D: C's chain re-applies red over B's green.
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\">\
+      <head><styling>\
+      <style xml:id=\"d\" tts:color=\"#FF0000\"/>\
+      <style xml:id=\"b\" style=\"d\" tts:color=\"#00FF00\"/>\
+      <style xml:id=\"c\" style=\"d\"/>\
+      <style xml:id=\"a\" style=\"b c\"/>\
+      </styling></head>\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\" style=\"a\">Hi</p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    let props = file.subtitles()[0].style_props.as_ref().unwrap();
     assert_eq!(props.color.as_deref(), Some("#FF0000"));
   }
 
