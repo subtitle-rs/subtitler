@@ -448,16 +448,6 @@ pub fn to_string(
   }
   buf.push('\n');
 
-  if !fonts.is_empty() {
-    buf.push_str("[Fonts]\n");
-    for font in fonts {
-      buf.push_str(&format!("fontname: {}\n", font.name));
-      buf.push_str(&uuencode::encode(&font.data));
-      buf.push('\n');
-    }
-    buf.push('\n');
-  }
-
   buf.push_str("[Events]\n");
   buf.push_str("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n");
   for sub in subtitles {
@@ -479,6 +469,16 @@ pub fn to_string(
       "{}: {},{},{},{},{},{},{},{},{},{}\n",
       line_type, layer, start, end, style, actor, margin_l, margin_r, margin_v, effect, sub.text
     ));
+  }
+
+  if !fonts.is_empty() {
+    buf.push_str("[Fonts]\n");
+    for font in fonts {
+      buf.push_str(&format!("fontname: {}\n", font.name));
+      buf.push_str(&uuencode::encode(&font.data));
+      buf.push('\n');
+    }
+    buf.push('\n');
   }
 
   buf
