@@ -389,9 +389,13 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
       continue;
     }
 
+    // Style names from other formats (ASS, SubViewer) may contain spaces,
+    // but TTML ids are NCNames and `style` refs are whitespace-separated
+    // lists — so the emitted id must have whitespace mapped to '_'.
     let base = sub
       .style
-      .clone()
+      .as_deref()
+      .map(|s| s.replace(char::is_whitespace, "_"))
       .unwrap_or_else(|| format!("s{}", entries.len() + 1));
     let mut id = base.clone();
     let mut n = 2;
@@ -822,6 +826,34 @@ mod tests {
     assert!(out.contains("tts:fontFamily=\"Arial\""), "got: {}", out);
     assert!(out.contains("tts:fontWeight=\"bold\""), "got: {}", out);
     assert_eq!(out.matches("style=\"Custom\"").count(), 2, "got: {}", out);
+  }
+
+  #[test]
+  fn test_write_style_name_with_space_is_sanitized() {
+    // Style names from other formats (ASS, SubViewer) may contain spaces;
+    // TTML xml:id/style refs are whitespace-separated lists, so the
+    // serializer must not emit the raw name.
+    let props = StyleProps {
+      bold: true,
+      ..StyleProps::default()
+    };
+    let subs = vec![
+      Subtitle::new(1000, 2000, "a")
+        .with_style("Custom Style")
+        .with_style_props(props),
+    ];
+    let out = to_string(&subs, None);
+    assert!(out.contains("xml:id=\"Custom_Style\""), "got: {}", out);
+    assert!(out.contains("style=\"Custom_Style\""), "got: {}", out);
+    assert!(!out.contains("xml:id=\"Custom Style\""), "got: {}", out);
+    assert!(!out.contains("style=\"Custom Style\""), "got: {}", out);
+    // Sanitized document still resolves the style on reparse.
+    let reparsed = parse_content(&out).unwrap();
+    assert_eq!(
+      reparsed.subtitles()[0].style.as_deref(),
+      Some("Custom_Style")
+    );
+    assert!(reparsed.subtitles()[0].style_props.as_ref().unwrap().bold);
   }
 
   #[test]
