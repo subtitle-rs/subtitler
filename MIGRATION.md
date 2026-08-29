@@ -22,6 +22,23 @@ ass::write_stream(&info, &styles, &subs, &[], &mut writer).await?;
   `&data.fonts` to preserve them on output (empty fonts emit no
   `[Fonts]` section, matching pre-2.7 output).
 
+### Breaking: new public struct fields
+
+`Subtitle` gains `style_props: Option<StyleProps>` and `AssData` gains
+`fonts: Vec<AssFont>`. Code that constructs these structs with exhaustive
+struct literals or matches them exhaustively no longer compiles:
+
+```rust
+// Before
+Subtitle { start, end, text, .. };
+
+// After
+Subtitle { start, end, text, style_props: None, .. };
+```
+
+Fields are `Option`/`Vec` and default to `None`/empty; parsers set them
+automatically.
+
 ## 2.3 → 2.4
 
 ### Additions (non-breaking)
