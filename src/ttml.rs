@@ -6,12 +6,13 @@
 //! Uses `quick-xml` for streaming pull parsing — no DOM build.
 
 use crate::error::SubtitleError;
-use crate::model::{Format, Subtitle, SubtitleFile, TextPart};
+use crate::model::{Format, StyleProps, Subtitle, SubtitleFile, TextPart};
 use crate::types::AnyResult;
 use crate::utils::parse_timestamp;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 use smallvec::SmallVec;
+use std::collections::HashMap;
 use std::io::Cursor;
 
 /// Parse a TTML time value to milliseconds.
@@ -53,6 +54,166 @@ fn local_name(name: &[u8]) -> &[u8] {
   }
 }
 
+/// Raw `<style>` definition: own props plus parent style references.
+#[derive(Default)]
+struct RawStyle {
+  parents: Vec<String>,
+  props: StyleProps,
+  bold: Option<bool>,
+  italic: Option<bool>,
+  underline: Option<bool>,
+}
+
+fn merge_style_attribute(props: &mut StyleProps, key: &[u8], val: &str) {
+  match key {
+    b"fontFamily" => props.font_family = Some(val.to_string()),
+    b"fontSize" => props.font_size = Some(val.to_string()),
+    b"color" => props.color = Some(val.to_string()),
+    b"fontWeight" => props.bold = val == "bold",
+    b"fontStyle" => props.italic = val == "italic",
+    b"textDecoration" => props.underline = val.split_whitespace().any(|t| t == "underline"),
+    _ => {}
+  }
+}
+
+fn parse_style_tag(e: &BytesStart, styles: &mut HashMap<String, RawStyle>) {
+  let mut id = None;
+  let mut raw = RawStyle::default();
+  for attr in e.attributes().flatten() {
+    let key = local_name(attr.key.as_ref());
+    let val = String::from_utf8_lossy(&attr.value);
+    match key {
+      b"id" => id = Some(val.into_owned()),
+      b"style" => raw.parents = val.split_whitespace().map(str::to_string).collect(),
+      b"fontWeight" => raw.bold = Some(val == "bold"),
+      b"fontStyle" => raw.italic = Some(val == "italic"),
+      b"textDecoration" => raw.underline = Some(val.split_whitespace().any(|t| t == "underline")),
+      _ => merge_style_attribute(&mut raw.props, key, &val),
+    }
+  }
+  if let Some(id) = id {
+    styles.insert(id, raw);
+  }
+}
+
+/// Style with inheritance applied. Boolean flags stay tri-state during
+/// resolution so a later explicit `Some(false)` overrides an earlier
+/// `Some(true)`; they collapse to concrete bools only at the end.
+#[derive(Default)]
+struct ResolvedStyle {
+  props: StyleProps,
+  bold: Option<bool>,
+  italic: Option<bool>,
+  underline: Option<bool>,
+}
+
+impl ResolvedStyle {
+  /// `other` wins: `Some` fields overwrite, tri-state flags overwrite if set.
+  fn merge_from(&mut self, other: &ResolvedStyle) {
+    self.props.merge_from(&other.props);
+    if other.bold.is_some() {
+      self.bold = other.bold;
+    }
+    if other.italic.is_some() {
+      self.italic = other.italic;
+    }
+    if other.underline.is_some() {
+      self.underline = other.underline;
+    }
+  }
+
+  fn into_props(self) -> StyleProps {
+    let mut props = self.props;
+    props.bold = self.bold.unwrap_or(false);
+    props.italic = self.italic.unwrap_or(false);
+    props.underline = self.underline.unwrap_or(false);
+    props
+  }
+}
+
+/// Resolve a style id to its effective props, walking parent references.
+fn resolve_style(id: &str, styles: &HashMap<String, RawStyle>) -> ResolvedStyle {
+  fn recurse(
+    id: &str,
+    styles: &HashMap<String, RawStyle>,
+    visited: &mut Vec<String>,
+  ) -> ResolvedStyle {
+    let mut resolved = ResolvedStyle::default();
+    if visited.iter().any(|v| v == id) {
+      return resolved;
+    }
+    visited.push(id.to_string());
+    if let Some(raw) = styles.get(id) {
+      for parent in &raw.parents {
+        resolved.merge_from(&recurse(parent, styles, visited));
+      }
+      resolved.props.merge_from(&raw.props);
+      if raw.bold.is_some() {
+        resolved.bold = raw.bold;
+      }
+      if raw.italic.is_some() {
+        resolved.italic = raw.italic;
+      }
+      if raw.underline.is_some() {
+        resolved.underline = raw.underline;
+      }
+    }
+    visited.pop();
+    resolved
+  }
+
+  recurse(id, styles, &mut Vec::new())
+}
+
+struct ParagraphAttrs {
+  start: Option<u64>,
+  end: Option<u64>,
+  style: Option<String>,
+  props: StyleProps,
+}
+
+/// Read <p> attributes: timing, style references (resolved), and direct
+/// tts:* overrides (applied in a second pass so they win over references).
+fn read_paragraph_attrs(e: &BytesStart, styles: &HashMap<String, RawStyle>) -> ParagraphAttrs {
+  let mut out = ParagraphAttrs {
+    start: None,
+    end: None,
+    style: None,
+    props: StyleProps::default(),
+  };
+
+  let mut resolved = ResolvedStyle::default();
+  for attr in e.attributes().flatten() {
+    if local_name(attr.key.as_ref()) == b"style" {
+      let val = String::from_utf8_lossy(&attr.value);
+      for id in val.split_whitespace() {
+        if out.style.is_none() {
+          out.style = Some(id.to_string());
+        }
+
+        resolved.merge_from(&resolve_style(id, styles));
+      }
+    }
+  }
+  out.props = resolved.into_props();
+
+  for attr in e.attributes().flatten() {
+    let key = local_name(attr.key.as_ref());
+    let val = String::from_utf8_lossy(&attr.value);
+    match key {
+      b"begin" => out.start = ttml_to_ms(&val),
+      b"end" => out.end = ttml_to_ms(&val),
+      b"dur" if out.end.is_none() => {
+        if let (Some(s), Some(d)) = (out.start, ttml_to_ms(&val)) {
+          out.end = Some(s + d);
+        }
+      }
+      _ => merge_style_attribute(&mut out.props, key, &val),
+    }
+  }
+  out
+}
+
 /// Parse TTML content into a SubtitleFile.
 pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut reader = Reader::from_str(content);
@@ -60,15 +221,17 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut buf = Vec::new();
 
   let mut subtitles: Vec<Subtitle> = Vec::with_capacity((content.len() / 300).max(16));
+  // Assumes <head> precedes <body>, so style defs are known before <p> events.
+  let mut styles: HashMap<String, RawStyle> = HashMap::new();
   let mut in_p = false;
   let mut current_start: Option<u64> = None;
   let mut current_end: Option<u64> = None;
+  let mut current_style: Option<String> = None;
+  let mut current_props = StyleProps::default();
   let mut current_text = String::new();
   let mut parts: SmallVec<[TextPart; 4]> = SmallVec::new();
   let mut in_span = false;
-  let mut span_bold = false;
-  let mut span_italic = false;
-  let mut span_color: Option<String> = None;
+  let mut span_props = StyleProps::default();
 
   loop {
     match reader.read_event_into(&mut buf) {
@@ -79,37 +242,20 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
             in_p = true;
             current_text.clear();
             parts.clear();
-            current_start = None;
-            current_end = None;
-            for attr in e.attributes().flatten() {
-              let key = local_name(attr.key.as_ref());
-              let val = String::from_utf8_lossy(&attr.value);
-              match key {
-                b"begin" => current_start = ttml_to_ms(&val),
-                b"end" => current_end = ttml_to_ms(&val),
-                b"dur" if current_end.is_none() => {
-                  if let (Some(s), Some(d)) = (current_start, ttml_to_ms(&val)) {
-                    current_end = Some(s + d);
-                  }
-                }
-                _ => {}
-              }
-            }
+            let attrs = read_paragraph_attrs(e, &styles);
+            current_start = attrs.start;
+            current_end = attrs.end;
+            current_style = attrs.style;
+            current_props = attrs.props;
           }
+          b"style" => parse_style_tag(e, &mut styles),
           b"span" => {
             in_span = true;
-            span_bold = false;
-            span_italic = false;
-            span_color = None;
+            span_props = StyleProps::default();
             for attr in e.attributes().flatten() {
               let key = local_name(attr.key.as_ref());
               let val = String::from_utf8_lossy(&attr.value);
-              match key {
-                b"color" => span_color = Some(val.to_string()),
-                b"fontWeight" => span_bold = val == "bold",
-                b"fontStyle" => span_italic = val == "italic",
-                _ => {}
-              }
+              merge_style_attribute(&mut span_props, key, &val);
             }
           }
           b"br" if in_p => {
@@ -122,26 +268,17 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
         let tag = local_name(e.name().as_ref()).to_vec();
         if tag.as_slice() == b"br" && in_p {
           current_text.push('\n');
+        } else if tag.as_slice() == b"style" {
+          parse_style_tag(e, &mut styles);
         } else if tag.as_slice() == b"p" {
-          // Self-closing <p/> — parse begin/end/dur from attributes
-          let mut start = None;
-          let mut end = None;
-          for attr in e.attributes().flatten() {
-            let key = local_name(attr.key.as_ref());
-            let val = String::from_utf8_lossy(&attr.value);
-            match key {
-              b"begin" => start = ttml_to_ms(&val),
-              b"end" => end = ttml_to_ms(&val),
-              b"dur" if end.is_none() => {
-                if let (Some(s), Some(d)) = (start, ttml_to_ms(&val)) {
-                  end = Some(s + d);
-                }
-              }
-              _ => {}
+          let attrs = read_paragraph_attrs(e, &styles);
+          if let (Some(s), Some(e)) = (attrs.start, attrs.end) {
+            let mut sub = Subtitle::new(s, e, "");
+            sub.style = attrs.style;
+            if !attrs.props.is_default() {
+              sub.style_props = Some(attrs.props);
             }
-          }
-          if let (Some(s), Some(e)) = (start, end) {
-            subtitles.push(Subtitle::new(s, e, ""));
+            subtitles.push(sub);
           }
         }
       }
@@ -153,9 +290,14 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
         if in_p && !text.trim().is_empty() {
           let segment = text.to_string();
           current_text.push_str(&segment);
-          if in_span || span_bold || span_italic || span_color.is_some() {
-            let mut part = TextPart::new(&segment, span_bold, span_italic, false);
-            part.color = span_color.clone();
+          if in_span || !span_props.is_default() {
+            let mut part = TextPart::new(
+              &segment,
+              span_props.bold,
+              span_props.italic,
+              span_props.underline,
+            );
+            part.color = span_props.color.clone();
             parts.push(part);
           }
         }
@@ -167,6 +309,11 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
             if let (Some(start), Some(end)) = (current_start, current_end) {
               let mut sub = Subtitle::new(start, end, &current_text);
               sub.text_parts = std::mem::take(&mut parts);
+              sub.style = current_style.take();
+              let props = std::mem::take(&mut current_props);
+              if !props.is_default() {
+                sub.style_props = Some(props);
+              }
               subtitles.push(sub);
             }
             in_p = false;
@@ -175,9 +322,7 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           }
           b"span" => {
             in_span = false;
-            span_bold = false;
-            span_italic = false;
-            span_color = None;
+            span_props = StyleProps::default();
           }
           _ => {}
         }
@@ -260,7 +405,9 @@ pub async fn generate(
 /// `header`, if provided, is injected verbatim into a `<head>` block
 /// between `<tt>` and `<body>`. The caller is responsible for ensuring
 /// `header` is well-formed XML fragment (e.g. `<metadata>...</metadata>`).
-/// `None` omits the `<head>` block entirely.
+/// The `<head>` block is also emitted when any subtitle carries
+/// `style_props` — a `<styling>` block is generated from them and each
+/// `<p>` references its style by id.
 ///
 /// **Note**: the parse path does not yet round-trip the header back into
 /// `SubtitleFile::Ttml { header, .. }` (it stays `None`). Round-trip
@@ -280,22 +427,100 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   // Optional <head> block — inject header verbatim as escaped XML text.
   // BytesText::from_escaped prevents double-escaping of the caller's
   // already-formed XML fragment (e.g. "<metadata>...</metadata>").
-  if let Some(h) = header.filter(|s| !s.is_empty()) {
+  // Cue-level styles are collected from subtitle style_props, deduplicated
+  // by (style name, props) in first-appearance order, and emitted as
+  // <style> elements.
+  let mut entries: Vec<(String, StyleProps)> = Vec::new();
+  let mut sub_ids: Vec<Option<String>> = Vec::with_capacity(subtitles.len());
+  for sub in subtitles {
+    let Some(props) = sub.style_props.as_ref().filter(|p| !p.is_default()) else {
+      sub_ids.push(None);
+      continue;
+    };
+    // Reuse an existing style only when the cue's own style name matches
+    // the name that entry was created from; identical props under different
+    // names stay distinct so each cue keeps its style id on round-trip.
+    let name = sub
+      .style
+      .as_deref()
+      .map(|s| s.replace(char::is_whitespace, "_"));
+    if let Some((id, _)) = entries
+      .iter()
+      .find(|(existing_id, p)| p == props && name.as_deref().is_none_or(|n| existing_id == n))
+    {
+      sub_ids.push(Some(id.clone()));
+      continue;
+    }
+
+    // Style names from other formats (ASS, SubViewer) may contain spaces,
+    // but TTML ids are NCNames and `style` refs are whitespace-separated
+    // lists — so the emitted id must have whitespace mapped to '_'.
+    let base = name
+      .clone()
+      .unwrap_or_else(|| format!("s{}", entries.len() + 1));
+    let mut id = base.clone();
+    let mut n = 2;
+
+    // preventing collisions
+    while entries.iter().any(|(existing, _)| existing == &id) {
+      id = format!("{base}_{n}");
+      n += 1;
+    }
+
+    entries.push((id.clone(), props.clone()));
+    sub_ids.push(Some(id));
+  }
+
+  let header = header.filter(|s| !s.is_empty());
+  if header.is_some() || !entries.is_empty() {
     let _ = writer.write_event(Event::Start(BytesStart::new("head")));
-    let _ = writer.write_event(Event::Text(BytesText::from_escaped(h)));
+    if let Some(h) = header {
+      let _ = writer.write_event(Event::Text(BytesText::from_escaped(h)));
+    }
+    if !entries.is_empty() {
+      let _ = writer.write_event(Event::Start(BytesStart::new("styling")));
+      for (id, props) in &entries {
+        let mut style = BytesStart::new("style");
+        style.push_attribute(("xml:id", id.as_str()));
+        if let Some(ff) = &props.font_family {
+          style.push_attribute(("tts:fontFamily", ff.as_str()));
+        }
+        if let Some(fs) = &props.font_size {
+          style.push_attribute(("tts:fontSize", fs.as_str()));
+        }
+        if let Some(c) = &props.color {
+          style.push_attribute(("tts:color", c.as_str()));
+        }
+        if props.bold {
+          style.push_attribute(("tts:fontWeight", "bold"));
+        }
+        if props.italic {
+          style.push_attribute(("tts:fontStyle", "italic"));
+        }
+        if props.underline {
+          style.push_attribute(("tts:textDecoration", "underline"));
+        }
+        let _ = writer.write_event(Event::Empty(style));
+      }
+      let _ = writer.write_event(Event::End(BytesEnd::new("styling")));
+    }
     let _ = writer.write_event(Event::End(BytesEnd::new("head")));
   }
 
   let _ = writer.write_event(Event::Start(BytesStart::new("body")));
   let _ = writer.write_event(Event::Start(BytesStart::new("div")));
 
-  for sub in subtitles {
+  for (sub, style_id) in subtitles.iter().zip(&sub_ids) {
     let start = crate::utils::format_timestamp(sub.start, "WebVTT");
     let end = crate::utils::format_timestamp(sub.end, "WebVTT");
     // TTML uses '.' separator (same as WebVTT), no conversion needed
 
-    let p =
-      BytesStart::new("p").with_attributes([("begin", start.as_str()), ("end", end.as_str())]);
+    let mut p = BytesStart::new("p");
+    p.push_attribute(("begin", start.as_str()));
+    p.push_attribute(("end", end.as_str()));
+    if let Some(id) = style_id {
+      p.push_attribute(("style", id.as_str()));
+    }
     let _ = writer.write_event(Event::Start(p));
 
     if sub.text_parts.is_empty() {
@@ -306,6 +531,15 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
           let mut span = BytesStart::new("span");
           if let Some(ref color) = part.color {
             span.push_attribute(("tts:color", color.as_str()));
+          }
+          if part.bold() {
+            span.push_attribute(("tts:fontWeight", "bold"));
+          }
+          if part.italic() {
+            span.push_attribute(("tts:fontStyle", "italic"));
+          }
+          if part.underline() {
+            span.push_attribute(("tts:textDecoration", "underline"));
           }
           let _ = writer.write_event(Event::Start(span));
           let _ = writer.write_event(Event::Text(BytesText::new(&part.text)));
@@ -561,5 +795,237 @@ mod tests {
     // 01:00:00:00 → 3600*30 = 108000 frames = 3603604ms (non-drop)
     let ms = ttml_to_ms("01:00:00:00").unwrap();
     assert!(ms > 3_600_000 && ms < 3_610_000, "got {}", ms);
+  }
+
+  #[test]
+  fn test_parse_style_elements_resolve_on_p() {
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\">\
+      <head><styling>\
+      <style xml:id=\"base\" tts:fontFamily=\"Arial\" tts:fontSize=\"48px\"/>\
+      <style xml:id=\"em\" style=\"base\" tts:fontStyle=\"italic\" tts:color=\"#FF0000\"/>\
+      </styling></head>\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\" style=\"em\">Hello</p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    let sub = &file.subtitles()[0];
+    assert_eq!(sub.style.as_deref(), Some("em"));
+    let props = sub.style_props.as_ref().unwrap();
+    // inherited from base
+    assert_eq!(props.font_family.as_deref(), Some("Arial"));
+    assert_eq!(props.font_size.as_deref(), Some("48px"));
+    // own props
+    assert!(props.italic);
+    assert!(!props.bold);
+    assert_eq!(props.color.as_deref(), Some("#FF0000"));
+  }
+
+  #[test]
+  fn test_diamond_style_inheritance_resolves_shared_parent_on_each_branch() {
+    // A -> [B, C], B -> [D], C -> [D]; D sets red, B overrides green.
+    // Each branch must re-resolve D: C's chain re-applies red over B's green.
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\">\
+      <head><styling>\
+      <style xml:id=\"d\" tts:color=\"#FF0000\"/>\
+      <style xml:id=\"b\" style=\"d\" tts:color=\"#00FF00\"/>\
+      <style xml:id=\"c\" style=\"d\"/>\
+      <style xml:id=\"a\" style=\"b c\"/>\
+      </styling></head>\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\" style=\"a\">Hi</p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    let props = file.subtitles()[0].style_props.as_ref().unwrap();
+    assert_eq!(props.color.as_deref(), Some("#FF0000"));
+  }
+
+  #[test]
+  fn test_parse_p_direct_attrs_override_referenced_style() {
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\">\
+      <head><styling>\
+      <style xml:id=\"base\" tts:fontFamily=\"Arial\" tts:fontSize=\"48px\"/>\
+      </styling></head>\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\" style=\"base\" tts:fontSize=\"24px\">Hi</p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    let props = file.subtitles()[0].style_props.as_ref().unwrap();
+    assert_eq!(props.font_family.as_deref(), Some("Arial"));
+    assert_eq!(props.font_size.as_deref(), Some("24px"));
+  }
+
+  #[test]
+  fn test_style_inheritance_child_resets_inherited_bold() {
+    // tts:fontWeight="normal" on a child style must unset the parent's bold,
+    // matching how direct <p tts:fontWeight="normal"> overrides behave.
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\">\
+      <head><styling>\
+      <style xml:id=\"base\" tts:fontWeight=\"bold\" tts:fontStyle=\"italic\" tts:color=\"#FF0000\"/>\
+      <style xml:id=\"plain\" style=\"base\" tts:fontWeight=\"normal\"/>\
+      </styling></head>\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\" style=\"plain\">Hi</p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    let props = file.subtitles()[0].style_props.as_ref().unwrap();
+    assert!(
+      !props.bold,
+      "child style reset must win over inherited bold"
+    );
+    // untouched inherited props still apply
+    assert!(props.italic);
+    assert_eq!(props.color.as_deref(), Some("#FF0000"));
+  }
+
+  #[test]
+  fn test_parse_span_text_decoration_underline() {
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\">\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\"><span tts:textDecoration=\"underline\">U</span></p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    let parts = &file.subtitles()[0].text_parts;
+    assert_eq!(parts.len(), 1);
+    assert!(parts[0].underline());
+  }
+
+  #[test]
+  fn test_parse_self_closing_p_carries_style() {
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\">\
+      <head><styling>\
+      <style xml:id=\"s1\" tts:fontFamily=\"Courier\"/>\
+      </styling></head>\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\" style=\"s1\"/>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    let sub = &file.subtitles()[0];
+    assert_eq!(sub.style.as_deref(), Some("s1"));
+    assert_eq!(
+      sub.style_props.as_ref().unwrap().font_family.as_deref(),
+      Some("Courier")
+    );
+  }
+
+  #[test]
+  fn test_write_styling_block_and_p_refs() {
+    let props = StyleProps {
+      font_family: Some("Arial".into()),
+      bold: true,
+      ..StyleProps::default()
+    };
+    let subs = vec![
+      Subtitle::new(1000, 2000, "a")
+        .with_style("Custom")
+        .with_style_props(props.clone()),
+      // Same name + props: must reuse a single <style> entry.
+      Subtitle::new(3000, 4000, "b")
+        .with_style("Custom")
+        .with_style_props(props),
+    ];
+    let out = to_string(&subs, None);
+    assert!(out.contains("<styling>"), "got: {}", out);
+    assert_eq!(out.matches("xml:id=\"Custom\"").count(), 1, "got: {}", out);
+    assert!(out.contains("tts:fontFamily=\"Arial\""), "got: {}", out);
+    assert!(out.contains("tts:fontWeight=\"bold\""), "got: {}", out);
+    assert_eq!(out.matches("style=\"Custom\"").count(), 2, "got: {}", out);
+  }
+
+  #[test]
+  fn test_write_dedup_keeps_distinct_style_names() {
+    // Identical props under different style names must not collapse to one
+    // id: each cue keeps its own style name across a round-trip.
+    let props = StyleProps {
+      font_family: Some("Arial".into()),
+      bold: true,
+      ..StyleProps::default()
+    };
+    let subs = vec![
+      Subtitle::new(1000, 2000, "a")
+        .with_style("Red")
+        .with_style_props(props.clone()),
+      Subtitle::new(3000, 4000, "b")
+        .with_style("Crimson")
+        .with_style_props(props),
+    ];
+    let out = to_string(&subs, None);
+    assert!(out.contains("style=\"Red\""), "got: {}", out);
+    assert!(out.contains("style=\"Crimson\""), "got: {}", out);
+    let reparsed = parse_content(&out).unwrap();
+    let subs = reparsed.subtitles();
+    assert_eq!(
+      subs[0].style.as_deref(),
+      Some("Red"),
+      "got: {:?}",
+      subs[0].style
+    );
+    assert_eq!(
+      subs[1].style.as_deref(),
+      Some("Crimson"),
+      "got: {:?}",
+      subs[1].style
+    );
+    assert_eq!(subs[0].style_props, subs[1].style_props);
+  }
+
+  #[test]
+  fn test_write_style_name_with_space_is_sanitized() {
+    // Style names from other formats (ASS, SubViewer) may contain spaces;
+    // TTML xml:id/style refs are whitespace-separated lists, so the
+    // serializer must not emit the raw name.
+    let props = StyleProps {
+      bold: true,
+      ..StyleProps::default()
+    };
+    let subs = vec![
+      Subtitle::new(1000, 2000, "a")
+        .with_style("Custom Style")
+        .with_style_props(props),
+    ];
+    let out = to_string(&subs, None);
+    assert!(out.contains("xml:id=\"Custom_Style\""), "got: {}", out);
+    assert!(out.contains("style=\"Custom_Style\""), "got: {}", out);
+    assert!(!out.contains("xml:id=\"Custom Style\""), "got: {}", out);
+    assert!(!out.contains("style=\"Custom Style\""), "got: {}", out);
+    // Sanitized document still resolves the style on reparse.
+    let reparsed = parse_content(&out).unwrap();
+    assert_eq!(
+      reparsed.subtitles()[0].style.as_deref(),
+      Some("Custom_Style")
+    );
+    assert!(reparsed.subtitles()[0].style_props.as_ref().unwrap().bold);
+  }
+
+  #[test]
+  fn test_write_span_bold_italic_underline() {
+    let mut sub = Subtitle::new(1000, 2000, "x");
+    sub.text_parts.push(TextPart::new("x", true, true, true));
+    let out = to_string(&[sub], None);
+    assert!(out.contains("tts:fontWeight=\"bold\""), "got: {}", out);
+    assert!(out.contains("tts:fontStyle=\"italic\""), "got: {}", out);
+    assert!(
+      out.contains("tts:textDecoration=\"underline\""),
+      "got: {}",
+      out
+    );
+  }
+
+  #[test]
+  fn test_style_roundtrip() {
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\">\
+      <head><styling>\
+      <style xml:id=\"base\" tts:fontFamily=\"Arial\" tts:fontSize=\"48px\"/>\
+      <style xml:id=\"em\" style=\"base\" tts:fontStyle=\"italic\"/>\
+      </styling></head>\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\" style=\"em\">Hello</p>\
+      <p begin=\"00:00:03.000\" end=\"00:00:04.000\" style=\"base\">World</p>\
+      <p begin=\"00:00:05.000\" end=\"00:00:06.000\">Plain</p>\
+      </div></body></tt>";
+    let first = parse_content(content).unwrap();
+    let out = first.to_string();
+    assert!(out.contains("<styling>"), "got: {}", out);
+    let second = parse_content(&out).unwrap();
+    assert_eq!(first.subtitles(), second.subtitles());
   }
 }

@@ -62,6 +62,7 @@ proptest! {
       &std::collections::HashMap::new(),
       &[subtitler::model::AssStyle::default_style()],
       std::slice::from_ref(&sub),
+      &[],
     );
     let parsed = subtitler::ass::parse_content(&s).unwrap();
     prop_assert_eq!(parsed.subtitles().len(), 1);
