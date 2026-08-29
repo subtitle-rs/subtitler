@@ -376,7 +376,8 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
   // BytesText::from_escaped prevents double-escaping of the caller's
   // already-formed XML fragment (e.g. "<metadata>...</metadata>").
   // Cue-level styles are collected from subtitle style_props, deduplicated
-  // by props in first-appearance order, and emitted as <style> elements.
+  // by (style name, props) in first-appearance order, and emitted as
+  // <style> elements.
   let mut entries: Vec<(String, StyleProps)> = Vec::new();
   let mut sub_ids: Vec<Option<String>> = Vec::with_capacity(subtitles.len());
   for sub in subtitles {
@@ -384,7 +385,17 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
       sub_ids.push(None);
       continue;
     };
-    if let Some((id, _)) = entries.iter().find(|(_, p)| p == props) {
+    // Reuse an existing style only when the cue's own style name matches
+    // the name that entry was created from; identical props under different
+    // names stay distinct so each cue keeps its style id on round-trip.
+    let name = sub
+      .style
+      .as_deref()
+      .map(|s| s.replace(char::is_whitespace, "_"));
+    if let Some((id, _)) = entries
+      .iter()
+      .find(|(existing_id, p)| p == props && name.as_deref().is_none_or(|n| existing_id == n))
+    {
       sub_ids.push(Some(id.clone()));
       continue;
     }
@@ -392,10 +403,8 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     // Style names from other formats (ASS, SubViewer) may contain spaces,
     // but TTML ids are NCNames and `style` refs are whitespace-separated
     // lists — so the emitted id must have whitespace mapped to '_'.
-    let base = sub
-      .style
-      .as_deref()
-      .map(|s| s.replace(char::is_whitespace, "_"))
+    let base = name
+      .clone()
       .unwrap_or_else(|| format!("s{}", entries.len() + 1));
     let mut id = base.clone();
     let mut n = 2;
@@ -826,6 +835,43 @@ mod tests {
     assert!(out.contains("tts:fontFamily=\"Arial\""), "got: {}", out);
     assert!(out.contains("tts:fontWeight=\"bold\""), "got: {}", out);
     assert_eq!(out.matches("style=\"Custom\"").count(), 2, "got: {}", out);
+  }
+
+  #[test]
+  fn test_write_dedup_keeps_distinct_style_names() {
+    // Identical props under different style names must not collapse to one
+    // id: each cue keeps its own style name across a round-trip.
+    let props = StyleProps {
+      font_family: Some("Arial".into()),
+      bold: true,
+      ..StyleProps::default()
+    };
+    let subs = vec![
+      Subtitle::new(1000, 2000, "a")
+        .with_style("Red")
+        .with_style_props(props.clone()),
+      Subtitle::new(3000, 4000, "b")
+        .with_style("Crimson")
+        .with_style_props(props),
+    ];
+    let out = to_string(&subs, None);
+    assert!(out.contains("style=\"Red\""), "got: {}", out);
+    assert!(out.contains("style=\"Crimson\""), "got: {}", out);
+    let reparsed = parse_content(&out).unwrap();
+    let subs = reparsed.subtitles();
+    assert_eq!(
+      subs[0].style.as_deref(),
+      Some("Red"),
+      "got: {:?}",
+      subs[0].style
+    );
+    assert_eq!(
+      subs[1].style.as_deref(),
+      Some("Crimson"),
+      "got: {:?}",
+      subs[1].style
+    );
+    assert_eq!(subs[0].style_props, subs[1].style_props);
   }
 
   #[test]
