@@ -102,6 +102,14 @@ impl AssStyle {
   }
 }
 
+/// An embedded font from the `[Fonts]` section of an ASS/SSA file.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct AssFont {
+  pub name: String,
+  /// Decoded binary font data (e.g. raw TTF/OTF bytes).
+  pub data: Vec<u8>,
+}
+
 /// Shared ASS/SSA structure. Used by both the `Ass` (v4+) and `Ssa` (v4)
 /// variants of `SubtitleFile`, which differ only in their `format()` tag.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -110,5 +118,7 @@ pub struct AssData {
   pub info: std::collections::HashMap<String, String>,
   #[serde(skip_serializing_if = "Vec::is_empty", default)]
   pub styles: Vec<AssStyle>,
+  #[serde(skip_serializing_if = "Vec::is_empty", default)]
+  pub fonts: Vec<AssFont>,
   pub subtitles: Vec<super::subtitle::Subtitle>,
 }

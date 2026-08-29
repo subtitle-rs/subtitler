@@ -292,18 +292,19 @@ impl SubtitleFormat for SubtitleFile {
 
 #[cfg(any(feature = "ass", feature = "ssa"))]
 fn ass_to_string_impl(file: &SubtitleFile, subs: &[Subtitle]) -> String {
-  let (info, styles) = match file {
+  let (info, styles, fonts) = match file {
     #[cfg(feature = "ass")]
-    SubtitleFile::Ass(data) => (data.info.clone(), data.styles.clone()),
+    SubtitleFile::Ass(data) => (data.info.clone(), data.styles.clone(), data.fonts.clone()),
     #[cfg(feature = "ssa")]
-    SubtitleFile::Ssa(data) => (data.info.clone(), data.styles.clone()),
+    SubtitleFile::Ssa(data) => (data.info.clone(), data.styles.clone(), data.fonts.clone()),
     #[allow(unreachable_patterns)]
     _ => (
       std::collections::HashMap::new(),
       vec![super::types::AssStyle::default_style()],
+      Vec::new(),
     ),
   };
-  crate::ass::to_string(&info, &styles, subs)
+  crate::ass::to_string(&info, &styles, subs, &fonts)
 }
 
 impl SubtitleFile {

@@ -16,7 +16,7 @@ pub use format::{Format, SubtitleFile};
 pub use streaming::StreamingParser;
 pub use subtitle::{Subtitle, TextFormat, TextPart};
 pub use r#trait::SubtitleFormat;
-pub use types::{AssData, AssStyle, Timestamp, WritePolicy};
+pub use types::{AssData, AssFont, AssStyle, Timestamp, WritePolicy};
 pub use validation::ValidationIssue;
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use crate::error::SubtitleError;
 use crate::model::convert::{MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND};
-use crate::model::{AssData, AssStyle, Format, Subtitle, SubtitleFile};
+use crate::model::{AssData, AssFont, AssStyle, Format, Subtitle, SubtitleFile};
 use crate::types::AnyResult;
 use regex::Regex;
 use std::collections::HashMap;
@@ -19,6 +19,134 @@ static RE_STYLE: LazyLock<Regex> = LazyLock::new(|| {
 static RE_INFO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([^:]+):\s*(.*)").unwrap());
 
 static RE_ASS_TAG_INLINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{([^}]*)\}").unwrap());
+
+/// SubStation Alpha's uuencode-like binary encoding
+mod uuencode {
+  const CHARS_PER_LINE: usize = 80;
+
+  fn decode_char(b: u8) -> Option<u8> {
+    b.checked_sub(33).filter(|&v| v < 64)
+  }
+
+  pub fn decode(lines: &[String]) -> Option<Vec<u8>> {
+    let mut data = Vec::new();
+    let mut src = [0u8; 4];
+    let mut len = 0;
+    for line in lines {
+      for &b in line.as_bytes() {
+        if b == 0 || b == b'\n' || b == b'\r' {
+          continue;
+        }
+        src[len] = decode_char(b)?;
+        len += 1;
+        if len == 4 {
+          data.push((src[0] << 2) | (src[1] >> 4));
+          data.push(((src[1] & 0x0F) << 4) | (src[2] >> 2));
+          data.push(((src[2] & 0x03) << 6) | src[3]);
+          len = 0;
+        }
+      }
+    }
+    if len > 1 {
+      data.push((src[0] << 2) | (src[1] >> 4));
+    }
+    if len > 2 {
+      data.push(((src[1] & 0x0F) << 4) | (src[2] >> 2));
+    }
+    // len == 1 is stray padding; no byte is recoverable.
+    Some(data)
+  }
+
+  pub fn encode(data: &[u8]) -> String {
+    let mut out = String::new();
+    let mut written = 0usize;
+    for pos in (0..data.len()).step_by(3) {
+      let rem = data.len() - pos;
+      let b0 = data[pos];
+      let b1 = data.get(pos + 1).copied().unwrap_or(0);
+      let b2 = data.get(pos + 2).copied().unwrap_or(0);
+      let dst = [
+        b0 >> 2,
+        ((b0 & 0x03) << 4) | (b1 >> 4),
+        ((b1 & 0x0F) << 2) | (b2 >> 6),
+        b2 & 0x3F,
+      ];
+      for &v in dst.iter().take((rem + 1).min(4)) {
+        out.push((v + 33) as char);
+        written += 1;
+        if written == CHARS_PER_LINE && pos + 3 < data.len() {
+          written = 0;
+          out.push('\n');
+        }
+      }
+    }
+    out
+  }
+
+  #[cfg(test)]
+  mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_known_vector() {
+      let lines = vec!["!\"#A".to_string(), "BC".to_string()];
+      assert_eq!(decode(&lines).unwrap(), vec![0, 16, 160, 134]);
+    }
+
+    #[test]
+    fn test_decode_ignores_cr_lf_and_nul() {
+      // Aegisub-style "\r\n" line breaks and NUL padding are skipped.
+      let lines = vec!["!\"#\r".to_string(), "\nA\x00".to_string()];
+      assert_eq!(decode(&lines).unwrap(), vec![0, 16, 160]);
+    }
+
+    #[test]
+    fn test_round_trip_two_byte_tail_uses_three_chars() {
+      let data = vec![0xAB, 0xCD];
+      let lines: Vec<String> = encode(&data).lines().map(str::to_string).collect();
+      assert_eq!(lines, vec!["K]U".to_string()]);
+      assert_eq!(decode(&lines).unwrap(), data);
+    }
+
+    #[test]
+    fn test_decode_rejects_out_of_range_char() {
+      let lines = vec!["! !".to_string()]; // space (32) is below '!'
+      assert_eq!(decode(&lines), None);
+    }
+
+    #[test]
+    fn test_decode_accepts_backtick() {
+      // '`' (96) encodes value 63 — the top of the range.
+      let lines = vec!["```".to_string()];
+      assert_eq!(decode(&lines).unwrap(), vec![255, 255]);
+    }
+
+    #[test]
+    fn test_round_trip_odd_length_across_line_wrap() {
+      let data: Vec<u8> = (0..=255u8).cycle().take(997).collect();
+      let encoded = encode(&data);
+      let lines: Vec<String> = encoded.lines().map(str::to_string).collect();
+      assert!(lines[..lines.len() - 1].iter().all(|l| l.len() == 80));
+      assert!(lines.last().unwrap().len() < 80);
+      assert_eq!(decode(&lines).unwrap(), data);
+    }
+
+    #[test]
+    fn test_round_trip_single_byte_uses_two_char_tail() {
+      let data = vec![0xAB];
+      let lines: Vec<String> = encode(&data).lines().map(str::to_string).collect();
+      assert_eq!(lines.len(), 1);
+      assert_eq!(lines[0].len(), 2);
+      assert_eq!(decode(&lines).unwrap(), data);
+    }
+
+    #[test]
+    fn test_round_trip_empty() {
+      assert_eq!(encode(&[]), "");
+      assert_eq!(decode(&[]).unwrap(), Vec::<u8>::new());
+    }
+  }
+}
 
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   if let Some(text) = crate::encoding::try_decode_for_detection(data) {
@@ -122,6 +250,19 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let estimated_subs = (content.len() / 300).max(32);
   let mut styles = Vec::new();
   let mut subtitles: Vec<Subtitle> = Vec::with_capacity(estimated_subs);
+  let mut fonts = Vec::new();
+  let mut font_name: Option<String> = None;
+  let mut font_lines: Vec<String> = Vec::new();
+
+  let mut flush_font = |font_name: &mut Option<String>, font_lines: &mut Vec<String>| {
+    if let Some(name) = font_name.take() {
+      if let Some(data) = uuencode::decode(font_lines) {
+        fonts.push(AssFont { name, data });
+      }
+      font_lines.clear();
+    }
+  };
+
   let mut section = Section::None;
 
   for line in content.lines() {
@@ -131,11 +272,14 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
     }
 
     if trimmed.starts_with('[') && trimmed.ends_with(']') {
+      flush_font(&mut font_name, &mut font_lines);
+
       let section_name = &trimmed[1..trimmed.len() - 1].to_lowercase();
       section = match section_name.as_str() {
         "script info" => Section::Info,
         "v4+ styles" | "v4 styles" => Section::Styles,
         "events" => Section::Events,
+        "fonts" => Section::Fonts,
         _ => Section::Other,
       };
       continue;
@@ -165,14 +309,24 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           subtitles.push(subtitle);
         }
       }
+      Section::Fonts => {
+        if let Some(name) = trimmed.strip_prefix("fontname:") {
+          flush_font(&mut font_name, &mut font_lines);
+          font_name = Some(name.trim().to_string());
+        } else if font_name.is_some() {
+          font_lines.push(trimmed.to_string());
+        }
+      }
       Section::Other => {}
       Section::None => {}
     }
   }
 
+  flush_font(&mut font_name, &mut font_lines);
   Ok(SubtitleFile::Ass(AssData {
     info,
     styles,
+    fonts,
     subtitles,
   }))
 }
@@ -201,6 +355,7 @@ enum Section {
   Info,
   Styles,
   Events,
+  Fonts,
   Other,
 }
 
@@ -228,7 +383,12 @@ pub async fn generate(
   file_path: impl AsRef<std::path::Path>,
   policy: Option<crate::model::WritePolicy>,
 ) -> AnyResult<String> {
-  let content = to_string(&HashMap::new(), &[AssStyle::default_style()], subtitles);
+  let content = to_string(
+    &HashMap::new(),
+    &[AssStyle::default_style()],
+    subtitles,
+    &[],
+  );
   let path = file_path.as_ref();
   crate::io::write_with_policy(path, content.as_bytes(), policy).await?;
   Ok(path.to_string_lossy().into_owned())
@@ -238,6 +398,7 @@ pub fn to_string(
   info: &HashMap<String, String>,
   styles: &[AssStyle],
   subtitles: &[Subtitle],
+  fonts: &[AssFont],
 ) -> String {
   let mut buf = String::new();
 
@@ -308,6 +469,16 @@ pub fn to_string(
       "{}: {},{},{},{},{},{},{},{},{},{}\n",
       line_type, layer, start, end, style, actor, margin_l, margin_r, margin_v, effect, sub.text
     ));
+  }
+
+  if !fonts.is_empty() {
+    buf.push_str("[Fonts]\n");
+    for font in fonts {
+      buf.push_str(&format!("fontname: {}\n", font.name));
+      buf.push_str(&uuencode::encode(&font.data));
+      buf.push('\n');
+    }
+    buf.push('\n');
   }
 
   buf
@@ -417,6 +588,7 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
   info: &HashMap<String, String>,
   styles: &[AssStyle],
   subtitles: &[Subtitle],
+  fonts: &[AssFont],
   writer: &mut W,
 ) -> AnyResult<()> {
   // Write [Script Info]
@@ -469,6 +641,20 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
     writer.write_all(line.as_bytes()).await?;
   }
   writer.write_all(b"\n").await?;
+
+  if !fonts.is_empty() {
+    writer.write_all(b"[Fonts]\n").await?;
+    for font in fonts {
+      writer
+        .write_all(format!("fontname: {}\n", font.name).as_bytes())
+        .await?;
+      writer
+        .write_all(uuencode::encode(&font.data).as_bytes())
+        .await?;
+      writer.write_all(b"\n").await?;
+    }
+    writer.write_all(b"\n").await?;
+  }
 
   // Write [Events]
   writer.write_all(b"[Events]\n").await?;
@@ -580,5 +766,58 @@ mod tests {
     assert!(parsed.subtitles()[0].is_comment);
     // Text must be "Visible text" even though "Comment" appears in the Effect column
     assert_eq!(parsed.subtitles()[0].text, "Visible text");
+  }
+
+  #[test]
+  fn test_parse_fonts_section() {
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[Fonts]\nfontname: tiny.ttf\n!\"#\nABC\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hi\n";
+    let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
+      panic!("expected ASS");
+    };
+    assert_eq!(data.fonts.len(), 1);
+    assert_eq!(data.fonts[0].name, "tiny.ttf");
+    assert_eq!(data.fonts[0].data, vec![0, 16, 160, 134]);
+    assert_eq!(data.subtitles.len(), 1);
+  }
+
+  #[test]
+  fn test_parse_fonts_multiple_and_odd_byte_tail() {
+    // Second font exercises the 2-char group encoding a single byte (0xAB).
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[Fonts]\nfontname: a.ttf\n!\"#\nABC\nfontname: b.ttf\nKQ\n\n[Events]\n";
+    let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
+      panic!("expected ASS");
+    };
+    assert_eq!(data.fonts.len(), 2);
+    assert_eq!(data.fonts[0].name, "a.ttf");
+    assert_eq!(data.fonts[0].data, vec![0, 16, 160, 134]);
+    assert_eq!(data.fonts[1].name, "b.ttf");
+    assert_eq!(data.fonts[1].data, vec![0xAB]);
+  }
+
+  #[test]
+  fn test_parse_fonts_skips_malformed_payload() {
+    let content =
+      "[Script Info]\nScriptType: v4.00+\n\n[Fonts]\nfontname: bad.ttf\n! !#\n\n[Events]\n";
+    let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
+      panic!("expected ASS");
+    };
+    assert!(data.fonts.is_empty());
+  }
+
+  #[test]
+  fn test_fonts_round_trip_via_to_string() {
+    // Odd length on purpose: crosses the 80-char wrap and ends on a 2-char group.
+    let data: Vec<u8> = (0..=255u8).cycle().take(997).collect();
+    let fonts = vec![AssFont {
+      name: "big.ttf".into(),
+      data: data.clone(),
+    }];
+    let out = to_string(&HashMap::new(), &[], &[], &fonts);
+    assert!(out.contains("[Fonts]\nfontname: big.ttf\n"));
+    let SubtitleFile::Ass(parsed) = parse_content(&out).unwrap() else {
+      panic!("expected ASS");
+    };
+    assert_eq!(parsed.fonts.len(), 1);
+    assert_eq!(parsed.fonts[0].data, data);
   }
 }
