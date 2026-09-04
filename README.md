@@ -170,6 +170,7 @@ pub struct Subtitle {
     pub style: Option<String>,    // style name reference
     pub actor: Option<String>,    // speaker/actor name
     pub is_comment: bool,         // comment flag
+    pub style_props: Option<StyleProps>, // resolved cue styling (font family/size, color, bold/italic/underline)
 }
 
 pub struct TextPart {
@@ -186,6 +187,11 @@ pub struct AssStyle {
     pub primary_color: String,
     pub secondary_color: String,
     // ... 23 fields total
+}
+
+pub struct AssFont {
+    pub name: String,
+    pub data: Vec<u8>, // decoded TTF/OTF bytes from the [Fonts] section
 }
 
 pub enum SubtitleFile {
@@ -238,7 +244,7 @@ pub enum SubtitleFile {
 | `parse_file(path)` | Parse ASS/SSA from file (async) |
 | `parse_bytes(data)` | Parse ASS/SSA from byte slice |
 | `parse_url(url)` | Parse ASS/SSA from HTTP URL (requires `http` feature) |
-| `to_string(info, styles, subtitles)` | Format as ASS string |
+| `to_string(info, styles, subtitles, fonts)` | Format as ASS string (`fonts`: embedded `[Fonts]` entries, pass `&[]` for none) |
 | `detect_format(data)` | Detect if data is ASS/SSA |
 
 ### MicroDVD Module (`subtitler::microdvd`)

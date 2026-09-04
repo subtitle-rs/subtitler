@@ -188,6 +188,8 @@ fn handle_index_or_ts(
       style: None,
       actor: None,
       is_comment: false,
+      style_props: None,
+      position: None,
     });
     *phase = Phase::Timestamp;
   } else if trimmed.contains("-->") {
@@ -333,6 +335,8 @@ impl<'a> Iterator for SrtStream<'a> {
               style: None,
               actor: None,
               is_comment: false,
+              style_props: None,
+              position: None,
             });
             self.phase = Phase::Timestamp;
           } else if trimmed.contains("-->") {
@@ -496,6 +500,8 @@ mod tests {
       style: None,
       actor: None,
       is_comment: false,
+      style_props: None,
+      position: None,
     }
   }
 

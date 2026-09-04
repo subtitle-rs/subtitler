@@ -100,6 +100,7 @@ impl SubtitleFileBuilder {
         } else {
           self.styles
         },
+        fonts: Vec::new(),
         subtitles: self.subtitles,
       })),
 
@@ -111,6 +112,7 @@ impl SubtitleFileBuilder {
         } else {
           self.styles
         },
+        fonts: Vec::new(),
         subtitles: self.subtitles,
       })),
 

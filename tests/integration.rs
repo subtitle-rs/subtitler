@@ -520,6 +520,8 @@ fn test_subtitle_serde_round_trip() {
     style: None,
     actor: None,
     is_comment: false,
+    style_props: None,
+    position: None,
   };
   let json = serde_json::to_string(&sub).unwrap();
   let parsed: Subtitle = serde_json::from_str(&json).unwrap();
@@ -685,6 +687,77 @@ fn test_parse_ass_tags_italic() {
   let parts = subtitler::ass::parse_ass_tags("{\\i1}Italic{\\i0}");
   assert_eq!(parts.len(), 1);
   assert!(parts[0].italic());
+}
+
+#[test]
+fn test_parse_ass_tags_primary_color() {
+  // \1c (and legacy \c) set the primary color; ASS &HBBGGRR → #RRGGBB.
+  let parts = subtitler::ass::parse_ass_tags("{\\1c&HFF0000&}blue {\\c&H00FF00&}green");
+  assert_eq!(parts.len(), 2);
+  assert_eq!(parts[0].color.as_deref(), Some("#0000FF"));
+  assert_eq!(parts[1].color.as_deref(), Some("#00FF00"));
+}
+
+#[test]
+fn test_parse_ass_tags_reset() {
+  let parts = subtitler::ass::parse_ass_tags("{\\b1\\1c&HFF0000&}styled {\\r}plain");
+  assert_eq!(parts.len(), 2);
+  assert!(parts[0].bold());
+  assert!(!parts[1].bold());
+  assert_eq!(parts[1].color, None);
+}
+
+#[test]
+fn test_parse_ass_tags_transform_skipped() {
+  // Tags inside \t(...) are animated and must not become permanent state;
+  // the transform itself is stripped.
+  let parts =
+    subtitler::ass::parse_ass_tags("{\\t(0,100,1.00,\\b1\\4c&HFFFFFF&)\\fad(0,500)}Hello");
+  assert_eq!(parts.len(), 1);
+  assert_eq!(parts[0].text, "Hello");
+  assert!(!parts[0].bold());
+  assert_eq!(parts[0].color, None);
+}
+
+#[test]
+fn test_parse_ass_tags_typesetting_stripped() {
+  let parts = subtitler::ass::parse_ass_tags(
+    "{\\an5\\pos(395.77,131.50)\\fad(200,200)\\alpha&HFE&\\4a&H00&\\yshad0.001\\xshad-81\\4c&HFFFFFF&\\bord0\\blur0.5\\fscx65\\fscy65\\org(0,0)}C",
+  );
+  assert_eq!(parts.len(), 1);
+  assert_eq!(parts[0].text, "C");
+  assert_eq!(parts[0].color.as_deref(), Some("#FFFFFF"));
+}
+
+#[test]
+fn test_parse_ass_tags_drawing_mode() {
+  // \p1 turns the cue text into vector drawing commands: no visible text.
+  // A single empty part is returned so writers don't fall back to the raw
+  // commands.
+  let parts = subtitler::ass::parse_ass_tags("{\\p1\\pos(10,10)\\bord0}m 0 0 l 5 0 l 5 5");
+  assert_eq!(parts.len(), 1);
+  assert_eq!(parts[0].text, "");
+}
+
+#[test]
+fn test_parse_ass_tags_tags_only_cue() {
+  // A cue whose text is only override blocks (common for whitespace glyphs
+  // in typeset karaoke) has no visible text; writers must not fall back to
+  // the raw tag syntax.
+  let parts = subtitler::ass::parse_ass_tags("{\\an5\\pos(649.08,83.00)\\fad(200,200)\\blur0.5}");
+  assert_eq!(parts.len(), 1);
+  assert_eq!(parts[0].text, "");
+}
+
+#[test]
+fn test_parse_dialogue_populates_text_parts() {
+  let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: ...\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,{\\an5\\pos(100,200)\\fad(0,500)}Hello {\\b1}World\n";
+  let file = subtitler::ass::parse_content(content).unwrap();
+  let sub = &file.subtitles()[0];
+  assert!(sub.text.contains("{\\an5"));
+  let joined: String = sub.text_parts.iter().map(|p| p.text.as_str()).collect();
+  assert_eq!(joined, "Hello World");
+  assert!(sub.text_parts.iter().any(|p| p.bold() && p.text == "World"));
 }
 
 // ── Normalize tests ──
