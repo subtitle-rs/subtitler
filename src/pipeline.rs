@@ -94,6 +94,20 @@ impl SubtitleBuilder {
     subs.dedup_by(|a, b| a.text.trim() == b.text.trim());
     self
   }
+
+  /// Collapse runs of consecutive identical-text subtitles (roll-up repair),
+  /// spanning the kept cue across the whole run.
+  pub fn remove_repeating_lines(mut self) -> Self {
+    self.file.remove_repeating_lines();
+    self
+  }
+
+  /// Merge identical-text subtitles whose gap is at most `max_gap_ms`
+  /// (overlapping duplicates always merge).
+  pub fn merge_identical(mut self, max_gap_ms: u64) -> Self {
+    self.file.merge_identical(max_gap_ms);
+    self
+  }
 }
 
 /// A single pipeline operation.
@@ -112,6 +126,8 @@ pub enum PipelineOp {
   AutoExtendCps { max_cps: f64 },
   FilterEmpty,
   RemoveDuplicates,
+  RemoveRepeatingLines,
+  MergeIdentical { max_gap_ms: u64 },
 }
 
 /// A declarative pipeline of subtitle transformation operations.
@@ -216,6 +232,18 @@ impl Pipeline {
     self
   }
 
+  pub fn remove_repeating_lines(mut self) -> Self {
+    self.operations.push(PipelineOp::RemoveRepeatingLines);
+    self
+  }
+
+  pub fn merge_identical(mut self, max_gap_ms: u64) -> Self {
+    self
+      .operations
+      .push(PipelineOp::MergeIdentical { max_gap_ms });
+    self
+  }
+
   pub fn apply(&self, file: SubtitleFile) -> SubtitleFile {
     let mut builder = SubtitleBuilder::from(file);
     for op in &self.operations {
@@ -235,6 +263,8 @@ impl Pipeline {
           builder
         }
         PipelineOp::RemoveDuplicates => builder.remove_duplicates(),
+        PipelineOp::RemoveRepeatingLines => builder.remove_repeating_lines(),
+        PipelineOp::MergeIdentical { max_gap_ms } => builder.merge_identical(*max_gap_ms),
       };
     }
     builder.build()
@@ -470,5 +500,85 @@ mod tests {
       "after enforcement no TooShortGap should remain: {:?}",
       issues
     );
+  }
+
+  #[test]
+  fn test_remove_repeating_lines_collapses_rollup_run() {
+    // SCC-style roll-up: the same line repeated as it grows.
+    let file = SubtitleFile::Srt(vec![
+      make_sub(2000, 3000, "hello"),
+      make_sub(0, 1000, "hello"),
+      make_sub(1000, 2000, "hello"),
+    ]);
+    let result = SubtitleBuilder::from(file).remove_repeating_lines().build();
+    let subs = result.subtitles();
+    assert_eq!(subs.len(), 1);
+    assert_eq!(subs[0].start, 0);
+    assert_eq!(subs[0].end, 3000, "kept cue spans the whole run");
+    assert_eq!(subs[0].text, "hello");
+  }
+
+  #[test]
+  fn test_remove_repeating_lines_keeps_non_adjacent_repeats() {
+    let file = SubtitleFile::Srt(vec![
+      make_sub(0, 1000, "hi"),
+      make_sub(1000, 2000, "yo"),
+      make_sub(2000, 3000, "hi"),
+    ]);
+    let result = SubtitleBuilder::from(file).remove_repeating_lines().build();
+    assert_eq!(result.subtitles().len(), 3);
+  }
+
+  #[test]
+  fn test_merge_identical_overlapping_duplicates() {
+    // Conversion artifact: the same cue exported twice, times offset.
+    let file = SubtitleFile::Srt(vec![
+      make_sub(0, 2000, "same text"),
+      make_sub(1000, 3000, "same text"),
+    ]);
+    let result = SubtitleBuilder::from(file).merge_identical(0).build();
+    let subs = result.subtitles();
+    assert_eq!(subs.len(), 1);
+    assert_eq!(subs[0].start, 0);
+    assert_eq!(subs[0].end, 3000);
+  }
+
+  #[test]
+  fn test_merge_identical_respects_gap_threshold() {
+    // 500 ms apart, threshold 500 → merged; threshold 499 → kept apart.
+    let mk = || {
+      SubtitleFile::Srt(vec![
+        make_sub(0, 1000, "line"),
+        make_sub(1500, 2000, "line"),
+      ])
+    };
+    let merged = SubtitleBuilder::from(mk()).merge_identical(500).build();
+    assert_eq!(merged.subtitles().len(), 1);
+    assert_eq!(merged.subtitles()[0].end, 2000);
+
+    let kept = SubtitleBuilder::from(mk()).merge_identical(499).build();
+    assert_eq!(kept.subtitles().len(), 2);
+  }
+
+  #[test]
+  fn test_merge_identical_keeps_distant_chorus() {
+    let file = SubtitleFile::Srt(vec![
+      make_sub(0, 1000, "chorus"),
+      make_sub(60_000, 61_000, "chorus"),
+    ]);
+    let result = SubtitleBuilder::from(file).merge_identical(500).build();
+    assert_eq!(result.subtitles().len(), 2);
+  }
+
+  #[test]
+  fn test_dedup_ops_serialize_round_trip() {
+    let pipeline = Pipeline::new()
+      .remove_repeating_lines()
+      .merge_identical(250);
+    let json = serde_json::to_string(&pipeline).unwrap();
+    assert!(json.contains("RemoveRepeatingLines"));
+    assert!(json.contains("MergeIdentical"));
+    let parsed: Pipeline = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.operations.len(), 2);
   }
 }

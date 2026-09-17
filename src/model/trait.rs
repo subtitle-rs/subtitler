@@ -217,6 +217,49 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
     }
   }
 
+  /// Repair roll-up style captions: collapse each run of consecutive
+  /// (in time order) subtitles with identical text into a single cue
+  /// spanning the whole run. Only *adjacent* duplicates collapse — the
+  /// same line recurring later (song chorus) is intentional repetition
+  /// and survives.
+  fn remove_repeating_lines(&mut self) {
+    self.sort();
+    let subs = self.subtitles_mut();
+    let mut write = 0;
+    for read in 1..subs.len() {
+      if subs[read].text.trim() == subs[write].text.trim() {
+        subs[write].end = subs[write].end.max(subs[read].end);
+      } else {
+        write += 1;
+        subs.swap(write, read);
+      }
+    }
+    subs.truncate(write + 1);
+  }
+
+  /// Merge consecutive subtitles with identical text whose gap is at most
+  /// `max_gap_ms` into one cue spanning the union of their time ranges.
+  /// Overlapping duplicates have a saturated gap of 0 and always merge.
+  /// Unlike `remove_repeating_lines`, this keeps repeated lines that are
+  /// separated by more than the threshold — the caller decides what
+  /// counts as "the same moment".
+  fn merge_identical(&mut self, max_gap_ms: u64) {
+    self.sort();
+    let subs = self.subtitles_mut();
+    let mut write = 0;
+    for read in 1..subs.len() {
+      let same_text = subs[read].text.trim() == subs[write].text.trim();
+      let gap = subs[read].start.saturating_sub(subs[write].end);
+      if same_text && gap <= max_gap_ms {
+        subs[write].end = subs[write].end.max(subs[read].end);
+      } else {
+        write += 1;
+        subs.swap(write, read);
+      }
+    }
+    subs.truncate(write + 1);
+  }
+
   fn auto_extend_for_cps(&mut self, max_cps: f64) {
     self.sort();
     let subs = self.subtitles_mut();
