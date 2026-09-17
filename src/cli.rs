@@ -376,6 +376,11 @@ pub struct ConvertArgs {
   /// Shift all timestamps by milliseconds (positive = delay, negative = advance)
   #[arg(long, allow_hyphen_values = true)]
   pub shift: Option<i64>,
+
+  /// For Whisper JSON input: build cues from the word-level timestamps
+  /// instead of the segments (merge word-by-word transcript into subtitle)
+  #[arg(long)]
+  pub from_words: bool,
 }
 
 /// Validate subtitle timing and text quality.

@@ -231,7 +231,25 @@ async fn cmd_convert(args: cli::ConvertArgs) -> AnyResult<()> {
     .ok_or_else(|| anyhow::anyhow!("Cannot detect source format. Use --from to specify."))?;
   let to = resolve_output_format(&args.output, args.to)?;
 
-  let mut file = parse_to_file(&data, from).await?;
+  let mut file = if args.from_words {
+    #[cfg(feature = "whisper")]
+    {
+      if !matches!(from, CliFormat::Whisper) {
+        anyhow::bail!("--from-words requires Whisper JSON input.");
+      }
+      let text = subtitler::encoding::decode_to_string(&data)?;
+      subtitler::whisper::parse_content_as_words(
+        &text,
+        &subtitler::whisper::WordGroupingOptions::default(),
+      )?
+    }
+    #[cfg(not(feature = "whisper"))]
+    {
+      anyhow::bail!("--from-words requires the `whisper` feature.");
+    }
+  } else {
+    parse_to_file(&data, from).await?
+  };
 
   if let Some(shift) = args.shift {
     file.shift_all(shift);
