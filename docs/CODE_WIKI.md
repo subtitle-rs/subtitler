@@ -102,6 +102,7 @@
      ├──── types.rs      (AnyResult 别名)
      ├──── normalize.rs  (文本规范化)
      ├──── quality.rs    (质量分析 + Translator trait)
+     ├──── guidelines.rs (广播机构规范预设，validate --guideline)
      ├──── pipeline.rs   (Pipeline + SubtitleBuilder DSL，v2.0+)
      └──── wasm.rs       (#[wasm_bindgen] 浏览器 API，v2.0+)
 ```
@@ -154,6 +155,7 @@ subtitler/
 │   ├── types.rs            # AnyResult 类型别名
 │   ├── normalize.rs        # 文本规范化
 │   ├── quality.rs          # 质量报告 + Translator trait
+│   ├── guidelines.rs       # 广播机构规范预设（Netflix/BBC/TED/ARD/C4）
 │   │
 │   ├── srt.rs              # 格式: SRT
 │   ├── vtt.rs              # 格式: WebVTT
@@ -428,6 +430,14 @@ v2.0 起拆分为 9 个子模块：
 | `strip_hearing_impaired` | 移除听障标签 `(LAUGHS)` / `[APPLAUSE]` / `♪` / 说话人标签 |
 | `optimize_line_breaks` | 在自然边界智能断行 |
 | `normalize_text` / `normalize_subtitle` | 组合规范化 |
+| `remove_other_language_chars` | 21 语种字符过滤（只滤字母，保留标点/emoji）|
+| `filter_language` | 语言码（en/zh/ja/ko/ar/he）薄包装；v2.4.0 起不再误删标点 |
+| `merge_short_lines` | 相邻短行合并（≤ max_chars）|
+| `remove_all_newlines` | 所有换行替换为空格并折叠 |
+| `replace_newlines` | 换行替换为自定义分隔符 |
+| `fix_opening_hyphen_spacing` | 对话破折号补空格（`-Hello` → `- Hello`）|
+| `normalize_all_caps` | 全大写 cue → 句子大小写（启发式，实验）|
+| `remove_text_between` | 删除 open…close 区间（含标记，非贪婪）|
 
 ### 5.9 [quality.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/quality.rs) — 质量分析
 
@@ -487,6 +497,17 @@ CLI 入口：`subtitler pipeline input.srt output.vtt --config ops.json`。
 
 浏览器 demo 在 `examples/wasm/`（`index.html` 拖拽式）。**注意**：WASM 函数当前 0 测试覆盖（路线图 2.3 修）。
 
+
+### 5.13 [guidelines.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/guidelines.rs) — 广播机构规范预设（QC 批次）
+
+| 项 | 内容 |
+|------|------|
+| `Guideline` | 规范参数包：每行字符数 / 行数 / 最短最长时长 / 最小间隙 / CPS；`0` = 该项不检查 |
+| `GuidelinePreset` | Netflix（42/2 行/833–7000ms/2 帧/20 CPS）、BBC（37/17 CPS）、TED（42/21 CPS/1–7s）、ARD-ORF-SRF-ZDF（37/15 CPS/1–4s）、Channel4（38/19 CPS）；数值逐条对照各机构官方 Style Guide |
+| `validate(subs, guideline)` | 按规范检查（每行字符数按**行**计、间隙检查跳过重叠对）|
+| `SubtitleFormat::validate_guideline` | `validate()` 结构性检查 + 规范检查一键组合 |
+| `ValidationIssue` 新变体 | `TooShortDuration` / `TooLongDuration` / `TooShortGap` / `LineCountExceeded` |
+| CLI | `subtitler validate --guideline netflix\|bbc\|ted\|ard\|channel4`（替代 --max-* 阈值）|
 ---
 
 ## 6. 关键类与函数说明

@@ -25,7 +25,28 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **`SubtitleFormat::merge_identical(max_gap_ms)`** (+ `PipelineOp::MergeIdentical`):
   merge identical-text cues within a gap threshold (overlapping duplicates
   always merge; a chorus repeated much later is preserved).
+- **21-language character filter** (`normalize::Language` +
+  `remove_other_language_chars`): strips letters that do not occur in the
+  kept language(s) — Netflix/BBC-style editingtools.io language list plus
+  Chinese. Only alphabetic characters are filtered; digits, punctuation,
+  symbols and emoji survive. CLI: `normalize --filter-language <lang>
+  [--second-language <lang>]`.
+- **normalize cleanup extensions**: `fix_opening_hyphen_spacing`
+  (`-Hello` → `- Hello`), `normalize_all_caps` (ALL-CAPS cues → sentence
+  case, experimental), `remove_text_between(open, close)` (inclusive,
+  non-greedy span removal). CLI flags `--fix-hyphens`, `--fix-caps`,
+  `--remove-between OPEN CLOSE`, plus exposure of the v2.4.0 library-only
+  helpers as `--merge-short-lines`, `--remove-linebreaks`,
+  `--linebreaks-to-pipe`.
 - CLI `about` text corrected: 13 → 15 formats.
+
+### Changed
+
+- **`normalize::filter_language` no longer strips punctuation.** It is now
+  a thin wrapper over `remove_other_language_chars` (letters only are
+  filtered); the v2.4.0 implementation also dropped non-ASCII punctuation
+  and symbols. Its supported codes (`en`/`zh`/`ja`/`ko`/`ar`/`he`) are
+  unchanged; the European language set is available via `Language` directly.
 
 ### Fixed
 
