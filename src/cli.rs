@@ -241,7 +241,7 @@ impl From<&GuidelinePreset> for subtitler::guidelines::GuidelinePreset {
 #[derive(Parser)]
 #[command(name = "subtitler")]
 #[command(
-  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 13 formats."
+  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 15 formats."
 )]
 #[command(version)]
 pub struct Cli {

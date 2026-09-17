@@ -8,7 +8,34 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
+- **Broadcaster guideline presets** (`guidelines` module): Netflix / BBC /
+  TED / ARD-ORF-SRF-ZDF / Channel 4 rule sets verified against each
+  broadcaster's published style guide. `SubtitleFormat::validate_guideline()`
+  composes structural timing checks with the preset (per-line length, line
+  count, duration bounds, minimum gap, reading speed). CLI:
+  `subtitler validate --guideline netflix|bbc|ted|ard|channel4`.
+- **4 new `ValidationIssue` variants**: `TooShortDuration`,
+  `TooLongDuration`, `TooShortGap`, `LineCountExceeded`.
+- **`SubtitleFormat::enforce_min_gap(min_gap_ms)`** (+ `PipelineOp::EnforceMinGap`):
+  guarantee a minimum gap between cues by pulling back the earlier cue's end;
+  start times stay fixed, impossible pairs are left for validation to report.
+- **`SubtitleFormat::remove_repeating_lines()`** (+ `PipelineOp::RemoveRepeatingLines`):
+  roll-up caption repair — collapse adjacent identical-text cues into one
+  cue spanning the run.
+- **`SubtitleFormat::merge_identical(max_gap_ms)`** (+ `PipelineOp::MergeIdentical`):
+  merge identical-text cues within a gap threshold (overlapping duplicates
+  always merge; a chorus repeated much later is preserved).
+- CLI `about` text corrected: 13 → 15 formats.
+
+### Fixed
+
+- **Flaky SRT/VTT round-trip proptests**: the `arb_subtitle` text strategy's
+  comment claimed to exclude `& < >`, but the character class `\x20-\x7E`
+  never actually did. When the RNG generated tag-bearing text, SRT/VTT parse
+  normalized the tags into `text_parts` and the exact-text assertion failed
+  (reproduced with minimal input `"<i>!"` after several green runs). The
+  class now genuinely excludes those three bytes; tag round-trip through
+  text_parts rendering remains future work.
 
 ## [2.6.1] - 2026-07-18
 

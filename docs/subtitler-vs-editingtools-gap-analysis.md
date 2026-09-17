@@ -4,6 +4,8 @@
 > 分析基准：subtitler（工作树 Cargo.toml v2.1.0，13 格式，344 测试基线参考 AGENTS §8）
 > 参考来源：https://editingtools.io/subtitles/（Subtitle Tool & Converter V 0.76，英文原版 + 中文版交叉核对）
 > 状态：完整版（v2，补充首轮遗漏的 6 个功能域）
+>
+> **⚠️ 状态核对（2026-09-17 实施时修正）**：首轮代码分析基于 7 月的 v2.1.0 快照（13 格式），而当前工作树实为 **v2.6.1 / 15 格式**——**DFXP 与 Whisper JSON 已于 v2.4.0 实现**（含检测、parse/generate、CLI、测试）。下文相应条目已标注"已实现"；P1 剩余项（guidelines 预设 / min-gap / dedup 双语义）已在 `feature/p1-gap-analysis` 分支落地。
 
 ---
 
@@ -42,8 +44,8 @@ editingtools.io 的转换是三向的：**输入（From）/ 输出（Convert To�
 
 | 格式 | 说明 | 建议优先级 | 实现思路 |
 |------|------|:---------:|---------|
-| **DFXP** (.dfxp) | W3C Distribution Format Exchange Profile，TTML 前身，namespace 不同结构几乎一致 | 🔴 P1 | 与 `ttml.rs` 复用 ~90%，新增 `detect_format` 判断 `xmlns:tt="http://www.w3.org/2006/04/ttaf1"` |
-| **Whisper AI Transcript** (.json) | OpenAI Whisper 转录 JSON（`segments[]: {start, end, text, id}`，秒为单位的浮点） | 🔴 P1 | serde 结构体直映射 `SubtitleFile`；注意秒→毫秒 ×1000；serde_json 已是现有依赖 |
+| **DFXP** (.dfxp) | W3C Distribution Format Exchange Profile，TTML 前身，namespace 不同结构几乎一致 | ✅ **已实现**（v2.4.0，`dfxp.rs`，与 TTML 复用解析） |
+| **Whisper AI Transcript** (.json) | OpenAI Whisper 转录 JSON（`segments[]: {start, end, text, id}`，秒为单位的浮点） | ✅ **已实现**（v2.4.0，`whisper.rs`，含 round-trip） |
 | **iTT (iTunes Timed Text)** (.itt) | Apple iTunes Store/TV 交付规范，IMSC1 profile，带严格校验规则（字体/区域/阅读速度约束） | 🟡 P2 | TTML/IMSC 家族第三成员，复用 `ttml.rs` 底座 + 额外校验层；对标 editingtools 输出项 |
 | **Whisper Subtitles** (.srt) | Whisper 生成的 SRT 变体 | 🟡 P2 | srt 模块容忍性解析即可覆盖，验证现有解析器是否兼容 |
 
@@ -175,15 +177,15 @@ subtitler：完全空白。这是连接 §2.3 guideline 预设的自然延伸，
 
 ## 3. 缺口严重性分级
 
-### 🔴 P1 — 立即着手（低投入高回报，合计 ~3 天）
+### 🔴 P1 — 立即着手（低投入高回报）
 
-| # | 缺口 | 估算 | 落点 |
-|---|------|------|------|
-| 1 | **GuidelinePreset 规范预设**（Netflix/BBC/TED/ARD/Channel4 参数包 + TooShortGap/LineCountExceeded/TooShortDuration 3 个新 ValidationIssue） | 1 天 | `quality.rs` / `model/validation.rs` |
-| 2 | **Remove repeating lines + Merge identical subtitles**（两个 dedup 语义都要） | 0.5 天 | 2 个新 PipelineOp |
-| 3 | **enforce_min_gap**（强制最小间隙，配 TooShortGap 验证） | 0.5 天 | `model/trait.rs` + PipelineOp |
-| 4 | **DFXP 格式** | 0.5 天 | `ttml.rs` 家族 |
-| 5 | **Whisper JSON 导入** | 0.5 天 | 新模块，serde 直映射 |
+| # | 缺口 | 估算 | 落点 | 状态 |
+|---|------|------|------|------|
+| 1 | **GuidelinePreset 规范预设**（Netflix/BBC/TED/ARD/Channel4 参数包 + TooShortGap/LineCountExceeded/TooShortDuration 3 个新 ValidationIssue） | 1 天 | `guidelines.rs` / `model/validation.rs` | ✅ 已落地（`validate_guideline` + CLI `--guideline`） |
+| 2 | **Remove repeating lines + Merge identical subtitles**（两个 dedup 语义都要） | 0.5 天 | 2 个新 PipelineOp | ✅ 已落地（`RemoveRepeatingLines` + `MergeIdentical`） |
+| 3 | **enforce_min_gap**（强制最小间隙，配 TooShortGap 验证） | 0.5 天 | `model/trait.rs` + PipelineOp | ✅ 已落地（`EnforceMinGap`） |
+| 4 | **DFXP 格式** | 0.5 天 | `ttml.rs` 家族 | ✅ 上游 v2.4.0 已实现 |
+| 5 | **Whisper JSON 导入** | 0.5 天 | 新模块，serde 直映射 | ✅ 上游 v2.4.0 已实现 |
 
 ### 🟡 P2 — 中期（专业场景，合计 ~1.5 周）
 
@@ -308,11 +310,12 @@ editingtools 一半的格式面是 NLE 标记/标题互转（Premiere/FCP/Avid/R
 
 ```
 近期版本（正确性/格式主题）
-├── P1#4 DFXP + P1#5 Whisper JSON        （格式增量，~1 天，随任一 minor 搭车）
-└── P1#1 GuidelinePreset + P1#3 min_gap  （QC 主题，1.5 天，一个 minor 的主打）
+├── P1#4 DFXP + P1#5 Whisper JSON        ✅ 上游 v2.4.0 已实现
+└── P1#1 GuidelinePreset + P1#3 min_gap  ✅ 已落地（feature/p1-gap-analysis）
 
 中期版本（专业场景主题）
-├── P1#2 dedup 双语义 + P2#6 语言过滤 + P2#7 normalize 包（清理主题）
+├── P1#2 dedup 双语义                    ✅ 已落地（feature/p1-gap-analysis）
+├── P2#6 语言过滤 + P2#7 normalize 包（清理主题）
 ├── P2#8 DF 感知变换 + P2#9 roll-up（帧格式正确性主题）
 └── P2#10 词级合并 + P2#12 iTT + P2#13 Spruce STL（AI 交付/母版主题）
 
@@ -342,14 +345,14 @@ editingtools 一半的格式面是 NLE 标记/标题互转（Premiere/FCP/Avid/R
 
 ## 7. Quick Summary
 
-> subtitler 格式广度领先（13 vs ~11 核心格式），工程底座（Pipeline/验证/normalize/streaming/WASM）全面强于 editingtools 的转换器。
+> subtitler 格式广度领先（15 vs ~11 核心格式），工程底座（Pipeline/验证/normalize/streaming/WASM）全面强于 editingtools 的转换器。
 >
 > **本轮深挖新发现的三大专业缺口**（v1 报告未覆盖）：
 > 1. **广播规范预设**（Netflix/BBC/TED/ARD/Channel4）——验证体系从"参数面板"升级为"一键规范体检"，这是专业付费场景的入场券，且实现成本低；
 > 2. **最小间隙**（TooShortGap）——验证和强制两侧全缺，而它是 Netflix 规范的硬性条款；
 > 3. **Shot change 规则**——Netflix 规范的另一半，只需 EDL 只读解析 + 纯时序计算。
 >
-> 加上 v1 已识别的 **DFXP/Whisper JSON（~1 天）**、**dedup 双语义** 和 **AI 翻译 adapter（trait 已就绪）**，P1 清单合计约 3 天工作量，建议按 §5 依赖链排序分两批落地。
+> **落地进度（2026-09-17）**：P1 全部完成——guidelines 预设、enforce_min_gap、dedup 双语义在 `feature/p1-gap-analysis` 分支落地（24 个新测试）；DFXP/Whisper JSON 上游 v2.4.0 已实现。下一批建议：语言过滤器 + normalize 扩展包（清理主题），然后 DF 感知变换（依赖链最后一环）。
 
 ---
 
