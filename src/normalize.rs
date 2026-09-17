@@ -148,39 +148,141 @@ pub fn optimize_line_breaks(text: &str, max_chars: usize) -> String {
   result_parts.join("\n")
 }
 
+// ── Language character filtering ──
+
+/// Languages selectable for character filtering, mirroring the language
+/// list of editingtools.io's subtitle cleaner plus Chinese. Used by
+/// [`remove_other_language_chars`] to strip letters that do not occur in
+/// any kept language.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Language {
+  English,
+  Spanish,
+  French,
+  German,
+  Italian,
+  Polish,
+  Portuguese,
+  Finnish,
+  Norwegian,
+  Swedish,
+  Danish,
+  Turkish,
+  Vietnamese,
+  Ukrainian,
+  Russian,
+  Hebrew,
+  Arabic,
+  Thai,
+  Japanese,
+  Korean,
+  Chinese,
+}
+
+/// Basic Latin letters. Included only for Latin-script languages —
+/// selecting e.g. Chinese or Japanese must strip Latin letters (the main
+/// bilingual-cleanup use case), matching editingtools.io's behavior.
+const LATIN_BASE: &[(char, char)] = &[('A', 'Z'), ('a', 'z')];
+/// Latin-1 Supplement letters (ä ö ü ß é ñ ç ã å ø …).
+const LATIN_1: &[(char, char)] = &[('\u{C0}', '\u{FF}')];
+/// Latin Extended-A (Polish ą ć ę ł, Turkish ğ ı ş, Vietnamese đ ơ ư, œ …).
+const LATIN_EXT_A: &[(char, char)] = &[('\u{100}', '\u{17F}')];
+/// Latin Extended Additional (Vietnamese tone-marked vowels ạ ế ộ …).
+const LATIN_EXT_ADD: &[(char, char)] = &[('\u{1E00}', '\u{1EFF}')];
+/// Cyrillic + Cyrillic Supplement.
+const CYRILLIC: &[(char, char)] = &[('\u{400}', '\u{52F}')];
+/// Hebrew block.
+const HEBREW: &[(char, char)] = &[('\u{590}', '\u{5FF}')];
+/// Arabic block.
+const ARABIC: &[(char, char)] = &[('\u{600}', '\u{6FF}')];
+/// Thai block.
+const THAI: &[(char, char)] = &[('\u{E00}', '\u{E7F}')];
+const HIRAGANA: &[(char, char)] = &[('\u{3041}', '\u{309F}')];
+const KATAKANA: &[(char, char)] = &[('\u{30A0}', '\u{30FF}')];
+/// CJK Unified Ideographs + Extension A.
+const HAN: &[(char, char)] = &[('\u{3400}', '\u{4DBF}'), ('\u{4E00}', '\u{9FFF}')];
+/// Hangul Jamo + Compatibility Jamo + Syllables.
+const HANGUL: &[(char, char)] = &[
+  ('\u{1100}', '\u{11FF}'),
+  ('\u{3130}', '\u{318F}'),
+  ('\u{AC00}', '\u{D7A3}'),
+];
+
+impl Language {
+  /// Unicode blocks whose letters occur in this language.
+  fn letter_ranges(self) -> &'static [&'static [(char, char)]] {
+    match self {
+      Language::English => &[LATIN_BASE],
+      Language::Spanish
+      | Language::French
+      | Language::German
+      | Language::Italian
+      | Language::Polish
+      | Language::Portuguese
+      | Language::Finnish
+      | Language::Norwegian
+      | Language::Swedish
+      | Language::Danish
+      | Language::Turkish => &[LATIN_BASE, LATIN_1, LATIN_EXT_A],
+      Language::Vietnamese => &[LATIN_BASE, LATIN_1, LATIN_EXT_A, LATIN_EXT_ADD],
+      Language::Ukrainian | Language::Russian => &[CYRILLIC],
+      Language::Hebrew => &[HEBREW],
+      Language::Arabic => &[ARABIC],
+      Language::Thai => &[THAI],
+      Language::Japanese => &[HIRAGANA, KATAKANA, HAN],
+      Language::Korean => &[HANGUL, HAN],
+      Language::Chinese => &[HAN],
+    }
+  }
+}
+
+/// Remove letters that do not occur in any of `keep`.
+///
+/// Only *alphabetic* characters are filtered: digits, whitespace,
+/// punctuation, symbols and emoji are never touched, so e.g. CJK or
+/// Arabic punctuation survives an English filter. Unicode block ranges
+/// are coarse — a stray letter from an unlisted block of the same script
+/// family may survive, but the common cases (mixed bilingual subtitles)
+/// clean up correctly.
+pub fn remove_other_language_chars(text: &str, keep: &[Language]) -> String {
+  if keep.is_empty() {
+    return text.to_string();
+  }
+  let groups: Vec<&[(char, char)]> = keep
+    .iter()
+    .flat_map(|lang| lang.letter_ranges().iter().copied())
+    .collect();
+  text
+    .chars()
+    .filter(|c| {
+      if !c.is_alphabetic() {
+        return true;
+      }
+      groups
+        .iter()
+        .any(|ranges| ranges.iter().any(|&(lo, hi)| (lo..=hi).contains(c)))
+    })
+    .collect()
+}
+
 /// Filter text to keep only characters from a specified language Unicode block.
 ///
-/// Supported `lang`: `"en"` (Latin), `"zh"` (CJK Unified), `"ja"` (CJK +
-/// Hiragana + Katakana), `"ko"` (CJK + Hangul), `"ar"` (Arabic), `"he"`
-/// (Hebrew). Unknown `lang` returns the input unchanged.
+/// `lang` is an ISO-style code: `"en"`, `"zh"`, `"ja"`, `"ko"`, `"ar"`,
+/// `"he"` map to the corresponding [`Language`]; for the wider European
+/// set use [`remove_other_language_chars`] with [`Language`] directly.
+/// Unknown `lang` returns the input unchanged. Since v2.4.0 this no
+/// longer strips punctuation — only letters are filtered.
 pub fn filter_language(text: &str, lang: &str) -> String {
-  let keep = match lang {
-    "en" => |c: char| {
-      c.is_ascii_alphabetic() || c.is_ascii_digit() || c.is_ascii_punctuation() || c == ' '
-    },
-    "zh" => |c: char| {
-      ('\u{4E00}'..='\u{9FFF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
-    },
-    "ja" => |c: char| {
-      ('\u{4E00}'..='\u{9FFF}').contains(&c)
-        || ('\u{3040}'..='\u{309F}').contains(&c)
-        || ('\u{30A0}'..='\u{30FF}').contains(&c)
-        || c.is_ascii_digit()
-        || c == ' '
-        || c == '\n'
-    },
-    "ko" => |c: char| {
-      ('\u{AC00}'..='\u{D7AF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
-    },
-    "ar" => |c: char| {
-      ('\u{0600}'..='\u{06FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
-    },
-    "he" => |c: char| {
-      ('\u{0590}'..='\u{05FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
-    },
+  let language = match lang {
+    "en" => Language::English,
+    "zh" => Language::Chinese,
+    "ja" => Language::Japanese,
+    "ko" => Language::Korean,
+    "ar" => Language::Arabic,
+    "he" => Language::Hebrew,
     _ => return text.to_string(),
   };
-  text.chars().filter(|&c| keep(c)).collect()
+  remove_other_language_chars(text, &[language])
 }
 
 /// Merge short lines (≤ `max_chars` characters) by removing newlines within
@@ -241,6 +343,83 @@ pub fn remove_all_newlines(text: &str) -> String {
 /// Replace all newlines with a custom separator string.
 pub fn replace_newlines(text: &str, separator: &str) -> String {
   text.lines().collect::<Vec<_>>().join(separator)
+}
+
+/// Ensure a dialogue dash at the start of a line is followed by a space:
+/// `-Hello` becomes `- Hello`. Only an ASCII `-` as the first
+/// non-whitespace character of a line and directly followed by a letter is
+/// touched — already-spaced dashes, minus signs and bullet dashes stay as
+/// they are (broadcast style guides, e.g. Netflix, require the spaced form).
+pub fn fix_opening_hyphen_spacing(text: &str) -> String {
+  text
+    .split('\n')
+    .map(|line| {
+      let indent = line.len() - line.trim_start().len();
+      let rest = &line[indent..];
+      let mut chars = rest.chars();
+      if let (Some('-'), Some(c)) = (chars.next(), chars.next()) {
+        if c.is_alphabetic() {
+          return format!("{}- {}", &line[..indent], &rest['-'.len_utf8()..]);
+        }
+      }
+      line.to_string()
+    })
+    .collect::<Vec<_>>()
+    .join("\n")
+}
+
+/// Convert an ALL-CAPS cue to sentence case (editingtools' "Caps lock to
+/// normal casing", experimental there too). Returns the input unchanged
+/// unless every alphabetic character is uppercase; sentence starts — cue
+/// start, after `. ! ?`, and at line starts — get an initial capital.
+/// Heuristic: a lone "I" mid-sentence becomes lowercase "i".
+pub fn normalize_all_caps(text: &str) -> String {
+  let letters: Vec<char> = text.chars().filter(|c| c.is_alphabetic()).collect();
+  if letters.is_empty() || letters.iter().any(|c| c.is_lowercase()) {
+    return text.to_string();
+  }
+  let lower = text.to_lowercase();
+  let mut out = String::with_capacity(lower.len());
+  let mut capitalize = true;
+  for c in lower.chars() {
+    if capitalize && c.is_alphabetic() {
+      out.extend(c.to_uppercase());
+      capitalize = false;
+    } else {
+      if matches!(c, '.' | '!' | '?' | '\n') {
+        capitalize = true;
+      }
+      out.push(c);
+    }
+  }
+  out
+}
+
+/// Remove every `open … close` span (markers included). Non-greedy: each
+/// span ends at the first `close` after its `open`. An `open` without a
+/// matching `close` is left in place. Generalizes the bracket patterns
+/// hardcoded in [`strip_hearing_impaired`] — e.g. `remove_text_between(
+/// text, "[", "]")`.
+pub fn remove_text_between(text: &str, open: &str, close: &str) -> String {
+  if open.is_empty() || close.is_empty() {
+    return text.to_string();
+  }
+  let mut out = String::with_capacity(text.len());
+  let mut rest = text;
+  while let Some(start) = rest.find(open) {
+    out.push_str(&rest[..start]);
+    let after_open = &rest[start + open.len()..];
+    match after_open.find(close) {
+      Some(end) => rest = &after_open[end + close.len()..],
+      None => {
+        // Unmatched open: keep it (and the remainder) verbatim.
+        out.push_str(&rest[start..]);
+        return out;
+      }
+    }
+  }
+  out.push_str(rest);
+  out
 }
 
 /// Find the best word boundary to split a sequence of words.
@@ -383,6 +562,123 @@ mod tests {
   fn test_filter_language_chinese() {
     let input = "Hello 你好 World 世界";
     assert_eq!(filter_language(input, "zh"), " 你好  世界");
+  }
+
+  #[test]
+  fn test_filter_language_keeps_punctuation() {
+    // Non-ASCII punctuation and emoji survive — only letters are filtered.
+    assert_eq!(filter_language("¡Hola! 你好… 🎬", "en"), "¡Hola! … 🎬");
+  }
+
+  #[test]
+  fn test_filter_language_unknown_code_unchanged() {
+    assert_eq!(filter_language("Hello 你好", "xx"), "Hello 你好");
+  }
+
+  #[test]
+  fn test_remove_other_language_chars_mixed_scripts() {
+    use Language::*;
+    // Russian strips Latin base and Han — selecting a non-Latin language
+    // removes Latin letters (the main bilingual-cleanup use case).
+    assert_eq!(
+      remove_other_language_chars("Привет OK 世界", &[Russian]),
+      "Привет  "
+    );
+    // Japanese keeps kana + kanji, strips Latin letters, keeps digits/punct.
+    assert_eq!(
+      remove_other_language_chars("カタカナ test 42!", &[Japanese]),
+      "カタカナ  42!"
+    );
+    // Korean keeps Hangul (and Han).
+    assert_eq!(
+      remove_other_language_chars("한국어 한국", &[Korean]),
+      "한국어 한국"
+    );
+    // Hebrew plus English as second language keeps both scripts.
+    assert_eq!(
+      remove_other_language_chars("שלום peace", &[Hebrew, English]),
+      "שלום peace"
+    );
+    // Vietnamese keeps tone-marked vowels from Latin Extended Additional.
+    assert_eq!(
+      remove_other_language_chars("Xin chào thế giới", &[Vietnamese]),
+      "Xin chào thế giới"
+    );
+    // English drops accented Latin-1 letters.
+    assert_eq!(
+      remove_other_language_chars("café naïve", &[English]),
+      "caf nave"
+    );
+    // Turkish keeps ğ ı ş from Latin Extended-A / Latin-1.
+    assert_eq!(
+      remove_other_language_chars("yemek şişi", &[Turkish]),
+      "yemek şişi"
+    );
+  }
+
+  #[test]
+  fn test_remove_other_language_chars_empty_keep() {
+    assert_eq!(remove_other_language_chars("Hello 你好", &[]), "Hello 你好");
+  }
+
+  #[test]
+  fn test_language_serde_round_trip() {
+    let json = serde_json::to_string(&Language::Vietnamese).unwrap();
+    assert_eq!(json, "\"Vietnamese\"");
+    let back: Language = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, Language::Vietnamese);
+  }
+
+  #[test]
+  fn test_fix_opening_hyphen_spacing() {
+    assert_eq!(fix_opening_hyphen_spacing("-Hello there"), "- Hello there");
+    assert_eq!(
+      fix_opening_hyphen_spacing("- Are you sure?\n-Yes."),
+      "- Are you sure?\n- Yes."
+    );
+    // Indented dash keeps its indentation.
+    assert_eq!(fix_opening_hyphen_spacing("  -Sure"), "  - Sure");
+    // Already spaced, double dash, minus sign, bullet: untouched.
+    assert_eq!(fix_opening_hyphen_spacing("- spaced"), "- spaced");
+    assert_eq!(fix_opening_hyphen_spacing("-- note"), "-- note");
+    assert_eq!(fix_opening_hyphen_spacing("-3 degrees"), "-3 degrees");
+    assert_eq!(fix_opening_hyphen_spacing("- no change"), "- no change");
+  }
+
+  #[test]
+  fn test_normalize_all_caps() {
+    assert_eq!(normalize_all_caps("HELLO. WORLD!"), "Hello. World!");
+    // Apostrophes don't end sentences — one sentence stays one capital.
+    assert_eq!(normalize_all_caps("IT'S FINE"), "It's fine");
+    // Mixed or lower-case cues pass through unchanged.
+    assert_eq!(
+      normalize_all_caps("Already mixed Case"),
+      "Already mixed Case"
+    );
+    assert_eq!(normalize_all_caps("all lower"), "all lower");
+    // No letters at all: unchanged.
+    assert_eq!(normalize_all_caps("42!"), "42!");
+    // Multi-line: each line start capitalizes (sentence case, not title case).
+    assert_eq!(
+      normalize_all_caps("LINE ONE\nLINE TWO"),
+      "Line one\nLine two"
+    );
+  }
+
+  #[test]
+  fn test_remove_text_between() {
+    assert_eq!(
+      remove_text_between("[LAUGHS] hi [MUSIC] there", "[", "]"),
+      " hi  there"
+    );
+    assert_eq!(remove_text_between("(sighs) okay", "(", ")"), " okay");
+    // Unmatched open marker is kept.
+    assert_eq!(
+      remove_text_between("oops [ no close", "[", "]"),
+      "oops [ no close"
+    );
+    // Empty markers: no-op.
+    assert_eq!(remove_text_between("keep me", "", "]"), "keep me");
   }
 
   #[test]

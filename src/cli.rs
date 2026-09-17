@@ -33,9 +33,15 @@ pub enum Format {
   #[cfg(feature = "ebu_stl")]
   #[value(name = "stl")]
   EbuStl,
+  #[cfg(feature = "spruce")]
+  #[value(name = "spruce")]
+  Spruce,
   #[cfg(feature = "dfxp")]
   #[value(name = "dfxp")]
   Dfxp,
+  #[cfg(feature = "itt")]
+  #[value(name = "itt")]
+  Itt,
   #[cfg(feature = "whisper")]
   #[value(name = "whisper")]
   Whisper,
@@ -92,6 +98,18 @@ impl Format {
     if lower.ends_with(".stl") {
       return Some(Format::EbuStl);
     }
+    #[cfg(feature = "dfxp")]
+    if lower.ends_with(".dfxp") {
+      return Some(Format::Dfxp);
+    }
+    #[cfg(feature = "itt")]
+    if lower.ends_with(".itt") {
+      return Some(Format::Itt);
+    }
+    #[cfg(feature = "whisper")]
+    if lower.ends_with(".json") {
+      return Some(Format::Whisper);
+    }
     None
   }
 }
@@ -127,8 +145,12 @@ impl From<&subtitler::model::Format> for Format {
       M::Scc => Format::Scc,
       #[cfg(feature = "ebu_stl")]
       M::EbuStl => Format::EbuStl,
+      #[cfg(feature = "spruce")]
+      M::Spruce => Format::Spruce,
       #[cfg(feature = "dfxp")]
       M::Dfxp => Format::Dfxp,
+      #[cfg(feature = "itt")]
+      M::Itt => Format::Itt,
       #[cfg(feature = "whisper")]
       M::Whisper => Format::Whisper,
     }
@@ -165,8 +187,12 @@ impl From<&Format> for subtitler::model::Format {
       Format::Scc => M::Scc,
       #[cfg(feature = "ebu_stl")]
       Format::EbuStl => M::EbuStl,
+      #[cfg(feature = "spruce")]
+      Format::Spruce => M::Spruce,
       #[cfg(feature = "dfxp")]
       Format::Dfxp => M::Dfxp,
+      #[cfg(feature = "itt")]
+      Format::Itt => M::Itt,
       #[cfg(feature = "whisper")]
       Format::Whisper => M::Whisper,
     }
@@ -202,10 +228,96 @@ impl std::fmt::Display for Format {
       Format::Scc => write!(f, "SCC"),
       #[cfg(feature = "ebu_stl")]
       Format::EbuStl => write!(f, "EBU STL"),
+      #[cfg(feature = "spruce")]
+      Format::Spruce => write!(f, "Spruce STL"),
       #[cfg(feature = "dfxp")]
       Format::Dfxp => write!(f, "DFXP"),
+      #[cfg(feature = "itt")]
+      Format::Itt => write!(f, "iTT"),
       #[cfg(feature = "whisper")]
       Format::Whisper => write!(f, "Whisper JSON"),
+    }
+  }
+}
+
+/// Broadcaster guideline presets for `validate --guideline`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum GuidelinePreset {
+  #[value(name = "netflix")]
+  Netflix,
+  #[value(name = "bbc")]
+  Bbc,
+  #[value(name = "ted")]
+  Ted,
+  #[value(name = "ard")]
+  ArdOrfSrfZdf,
+  #[value(name = "channel4")]
+  Channel4,
+}
+
+impl From<&GuidelinePreset> for subtitler::guidelines::GuidelinePreset {
+  fn from(p: &GuidelinePreset) -> Self {
+    match p {
+      GuidelinePreset::Netflix => subtitler::guidelines::GuidelinePreset::Netflix,
+      GuidelinePreset::Bbc => subtitler::guidelines::GuidelinePreset::Bbc,
+      GuidelinePreset::Ted => subtitler::guidelines::GuidelinePreset::Ted,
+      GuidelinePreset::ArdOrfSrfZdf => subtitler::guidelines::GuidelinePreset::ArdOrfSrfZdf,
+      GuidelinePreset::Channel4 => subtitler::guidelines::GuidelinePreset::Channel4,
+    }
+  }
+}
+
+/// Languages for `normalize --filter-language`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum Language {
+  English,
+  Spanish,
+  French,
+  German,
+  Italian,
+  Polish,
+  Portuguese,
+  Finnish,
+  Norwegian,
+  Swedish,
+  Danish,
+  Turkish,
+  Vietnamese,
+  Ukrainian,
+  Russian,
+  Hebrew,
+  Arabic,
+  Thai,
+  Japanese,
+  Korean,
+  Chinese,
+}
+
+impl From<&Language> for subtitler::normalize::Language {
+  fn from(l: &Language) -> Self {
+    use Language::*;
+    match l {
+      English => subtitler::normalize::Language::English,
+      Spanish => subtitler::normalize::Language::Spanish,
+      French => subtitler::normalize::Language::French,
+      German => subtitler::normalize::Language::German,
+      Italian => subtitler::normalize::Language::Italian,
+      Polish => subtitler::normalize::Language::Polish,
+      Portuguese => subtitler::normalize::Language::Portuguese,
+      Finnish => subtitler::normalize::Language::Finnish,
+      Norwegian => subtitler::normalize::Language::Norwegian,
+      Swedish => subtitler::normalize::Language::Swedish,
+      Danish => subtitler::normalize::Language::Danish,
+      Turkish => subtitler::normalize::Language::Turkish,
+      Vietnamese => subtitler::normalize::Language::Vietnamese,
+      Ukrainian => subtitler::normalize::Language::Ukrainian,
+      Russian => subtitler::normalize::Language::Russian,
+      Hebrew => subtitler::normalize::Language::Hebrew,
+      Arabic => subtitler::normalize::Language::Arabic,
+      Thai => subtitler::normalize::Language::Thai,
+      Japanese => subtitler::normalize::Language::Japanese,
+      Korean => subtitler::normalize::Language::Korean,
+      Chinese => subtitler::normalize::Language::Chinese,
     }
   }
 }
@@ -214,7 +326,7 @@ impl std::fmt::Display for Format {
 #[derive(Parser)]
 #[command(name = "subtitler")]
 #[command(
-  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 13 formats."
+  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 17 formats."
 )]
 #[command(version)]
 pub struct Cli {
@@ -294,6 +406,11 @@ pub struct ConvertArgs {
   /// Shift all timestamps by milliseconds (positive = delay, negative = advance)
   #[arg(long, allow_hyphen_values = true)]
   pub shift: Option<i64>,
+
+  /// For Whisper JSON input: build cues from the word-level timestamps
+  /// instead of the segments (merge word-by-word transcript into subtitle)
+  #[arg(long)]
+  pub from_words: bool,
 }
 
 /// Validate subtitle timing and text quality.
@@ -313,6 +430,12 @@ pub struct ValidateArgs {
   /// Maximum characters per second
   #[arg(long, default_value = "25.0")]
   pub max_cps: f64,
+
+  /// Validate against a broadcaster guideline preset (replaces the
+  /// --max-chars/--max-gap/--max-cps thresholds with the preset's
+  /// published rule set, incl. duration bounds and minimum gap)
+  #[arg(long, value_enum)]
+  pub guideline: Option<GuidelinePreset>,
 
   /// Only show basic timing validation (no text checks)
   #[arg(long)]
@@ -352,6 +475,20 @@ pub struct EditArgs {
   /// Transform framerate: FROM_FPS TO_FPS (e.g., "23.976 25.0")
   #[arg(long, value_names = &["FROM_FPS", "TO_FPS"], number_of_values = 2)]
   pub transform_fps: Option<Vec<f64>>,
+
+  /// Snap all timestamps to whole frames of FPS (e.g. after fps conversion)
+  #[arg(long)]
+  pub snap_to_frames: Option<f64>,
+
+  /// Retime between timebase interpretations, FROM/TO each one of
+  /// 23.976, 24, 25, 29.97, 29.97df, 59.94df (repairs drop-frame files
+  /// parsed as non-drop and vice versa)
+  #[arg(long, value_names = &["FROM", "TO"], number_of_values = 2)]
+  pub reinterpret_timebase: Option<Vec<String>>,
+
+  /// Convert roll-up captions to progressive cues (new lines only)
+  #[arg(long)]
+  pub convert_rollup: bool,
 
   /// Force input format (auto-detect if not specified)
   #[arg(short, long)]
@@ -428,6 +565,42 @@ pub struct NormalizeArgs {
   /// Apply all normalizations (equivalent to --strip-hi --fix-ocr --quotes --whitespace)
   #[arg(long)]
   pub all: bool,
+
+  /// Remove letters that do not occur in the selected language (digits,
+  /// punctuation, symbols and emoji are kept; combine with
+  /// --second-language to keep two languages)
+  #[arg(long, value_enum)]
+  pub filter_language: Option<Language>,
+
+  /// Optional second language kept by --filter-language
+  #[arg(long, value_enum)]
+  pub second_language: Option<Language>,
+
+  /// Merge consecutive lines when they fit within MAX characters
+  /// (per line, paragraph breaks are preserved)
+  #[arg(long)]
+  pub merge_short_lines: Option<usize>,
+
+  /// Replace all line breaks with spaces (single line per cue)
+  #[arg(long)]
+  pub remove_linebreaks: bool,
+
+  /// Replace line breaks with the | symbol
+  #[arg(long)]
+  pub linebreaks_to_pipe: bool,
+
+  /// Ensure dialogue dashes at line starts are followed by a space
+  /// ("-Hello" -> "- Hello")
+  #[arg(long)]
+  pub fix_hyphens: bool,
+
+  /// Convert ALL-CAPS cues to sentence case (experimental heuristic)
+  #[arg(long)]
+  pub fix_caps: bool,
+
+  /// Remove every OPEN...CLOSE span (inclusive), e.g. --remove-between '[' ']'
+  #[arg(long, value_names = &["OPEN", "CLOSE"], number_of_values = 2)]
+  pub remove_between: Option<Vec<String>>,
 
   /// Force input format (auto-detected by default)
   #[arg(short, long)]

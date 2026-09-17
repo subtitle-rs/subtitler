@@ -1,7 +1,7 @@
 # Subtitler Code Wiki
 
-> 版本: v2.4.0 · Rust Edition 2024 · MSRV 1.85
-> 15 字幕格式 · ~340 tests · WASM-ready · Pipeline DSL · API-unified · CI-hardened
+> 版本: v2.7.0 · Rust Edition 2024 · MSRV 1.85
+> 17 字幕格式 · 408 tests · WASM-ready · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设
 
 ---
 
@@ -34,18 +34,21 @@
 - **库 (library)**: 可被任何 Rust 项目依赖，用于程序化处理字幕。
 - **CLI 二进制**: 名为 `subtitler` 的命令行工具，面向终端用户。
 
-### 支持的 15 种格式
+### 支持的 17 种格式
 
 | 领域 | 格式 | 扩展名 | Feature |
 |------|------|--------|---------|
 | Web | SRT | `.srt` | `srt` |
 | Web | WebVTT | `.vtt` | `vtt` |
 | Web | TTML/IMSC | `.ttml`, `.xml` | `ttml` |
+| Web | DFXP | `.dfxp` | `dfxp` |
+| Web | iTT (iTunes/IMSC1) | `.itt` | `itt` |
 | Web | SAMI | `.smi`, `.sami` | `sami` |
 | 视频编辑 | ASS | `.ass` | `ass` |
 | 视频编辑 | SSA | `.ssa` | `ssa` |
 | DVD | MicroDVD | `.sub` | `microdvd` |
 | DVD | SubViewer | `.sub` | `subviewer` |
+| DVD | Spruce STL（帧时码，fps 默认 25） | `.stl`* | `spruce` |
 | 广播 | SCC | `.scc` | `scc` |
 | 广播 | EBU STL | `.stl` | `ebu_stl` |
 | YouTube | SBV | `.sbv` | `sbv` |
@@ -102,6 +105,7 @@
      ├──── types.rs      (AnyResult 别名)
      ├──── normalize.rs  (文本规范化)
      ├──── quality.rs    (质量分析 + Translator trait)
+     ├──── guidelines.rs (广播机构规范预设，validate --guideline)
      ├──── pipeline.rs   (Pipeline + SubtitleBuilder DSL，v2.0+)
      └──── wasm.rs       (#[wasm_bindgen] 浏览器 API，v2.0+)
 ```
@@ -126,7 +130,7 @@ subtitler/
 ├── CHANGELOG.md            # 版本变更记录（newest-first）
 ├── MIGRATION.md            # 跨版本升级指南（含 2.0→2.1 行为变更）
 ├── AGENTS.md               # ★ 开发手册（14 条踩坑 + 发布 runbook）
-├── SKILL.md                # Skill 描述文件（15 格式）
+├── SKILL.md                # Skill 描述文件（17 格式）
 ├── LICENSE                 # Apache-2.0
 ├── rustfmt.toml            # 2 空格缩进配置
 ├── dist-workspace.toml     # cargo-dist 发布配置
@@ -154,6 +158,7 @@ subtitler/
 │   ├── types.rs            # AnyResult 类型别名
 │   ├── normalize.rs        # 文本规范化
 │   ├── quality.rs          # 质量报告 + Translator trait
+│   ├── guidelines.rs       # 广播机构规范预设（Netflix/BBC/TED/ARD/C4）
 │   │
 │   ├── srt.rs              # 格式: SRT
 │   ├── vtt.rs              # 格式: WebVTT
@@ -166,7 +171,11 @@ subtitler/
 │   ├── sami.rs             # 格式: SAMI
 │   ├── mpl2.rs             # 格式: MPL2
 │   ├── scc.rs              # 格式: SCC (CEA-608，SMPTE 12M drop-frame 自 2.1)
-│   └── ebu_stl.rs          # 格式: EBU STL (二进制，round-trip 自 2.1 修复)
+│   ├── ebu_stl.rs          # 格式: EBU STL (二进制，round-trip 自 2.1 修复)
+│   ├── dfxp.rs             # 格式: DFXP (委托 TTML，自 2.4)
+│   ├── whisper.rs          # 格式: Whisper JSON (词级合并自 2.7)
+│   ├── itt.rs              # 格式: iTT (IMSC1，委托 TTML，自 2.7)
+│   └── spruce.rs           # 格式: Spruce STL (帧时码 fps=25 默认，自 2.7)
 │
 ├── examples/               # 23 使用示例 (每个 [[example]] 在 Cargo.toml 声明)
 │   └── wasm/               #   浏览器 WASM demo (index.html + README)
@@ -428,6 +437,14 @@ v2.0 起拆分为 9 个子模块：
 | `strip_hearing_impaired` | 移除听障标签 `(LAUGHS)` / `[APPLAUSE]` / `♪` / 说话人标签 |
 | `optimize_line_breaks` | 在自然边界智能断行 |
 | `normalize_text` / `normalize_subtitle` | 组合规范化 |
+| `remove_other_language_chars` | 21 语种字符过滤（只滤字母，保留标点/emoji）|
+| `filter_language` | 语言码（en/zh/ja/ko/ar/he）薄包装；v2.4.0 起不再误删标点 |
+| `merge_short_lines` | 相邻短行合并（≤ max_chars）|
+| `remove_all_newlines` | 所有换行替换为空格并折叠 |
+| `replace_newlines` | 换行替换为自定义分隔符 |
+| `fix_opening_hyphen_spacing` | 对话破折号补空格（`-Hello` → `- Hello`）|
+| `normalize_all_caps` | 全大写 cue → 句子大小写（启发式，实验）|
+| `remove_text_between` | 删除 open…close 区间（含标记，非贪婪）|
 
 ### 5.9 [quality.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/quality.rs) — 质量分析
 
@@ -487,6 +504,17 @@ CLI 入口：`subtitler pipeline input.srt output.vtt --config ops.json`。
 
 浏览器 demo 在 `examples/wasm/`（`index.html` 拖拽式）。**注意**：WASM 函数当前 0 测试覆盖（路线图 2.3 修）。
 
+
+### 5.13 [guidelines.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/guidelines.rs) — 广播机构规范预设（QC 批次）
+
+| 项 | 内容 |
+|------|------|
+| `Guideline` | 规范参数包：每行字符数 / 行数 / 最短最长时长 / 最小间隙 / CPS；`0` = 该项不检查 |
+| `GuidelinePreset` | Netflix（42/2 行/833–7000ms/2 帧/20 CPS）、BBC（37/17 CPS）、TED（42/21 CPS/1–7s）、ARD-ORF-SRF-ZDF（37/15 CPS/1–4s）、Channel4（38/19 CPS）；数值逐条对照各机构官方 Style Guide |
+| `validate(subs, guideline)` | 按规范检查（每行字符数按**行**计、间隙检查跳过重叠对）|
+| `SubtitleFormat::validate_guideline` | `validate()` 结构性检查 + 规范检查一键组合 |
+| `ValidationIssue` 新变体 | `TooShortDuration` / `TooLongDuration` / `TooShortGap` / `LineCountExceeded` |
+| CLI | `subtitler validate --guideline netflix\|bbc\|ted\|ard\|channel4`（替代 --max-* 阈值）|
 ---
 
 ## 6. 关键类与函数说明
@@ -912,20 +940,22 @@ console.log(result.subtitle_count, result.format, result.output);
 
 ## 14. 测试体系
 
-### 14.1 测试分布（v2.1.0 快照）
+### 14.1 测试分布（v2.7.0 快照）
 
-- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 142 个）。
-- **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 144 个）:
-  - [integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/integration.rs) — 端到端流程（66 tests）
-  - [cross_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format.rs) — 跨格式转换（覆盖 ~3%，路线图 2.3 扩矩阵）
-  - [arch_unification.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/arch_unification.rs) — 架构统一性（12 tests）
-  - [cleanup_batch.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cleanup_batch.rs) — 清理批处理（6 tests）
-  - [error_assertions.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/error_assertions.rs) — 错误类型 Display（12 tests）
+- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 238 个）。
+- **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 170 个）:
+  - [integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/integration.rs) — 端到端流程（43 tests）
+  - [cross_format_matrix.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format_matrix.rs) — 跨格式矩阵（23 tests）
   - [pipeline_integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/pipeline_integration.rs) — Pipeline + Builder（16 tests，v2.0+）
   - [streaming_tests.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/streaming_tests.rs) — 流式解析（16 tests）
-  - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests，v2.1+）
-  - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（2 tests，仅 SRT/VTT）
-- **总测试数**: **293**（v1.4 时 216 → v2.0 时 273 → v2.1 时 286 → v2.2 时 293）。
+  - [arch_unification.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/arch_unification.rs) — 架构统一性（12 tests）
+  - [error_assertions.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/error_assertions.rs) — 错误类型 Display（12 tests）
+  - [api_surface.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/api_surface.rs) — API 表面（5 tests）
+  - [cleanup_batch.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cleanup_batch.rs) — 清理批处理（6 tests）
+  - [cross_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format.rs) — 跨格式转换（6 tests）
+  - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（6 tests）
+  - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests）
+- **总测试数**: **408**（v2.2 时 293 → v2.3 时 325 → v2.4 时 340 → v2.4.1/2.6 时 344 → v2.7 时 408）。
 
 ### 14.2 运行
 
@@ -1012,6 +1042,7 @@ gap analysis: [docs/subtitler-vs-editingtools-gap-analysis.md](file:///Users/man
 | **2.4.0** | ✅ 已发布 | gap analysis P1 收编：DFXP + Whisper JSON + 去重 PipelineOp + normalize 4 扩展。15 新测试，总 340 |
 | **2.4.1** | ✅ 已发布 | 外部测试修复：SCC 文本解码 P1、DFXP namespace、SubViewer 检测、SBV 两行格式、iTT SMPTE。344 测试 |
 | **2.6.x** | ✅ 已发布 | 代码质量优化：error 类型统一 + magic number 常量化 + MSRV 修复 + CI 修正。344 测试 |
+| **2.7.0** | ✅ 已发布 | editingtools.io 差距收编：Guideline QC 预设 + min-gap/dedup/DF 时基/roll-up + 21 语种过滤 + normalize 扩展 + 词级合并 + iTT + Spruce STL（17 格式）。64 新测试，总 408 |
 
 **当前专注打磨 2.x**，暂不规划 3.0。
 

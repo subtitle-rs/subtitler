@@ -7,7 +7,7 @@ categories = [
   "multimedia",
   "parser-implementations",
 ] 
-description = "Parse, convert, validate, edit, and generate subtitles in 15 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL, DFXP, Whisper JSON). Full CLI included." 
+description = "Parse, convert, validate, edit, and generate subtitles in 17 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL, Spruce STL, DFXP, iTT, Whisper JSON). Full CLI included." 
 documentation = "https://docs.rs/subtitler" 
 edition = "2024" 
 keywords = [
@@ -23,7 +23,7 @@ publish = true
 readme = "README.md" 
 repository = "https://github.com/subtitle-rs/subtitler" 
 rust-version = "1.85"
-version = "2.6.1" 
+version = "2.7.0" 
 
 include = [
   "Cargo.toml",
@@ -71,7 +71,7 @@ proptest = "1.5"
 wasm-bindgen-test = "0.3"
 
 [features]
-default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "dfxp", "whisper", "http"]
+default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "dfxp", "itt", "spruce", "whisper", "http"]
 
 srt = []
 vtt = []
@@ -87,6 +87,8 @@ mpl2 = []
 scc = []
 ebu_stl = []
 dfxp = []
+itt = []
+spruce = []
 whisper = []
 http = ["reqwest"]
 wasm = []

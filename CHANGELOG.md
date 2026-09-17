@@ -8,7 +8,84 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- TBD — see `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md` for the roadmap.
+- TBD — next batch items live on feature branches until merged.
+
+## [2.7.0] - 2026-09-17
+
+### Added
+
+- **Broadcaster guideline presets** (`guidelines` module): Netflix / BBC /
+  TED / ARD-ORF-SRF-ZDF / Channel 4 rule sets verified against each
+  broadcaster's published style guide. `SubtitleFormat::validate_guideline()`
+  composes structural timing checks with the preset (per-line length, line
+  count, duration bounds, minimum gap, reading speed). CLI:
+  `subtitler validate --guideline netflix|bbc|ted|ard|channel4`.
+- **4 new `ValidationIssue` variants**: `TooShortDuration`,
+  `TooLongDuration`, `TooShortGap`, `LineCountExceeded`.
+- **`SubtitleFormat::enforce_min_gap(min_gap_ms)`** (+ `PipelineOp::EnforceMinGap`):
+  guarantee a minimum gap between cues by pulling back the earlier cue's end;
+  start times stay fixed, impossible pairs are left for validation to report.
+- **`SubtitleFormat::remove_repeating_lines()`** (+ `PipelineOp::RemoveRepeatingLines`):
+  roll-up caption repair — collapse adjacent identical-text cues into one
+  cue spanning the run.
+- **`SubtitleFormat::merge_identical(max_gap_ms)`** (+ `PipelineOp::MergeIdentical`):
+  merge identical-text cues within a gap threshold (overlapping duplicates
+  always merge; a chorus repeated much later is preserved).
+- **21-language character filter** (`normalize::Language` +
+  `remove_other_language_chars`): strips letters that do not occur in the
+  kept language(s) — Netflix/BBC-style editingtools.io language list plus
+  Chinese. Only alphabetic characters are filtered; digits, punctuation,
+  symbols and emoji survive. CLI: `normalize --filter-language <lang>
+  [--second-language <lang>]`.
+- **normalize cleanup extensions**: `fix_opening_hyphen_spacing`
+  (`-Hello` → `- Hello`), `normalize_all_caps` (ALL-CAPS cues → sentence
+  case, experimental), `remove_text_between(open, close)` (inclusive,
+  non-greedy span removal). CLI flags `--fix-hyphens`, `--fix-caps`,
+  `--remove-between OPEN CLOSE`, plus exposure of the v2.4.0 library-only
+  helpers as `--merge-short-lines`, `--remove-linebreaks`,
+  `--linebreaks-to-pipe`.
+- **`model::convert::Timebase`** — SMPTE 12M timecode timebases
+  (`Ndf(fps)`, `Df2997`, `Df5994`) with display ↔ wall-clock conversions
+  (values verified against the Python model in AGENTS §6.4).
+  `SubtitleFormat::reinterpret_framerate(from, to)` repairs drop-frame
+  files misparsed as non-drop and vice versa (600601 → 600000 ms at the
+  10-minute mark);
+  `SubtitleFormat::snap_to_frames(fps)` rounds timestamps to whole frames.
+  Both plus `SubtitleFormat::convert_rollup` (accumulated roll-up cues →
+  progressive cues) are PipelineOps and `edit` CLI flags
+  (`--reinterpret-timebase FROM TO`, `--snap-to-frames FPS`,
+  `--convert-rollup`).
+- **iTT (iTunes Timed Text) format** (+1 → 16 formats, feature `itt`):
+  Apple's IMSC1 delivery profile. Parsing delegates to the TTML module;
+  detection matches the IMSC1 profile designator and runs before the TTML
+  detector (iTT files carry the shared TTML namespace). `to_string` emits
+  base TTML — strict Apple delivery validation is future work.
+- **Spruce STL format** (+1 → 17 formats, feature `spruce`): the
+  text-based DVD Maestro / Spruce Technologies format. `$`-directives and
+  `//` comments are skipped; data lines are `HH:MM:SS:FF,HH:MM:SS:FF,
+  text` at the file's frame rate (`DEFAULT_FPS` = 25, override in the
+  library API); `|` marks line breaks. Content-signature detection
+  requires a data line plus a directive/comment; `.stl` stays mapped to
+  EBU STL in `--from`/`--to` (force with `--from spruce`).
+- CLI `about` text corrected: 13 → 15 formats (now 17 with iTT + Spruce STL).
+
+### Changed
+
+- **`normalize::filter_language` no longer strips punctuation.** It is now
+  a thin wrapper over `remove_other_language_chars` (letters only are
+  filtered); the v2.4.0 implementation also dropped non-ASCII punctuation
+  and symbols. Its supported codes (`en`/`zh`/`ja`/`ko`/`ar`/`he`) are
+  unchanged; the European language set is available via `Language` directly.
+
+### Fixed
+
+- **Flaky SRT/VTT round-trip proptests**: the `arb_subtitle` text strategy's
+  comment claimed to exclude `& < >`, but the character class `\x20-\x7E`
+  never actually did. When the RNG generated tag-bearing text, SRT/VTT parse
+  normalized the tags into `text_parts` and the exact-text assertion failed
+  (reproduced with minimal input `"<i>!"` after several green runs). The
+  class now genuinely excludes those three bytes; tag round-trip through
+  text_parts rendering remains future work.
 
 ## [2.6.1] - 2026-07-18
 

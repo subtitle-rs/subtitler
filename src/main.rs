@@ -130,8 +130,12 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     CliFormat::Scc => Ok(scc::parse_content(&text)?),
     #[cfg(feature = "ebu_stl")]
     CliFormat::EbuStl => unreachable!("EBU STL handled above to skip text decoding"),
+    #[cfg(feature = "spruce")]
+    CliFormat::Spruce => Ok(subtitler::spruce::parse_content(&text, None)?),
     #[cfg(feature = "dfxp")]
     CliFormat::Dfxp => Ok(subtitler::dfxp::parse_content(&text)?),
+    #[cfg(feature = "itt")]
+    CliFormat::Itt => Ok(subtitler::itt::parse_content(&text)?),
     #[cfg(feature = "whisper")]
     CliFormat::Whisper => Ok(subtitler::whisper::parse_content(&text)?),
   }
@@ -170,8 +174,12 @@ fn cmd_parse_text(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
     CliFormat::Scc => subtitler::scc::parse_content(&content)?,
     #[cfg(feature = "ebu_stl")]
     CliFormat::EbuStl => unreachable!("EBU STL is binary; handled by callers"),
+    #[cfg(feature = "spruce")]
+    CliFormat::Spruce => subtitler::spruce::parse_content(&content, None)?,
     #[cfg(feature = "dfxp")]
     CliFormat::Dfxp => subtitler::dfxp::parse_content(&content)?,
+    #[cfg(feature = "itt")]
+    CliFormat::Itt => subtitler::itt::parse_content(&content)?,
     #[cfg(feature = "whisper")]
     CliFormat::Whisper => subtitler::whisper::parse_content(&content)?,
   };
@@ -231,7 +239,25 @@ async fn cmd_convert(args: cli::ConvertArgs) -> AnyResult<()> {
     .ok_or_else(|| anyhow::anyhow!("Cannot detect source format. Use --from to specify."))?;
   let to = resolve_output_format(&args.output, args.to)?;
 
-  let mut file = parse_to_file(&data, from).await?;
+  let mut file = if args.from_words {
+    #[cfg(feature = "whisper")]
+    {
+      if !matches!(from, CliFormat::Whisper) {
+        anyhow::bail!("--from-words requires Whisper JSON input.");
+      }
+      let text = subtitler::encoding::decode_to_string(&data)?;
+      subtitler::whisper::parse_content_as_words(
+        &text,
+        &subtitler::whisper::WordGroupingOptions::default(),
+      )?
+    }
+    #[cfg(not(feature = "whisper"))]
+    {
+      anyhow::bail!("--from-words requires the `whisper` feature.");
+    }
+  } else {
+    parse_to_file(&data, from).await?
+  };
 
   if let Some(shift) = args.shift {
     file.shift_all(shift);
@@ -257,7 +283,20 @@ async fn cmd_validate(args: cli::ValidateArgs) -> AnyResult<()> {
 
   let subs = file.subtitles();
 
-  let issues = if args.basic {
+  let issues = if let Some(preset) = args.guideline {
+    let guideline = subtitler::guidelines::GuidelinePreset::from(&preset).guideline();
+    eprintln!(
+      "Guideline preset: {} (max {} chars/line, {} lines, {}–{}ms duration, ≥{}ms gap, ≤{:.0} CPS)",
+      guideline.name,
+      guideline.max_chars_per_line,
+      guideline.max_lines,
+      guideline.min_duration_ms,
+      guideline.max_duration_ms,
+      guideline.min_gap_ms,
+      guideline.max_cps
+    );
+    file.validate_guideline(&guideline)
+  } else if args.basic {
     file.validate()
   } else {
     file.validate_extended(args.max_chars, args.max_gap, args.max_cps)
@@ -309,12 +348,38 @@ fn issue_kind(issue: &subtitler::model::ValidationIssue) -> &'static str {
     TooLongGap { .. } => "LONG_GAP",
     TextTooLong { .. } => "LONG_TEXT",
     CpsTooHigh { .. } => "HIGH_CPS",
+    TooShortDuration { .. } => "SHORT_DUR",
+    TooLongDuration { .. } => "LONG_DUR",
+    TooShortGap { .. } => "SHORT_GAP",
+    LineCountExceeded { .. } => "MANY_LINES",
   }
 }
 
 fn format_to_subtitle_format(f: &CliFormat) -> Format {
   // 通过 cli::Format 上实现的 Into<model::Format> 转换
   f.into()
+}
+
+fn parse_timebase(s: &str) -> AnyResult<subtitler::model::Timebase> {
+  use subtitler::model::Timebase;
+  let lower = s.trim().to_lowercase();
+  if lower == "29.97df" || lower == "df29.97" {
+    return Ok(Timebase::Df2997);
+  }
+  if lower == "59.94df" || lower == "df59.94" {
+    return Ok(Timebase::Df5994);
+  }
+  let digits = lower.strip_suffix("ndf").unwrap_or(&lower);
+  let fps: f64 = digits.parse().map_err(|_| {
+    anyhow::anyhow!(
+      "Invalid timebase '{}'. Use e.g. 23.976, 25, 29.97ndf, 29.97df, or 59.94df.",
+      s
+    )
+  })?;
+  if fps <= 0.0 {
+    anyhow::bail!("Timebase FPS must be positive, got '{}'.", s);
+  }
+  Ok(Timebase::Ndf(fps))
 }
 
 async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
@@ -349,10 +414,26 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
     builder = builder.transform_fps(fps_pair[0], fps_pair[1]);
     ops += 1;
   }
+  if let Some(fps) = args.snap_to_frames {
+    builder = builder.snap_to_frames(fps);
+    ops += 1;
+  }
+  if let Some(pair) = args.reinterpret_timebase {
+    if pair.len() == 2 {
+      let from = parse_timebase(&pair[0])?;
+      let to = parse_timebase(&pair[1])?;
+      builder = builder.reinterpret_framerate(from, to);
+      ops += 1;
+    }
+  }
+  if args.convert_rollup {
+    builder = builder.convert_rollup();
+    ops += 1;
+  }
 
   if ops == 0 {
     anyhow::bail!(
-      "No edit operations specified. Use --sort, --shift, --merge, --split, or --transform-fps."
+      "No edit operations specified. Use --sort, --shift, --merge, --split, --transform-fps, --snap-to-frames, --reinterpret-timebase, or --convert-rollup."
     );
   }
 
@@ -481,8 +562,12 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
     Some(Format::Scc) => println!("scc"),
     #[cfg(feature = "ebu_stl")]
     Some(Format::EbuStl) => println!("ebu_stl"),
+    #[cfg(feature = "spruce")]
+    Some(Format::Spruce) => println!("spruce"),
     #[cfg(feature = "dfxp")]
     Some(Format::Dfxp) => println!("dfxp"),
+    #[cfg(feature = "itt")]
+    Some(Format::Itt) => println!("itt"),
     #[cfg(feature = "whisper")]
     Some(Format::Whisper) => println!("whisper"),
     None => {
@@ -535,7 +620,38 @@ async fn cmd_normalize(args: cli::NormalizeArgs) -> AnyResult<()> {
     .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format. Use --format to specify."))?;
   let mut file = parse_to_file(&data, format).await?;
 
+  let mut keep_languages: Vec<subtitler::normalize::Language> = Vec::new();
+  if let Some(lang) = args.filter_language {
+    keep_languages.push(subtitler::normalize::Language::from(&lang));
+  }
+  if let Some(lang) = args.second_language {
+    keep_languages.push(subtitler::normalize::Language::from(&lang));
+  }
+
   for sub in file.subtitles_mut() {
+    if !keep_languages.is_empty() {
+      sub.text = subtitler::normalize::remove_other_language_chars(&sub.text, &keep_languages);
+    }
+    if let Some(max) = args.merge_short_lines {
+      sub.text = subtitler::normalize::merge_short_lines(&sub.text, max);
+    }
+    if args.remove_linebreaks {
+      sub.text = subtitler::normalize::remove_all_newlines(&sub.text);
+    }
+    if args.linebreaks_to_pipe {
+      sub.text = subtitler::normalize::replace_newlines(&sub.text, "|");
+    }
+    if args.fix_hyphens {
+      sub.text = subtitler::normalize::fix_opening_hyphen_spacing(&sub.text);
+    }
+    if args.fix_caps {
+      sub.text = subtitler::normalize::normalize_all_caps(&sub.text);
+    }
+    if let Some(between) = &args.remove_between {
+      if between.len() == 2 {
+        sub.text = subtitler::normalize::remove_text_between(&sub.text, &between[0], &between[1]);
+      }
+    }
     if args.all || args.fix_ocr {
       sub.text = subtitler::normalize::fix_ocr_errors(&sub.text);
     }

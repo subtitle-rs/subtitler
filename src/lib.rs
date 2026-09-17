@@ -7,8 +7,11 @@ pub mod dfxp;
 pub mod ebu_stl;
 pub mod encoding;
 pub mod error;
+pub mod guidelines;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
+#[cfg(feature = "itt")]
+pub mod itt;
 #[cfg(feature = "lrc")]
 pub mod lrc;
 #[cfg(feature = "microdvd")]
@@ -25,6 +28,8 @@ pub mod sami;
 pub mod sbv;
 #[cfg(feature = "scc")]
 pub mod scc;
+#[cfg(feature = "spruce")]
+pub mod spruce;
 #[cfg(feature = "srt")]
 pub mod srt;
 #[cfg(feature = "subviewer")]
@@ -41,6 +46,7 @@ pub mod whisper;
 pub use model::SubtitleFormat;
 
 // Re-export commonly used types for convenience
+pub use guidelines::{Guideline, GuidelinePreset};
 pub use model::{
   Format, ParseConfig, StreamingParser, Subtitle, SubtitleFile, SubtitleFileBuilder, TextPart,
   WritePolicy,
@@ -62,6 +68,10 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| subviewer::detect_format(data));
   #[cfg(feature = "dfxp")]
   let f = f.or_else(|| dfxp::detect_format(data));
+  // iTT must run BEFORE TTML: iTT files carry the plain TTML namespace
+  // and would otherwise be claimed by the TTML detector.
+  #[cfg(feature = "itt")]
+  let f = f.or_else(|| itt::detect_format(data));
   #[cfg(feature = "ttml")]
   let f = f.or_else(|| ttml::detect_format(data));
   #[cfg(feature = "whisper")]
@@ -78,6 +88,8 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| scc::detect_format(data));
   #[cfg(feature = "ebu_stl")]
   let f = f.or_else(|| ebu_stl::detect_format(data));
+  #[cfg(feature = "spruce")]
+  let f = f.or_else(|| spruce::detect_format(data));
   f
 }
 
@@ -122,8 +134,12 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     Format::Scc => Ok(scc::parse_bytes(data)?),
     #[cfg(feature = "ebu_stl")]
     Format::EbuStl => Ok(ebu_stl::parse_bytes(data)?),
+    #[cfg(feature = "spruce")]
+    Format::Spruce => Ok(spruce::parse_bytes(data, None)?),
     #[cfg(feature = "dfxp")]
     Format::Dfxp => Ok(dfxp::parse_bytes(data)?),
+    #[cfg(feature = "itt")]
+    Format::Itt => Ok(itt::parse_bytes(data)?),
     #[cfg(feature = "whisper")]
     Format::Whisper => Ok(whisper::parse_bytes(data)?),
     #[allow(unreachable_patterns)]
