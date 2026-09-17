@@ -38,6 +38,17 @@ adheres to [Semantic Versioning](https://semver.org/).
   `--remove-between OPEN CLOSE`, plus exposure of the v2.4.0 library-only
   helpers as `--merge-short-lines`, `--remove-linebreaks`,
   `--linebreaks-to-pipe`.
+- **`model::convert::Timebase`** — SMPTE 12M timecode timebases
+  (`Ndf(fps)`, `Df2997`, `Df5994`) with display ↔ wall-clock conversions
+  (values verified against the Python model in AGENTS §6.4).
+  `SubtitleFormat::reinterpret_framerate(from, to)` repairs drop-frame
+  files misparsed as non-drop and vice versa (600601 → 600000 ms at the
+  10-minute mark);
+  `SubtitleFormat::snap_to_frames(fps)` rounds timestamps to whole frames.
+  Both plus `SubtitleFormat::convert_rollup` (accumulated roll-up cues →
+  progressive cues) are PipelineOps and `edit` CLI flags
+  (`--reinterpret-timebase FROM TO`, `--snap-to-frames FPS`,
+  `--convert-rollup`).
 - CLI `about` text corrected: 13 → 15 formats.
 
 ### Changed

@@ -315,8 +315,8 @@ editingtools 一半的格式面是 NLE 标记/标题互转（Premiere/FCP/Avid/R
 
 中期版本（专业场景主题）
 ├── P1#2 dedup 双语义                    ✅ 已落地（feature/p1-gap-analysis）
-├── P2#6 语言过滤 + P2#7 normalize 包（清理主题）
-├── P2#8 DF 感知变换 + P2#9 roll-up（帧格式正确性主题）
+├── P2#6 语言过滤 + P2#7 normalize 包    ✅ 已落地（21 语种 + 3 新函数 + CLI 补课）
+├── P2#8 DF 感知变换 + P2#9 roll-up      ✅ 已落地（Timebase + reinterpret + snap + rollup）
 └── P2#10 词级合并 + P2#12 iTT + P2#13 Spruce STL（AI 交付/母版主题）
 
 3.0（已规划方向不变）
