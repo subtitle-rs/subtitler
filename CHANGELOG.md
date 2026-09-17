@@ -10,6 +10,23 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — next batch items live on feature branches until merged.
 
+## [2.7.1] - 2026-09-18
+
+### Fixed
+
+- **Dependency vulnerabilities in release binaries** (4 dependabot alerts:
+  3 moderate, 1 low): `cargo update` refresh of 82 lockfile packages, all
+  SemVer-compatible. Security-relevant: `chacha20 0.10.2` (0.10.1 was
+  yanked), `rustls 0.23.45`, `rustls-webpki 0.103.15`, `quinn-proto
+  0.11.18`, `aws-lc-rs 1.18.1`, `aws-lc-sys 0.45.0`, `reqwest 0.13.5`,
+  `hyper 1.11.1`, `tokio 1.53.1`. crates.io users were never affected
+  (downstream lockfiles resolve independently); the fix matters for the
+  prebuilt CLI binaries on the GitHub Release.
+- **MSRV regression in the update**: `yoke-derive 0.8.3` uses
+  `str::from_utf8` as an inherent associated function without declaring
+  the raised rust_version, breaking `cargo +1.85 build`; pinned back to
+  0.8.2 (see commit 6830ccb).
+
 ## [2.7.0] - 2026-09-17
 
 ### Added
