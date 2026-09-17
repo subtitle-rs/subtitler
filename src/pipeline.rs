@@ -1,4 +1,4 @@
-use crate::model::{SubtitleFile, SubtitleFormat};
+use crate::model::{SubtitleFile, SubtitleFormat, Timebase};
 use serde::{Deserialize, Serialize};
 
 /// Chainable builder for subtitle file transformations.
@@ -108,6 +108,24 @@ impl SubtitleBuilder {
     self.file.merge_identical(max_gap_ms);
     self
   }
+
+  /// Round all timestamps to whole frame boundaries of `fps`.
+  pub fn snap_to_frames(mut self, fps: f64) -> Self {
+    self.file.snap_to_frames(fps);
+    self
+  }
+
+  /// Retime between timebase interpretations (drop-frame repair).
+  pub fn reinterpret_framerate(mut self, from: Timebase, to: Timebase) -> Self {
+    self.file.reinterpret_framerate(from, to);
+    self
+  }
+
+  /// Convert roll-up captions to progressive cues (new lines only).
+  pub fn convert_rollup(mut self) -> Self {
+    self.file.convert_rollup();
+    self
+  }
 }
 
 /// A single pipeline operation.
@@ -128,6 +146,9 @@ pub enum PipelineOp {
   RemoveDuplicates,
   RemoveRepeatingLines,
   MergeIdentical { max_gap_ms: u64 },
+  SnapToFrames { fps: f64 },
+  ReinterpretTimebase { from: Timebase, to: Timebase },
+  ConvertRollup,
 }
 
 /// A declarative pipeline of subtitle transformation operations.
@@ -244,6 +265,23 @@ impl Pipeline {
     self
   }
 
+  pub fn snap_to_frames(mut self, fps: f64) -> Self {
+    self.operations.push(PipelineOp::SnapToFrames { fps });
+    self
+  }
+
+  pub fn reinterpret_framerate(mut self, from: Timebase, to: Timebase) -> Self {
+    self
+      .operations
+      .push(PipelineOp::ReinterpretTimebase { from, to });
+    self
+  }
+
+  pub fn convert_rollup(mut self) -> Self {
+    self.operations.push(PipelineOp::ConvertRollup);
+    self
+  }
+
   pub fn apply(&self, file: SubtitleFile) -> SubtitleFile {
     let mut builder = SubtitleBuilder::from(file);
     for op in &self.operations {
@@ -265,6 +303,9 @@ impl Pipeline {
         PipelineOp::RemoveDuplicates => builder.remove_duplicates(),
         PipelineOp::RemoveRepeatingLines => builder.remove_repeating_lines(),
         PipelineOp::MergeIdentical { max_gap_ms } => builder.merge_identical(*max_gap_ms),
+        PipelineOp::SnapToFrames { fps } => builder.snap_to_frames(*fps),
+        PipelineOp::ReinterpretTimebase { from, to } => builder.reinterpret_framerate(*from, *to),
+        PipelineOp::ConvertRollup => builder.convert_rollup(),
       };
     }
     builder.build()
@@ -580,5 +621,89 @@ mod tests {
     assert!(json.contains("MergeIdentical"));
     let parsed: Pipeline = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.operations.len(), 2);
+  }
+
+  #[test]
+  fn test_snap_to_frames() {
+    // 25 fps = 40 ms per frame; off-boundary times snap to nearest frame.
+    let file = SubtitleFile::Srt(vec![
+      make_sub(1_005, 2_049, "first"), // -> 1000 / 2040
+      make_sub(3_040, 4_000, "second"),
+    ]);
+    let result = SubtitleBuilder::from(file).snap_to_frames(25.0).build();
+    let subs = result.subtitles();
+    assert_eq!(subs[0].start, 1_000);
+    assert_eq!(subs[0].end, 2_040);
+    assert_eq!(subs[1].start, 3_040, "already on a frame boundary stays");
+    assert_eq!(subs[1].end, 4_000);
+  }
+
+  #[test]
+  fn test_reinterpret_framerate_repairs_misread_df() {
+    // A 29.97 DF file misread as NDF lands at 600601 ms for the display
+    // 00:10:00;00; reinterpreting NDF -> DF recovers 600000 ms wall clock.
+    // The end display 00:10:02;00 maps to 602002 (DF minutes end 2 ms
+    // past the wall-clock minute under the quoted-rate convention).
+    let file = SubtitleFile::Srt(vec![make_sub(600_601, 602_601, "ten minutes in")]);
+    let result = SubtitleBuilder::from(file)
+      .reinterpret_framerate(Timebase::Ndf(29.97), Timebase::Df2997)
+      .build();
+    let sub = &result.subtitles()[0];
+    assert_eq!(sub.start, 600_000);
+    assert_eq!(sub.end, 602_002);
+  }
+
+  #[test]
+  fn test_reinterpret_framerate_ndf_identity_on_clean_file() {
+    // 25 fps NDF has no drops: same-timebase reinterpretation is a no-op
+    // for frame-aligned times.
+    let file = SubtitleFile::Srt(vec![make_sub(60_000, 62_520, "pal")]);
+    let result = SubtitleBuilder::from(file.clone())
+      .reinterpret_framerate(Timebase::Ndf(25.0), Timebase::Ndf(25.0))
+      .build();
+    assert_eq!(result.subtitles(), file.subtitles());
+  }
+
+  #[test]
+  fn test_convert_rollup_unrolls_accumulated_lines() {
+    // SCC-style roll-up: every cue repeats the accumulated text.
+    let file = SubtitleFile::Srt(vec![
+      make_sub(2_000, 3_000, "HELLO WORLD HOW"),
+      make_sub(0, 1_000, "HELLO"),
+      make_sub(1_000, 2_000, "HELLO WORLD"),
+    ]);
+    let result = SubtitleBuilder::from(file).convert_rollup().build();
+    let subs = result.subtitles();
+    assert_eq!(subs.len(), 3);
+    assert_eq!(subs[0].text, "HELLO");
+    assert_eq!(subs[1].text, "WORLD", "each cue keeps only its new lines");
+    assert_eq!(subs[2].text, "HOW");
+    // Timings are untouched.
+    assert_eq!(subs[1].start, 1_000);
+    assert_eq!(subs[1].end, 2_000);
+  }
+
+  #[test]
+  fn test_convert_rollup_leaves_non_accumulating_cues() {
+    let file = SubtitleFile::Srt(vec![
+      make_sub(0, 1_000, "HELLO"),
+      make_sub(1_000, 2_000, "WORLD"), // not an extension -> untouched
+    ]);
+    let result = SubtitleBuilder::from(file).convert_rollup().build();
+    assert_eq!(result.subtitles()[1].text, "WORLD");
+  }
+
+  #[test]
+  fn test_frame_ops_serialize_round_trip() {
+    let pipeline = Pipeline::new()
+      .snap_to_frames(29.97)
+      .reinterpret_framerate(Timebase::Ndf(29.97), Timebase::Df2997)
+      .convert_rollup();
+    let json = serde_json::to_string(&pipeline).unwrap();
+    assert!(json.contains("SnapToFrames"));
+    assert!(json.contains("ReinterpretTimebase"));
+    assert!(json.contains("ConvertRollup"));
+    let parsed: Pipeline = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.operations.len(), 3);
   }
 }

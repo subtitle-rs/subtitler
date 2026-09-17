@@ -1,4 +1,4 @@
-use super::convert::split_text_chunks;
+use super::convert::{Timebase, frames_to_ms, ms_to_frames, split_text_chunks};
 use super::format::Format;
 use super::subtitle::Subtitle;
 use super::validation::ValidationIssue;
@@ -359,6 +359,57 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
     for sub in self.subtitles_mut().iter_mut() {
       sub.start = ((sub.start as f64) * ratio).round() as u64;
       sub.end = ((sub.end as f64) * ratio).round() as u64;
+    }
+  }
+
+  /// Round all timestamps to whole frame boundaries of `fps` — useful
+  /// after a linear framerate conversion whose targets feed frame-indexed
+  /// formats (MicroDVD, MPL2, SCC) and may otherwise sit between frames.
+  fn snap_to_frames(&mut self, fps: f64) {
+    for sub in self.subtitles_mut().iter_mut() {
+      sub.start = frames_to_ms(ms_to_frames(sub.start, fps), fps);
+      sub.end = frames_to_ms(ms_to_frames(sub.end, fps), fps);
+    }
+  }
+
+  /// Retime between timebase interpretations: the current millisecond
+  /// values are read as displays of `from` and rewritten as the same
+  /// displays in `to`. This repairs files whose SMPTE drop-frame timecodes
+  /// were parsed as non-drop (drifting ~3.6 s per hour) or vice versa, and
+  /// is not a wall-clock conversion — identical displays in different
+  /// timebases legitimately mean different wall-clock times.
+  fn reinterpret_framerate(&mut self, from: Timebase, to: Timebase) {
+    for sub in self.subtitles_mut().iter_mut() {
+      let (sh, sm, ss, sf) = from.ms_to_display(sub.start);
+      let (eh, em, es, ef) = from.ms_to_display(sub.end);
+      sub.start = to.display_to_ms(sh, sm, ss, sf);
+      sub.end = to.display_to_ms(eh, em, es, ef);
+    }
+  }
+
+  /// Repair roll-up style captions where each cue repeats everything so
+  /// far and appends new lines (`"A"` → `"A\nB"` → `"A\nB\nC"`). Each
+  /// cue's text shrinks to the lines it adds over its predecessor,
+  /// yielding progressive cues (`"A"`, `"B"`, `"C"`) with timings
+  /// unchanged. Cues that repeat their predecessor verbatim are left for
+  /// `remove_repeating_lines` / `merge_identical`; non-accumulating cues
+  /// are untouched.
+  fn convert_rollup(&mut self) {
+    self.sort();
+    let subs = self.subtitles_mut();
+    // Walk backwards so each cue is compared against its predecessor's
+    // still-accumulated text — chains unroll one step per cue.
+    for i in (1..subs.len()).rev() {
+      let prev = subs[i - 1].text.trim_end().to_string();
+      if prev.is_empty() {
+        continue;
+      }
+      if let Some(suffix) = subs[i].text.strip_prefix(prev.as_str()) {
+        let suffix = suffix.trim_start_matches(['\n', '\r', ' ']).to_string();
+        if !suffix.is_empty() {
+          subs[i].text = suffix;
+        }
+      }
     }
   }
 }

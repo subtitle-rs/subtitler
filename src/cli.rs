@@ -441,6 +441,20 @@ pub struct EditArgs {
   #[arg(long, value_names = &["FROM_FPS", "TO_FPS"], number_of_values = 2)]
   pub transform_fps: Option<Vec<f64>>,
 
+  /// Snap all timestamps to whole frames of FPS (e.g. after fps conversion)
+  #[arg(long)]
+  pub snap_to_frames: Option<f64>,
+
+  /// Retime between timebase interpretations, FROM/TO each one of
+  /// 23.976, 24, 25, 29.97, 29.97df, 59.94df (repairs drop-frame files
+  /// parsed as non-drop and vice versa)
+  #[arg(long, value_names = &["FROM", "TO"], number_of_values = 2)]
+  pub reinterpret_timebase: Option<Vec<String>>,
+
+  /// Convert roll-up captions to progressive cues (new lines only)
+  #[arg(long)]
+  pub convert_rollup: bool,
+
   /// Force input format (auto-detect if not specified)
   #[arg(short, long)]
   pub from: Option<Format>,

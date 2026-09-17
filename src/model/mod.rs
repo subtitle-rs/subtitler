@@ -10,7 +10,7 @@ mod r#trait;
 
 pub use builder::{ParseConfig, SubtitleFileBuilder};
 pub use convert::{
-  format_ass_color, frames_to_ms, ms_to_frames, parse_ass_color, split_text_chunks,
+  Timebase, format_ass_color, frames_to_ms, ms_to_frames, parse_ass_color, split_text_chunks,
 };
 pub use format::{Format, SubtitleFile};
 pub use streaming::StreamingParser;

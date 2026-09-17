@@ -334,6 +334,28 @@ fn format_to_subtitle_format(f: &CliFormat) -> Format {
   f.into()
 }
 
+fn parse_timebase(s: &str) -> AnyResult<subtitler::model::Timebase> {
+  use subtitler::model::Timebase;
+  let lower = s.trim().to_lowercase();
+  if lower == "29.97df" || lower == "df29.97" {
+    return Ok(Timebase::Df2997);
+  }
+  if lower == "59.94df" || lower == "df59.94" {
+    return Ok(Timebase::Df5994);
+  }
+  let digits = lower.strip_suffix("ndf").unwrap_or(&lower);
+  let fps: f64 = digits.parse().map_err(|_| {
+    anyhow::anyhow!(
+      "Invalid timebase '{}'. Use e.g. 23.976, 25, 29.97ndf, 29.97df, or 59.94df.",
+      s
+    )
+  })?;
+  if fps <= 0.0 {
+    anyhow::bail!("Timebase FPS must be positive, got '{}'.", s);
+  }
+  Ok(Timebase::Ndf(fps))
+}
+
 async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
   let (data, ext) = read_input(&args.input).await?;
   let from = resolve_format(&data, args.from.or(ext))
@@ -366,10 +388,26 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
     builder = builder.transform_fps(fps_pair[0], fps_pair[1]);
     ops += 1;
   }
+  if let Some(fps) = args.snap_to_frames {
+    builder = builder.snap_to_frames(fps);
+    ops += 1;
+  }
+  if let Some(pair) = args.reinterpret_timebase {
+    if pair.len() == 2 {
+      let from = parse_timebase(&pair[0])?;
+      let to = parse_timebase(&pair[1])?;
+      builder = builder.reinterpret_framerate(from, to);
+      ops += 1;
+    }
+  }
+  if args.convert_rollup {
+    builder = builder.convert_rollup();
+    ops += 1;
+  }
 
   if ops == 0 {
     anyhow::bail!(
-      "No edit operations specified. Use --sort, --shift, --merge, --split, or --transform-fps."
+      "No edit operations specified. Use --sort, --shift, --merge, --split, --transform-fps, --snap-to-frames, --reinterpret-timebase, or --convert-rollup."
     );
   }
 
