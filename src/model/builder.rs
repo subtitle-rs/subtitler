@@ -200,6 +200,11 @@ impl SubtitleFileBuilder {
         header: self.header,
         subtitles: self.subtitles,
       }),
+      #[cfg(feature = "itt")]
+      Format::Itt => Some(SubtitleFile::Itt {
+        header: self.header,
+        subtitles: self.subtitles,
+      }),
       #[cfg(feature = "whisper")]
       Format::Whisper => Some(SubtitleFile::Whisper(self.subtitles)),
     }

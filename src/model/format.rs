@@ -33,6 +33,8 @@ pub enum Format {
   EbuStl,
   #[cfg(feature = "dfxp")]
   Dfxp,
+  #[cfg(feature = "itt")]
+  Itt,
   #[cfg(feature = "whisper")]
   Whisper,
 }
@@ -99,6 +101,12 @@ pub enum SubtitleFile {
     subtitles: Vec<Subtitle>,
   },
 
+  #[cfg(feature = "itt")]
+  Itt {
+    header: Option<String>,
+    subtitles: Vec<Subtitle>,
+  },
+
   #[cfg(feature = "whisper")]
   Whisper(Vec<Subtitle>),
 }
@@ -134,6 +142,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::EbuStl(data) => &data.subtitles,
       #[cfg(feature = "dfxp")]
       SubtitleFile::Dfxp { subtitles, .. } => subtitles,
+      #[cfg(feature = "itt")]
+      SubtitleFile::Itt { subtitles, .. } => subtitles,
       #[cfg(feature = "whisper")]
       SubtitleFile::Whisper(subs) => subs,
     }
@@ -169,6 +179,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::EbuStl(data) => &mut data.subtitles,
       #[cfg(feature = "dfxp")]
       SubtitleFile::Dfxp { subtitles, .. } => subtitles,
+      #[cfg(feature = "itt")]
+      SubtitleFile::Itt { subtitles, .. } => subtitles,
       #[cfg(feature = "whisper")]
       SubtitleFile::Whisper(subs) => subs,
     }
@@ -204,6 +216,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::EbuStl(_) => Format::EbuStl,
       #[cfg(feature = "dfxp")]
       SubtitleFile::Dfxp { .. } => Format::Dfxp,
+      #[cfg(feature = "itt")]
+      SubtitleFile::Itt { .. } => Format::Itt,
       #[cfg(feature = "whisper")]
       SubtitleFile::Whisper(_) => Format::Whisper,
     }
@@ -283,6 +297,14 @@ impl SubtitleFormat for SubtitleFile {
           _ => None,
         };
         crate::dfxp::to_string(subs, header)
+      }
+      #[cfg(feature = "itt")]
+      Format::Itt => {
+        let header = match self {
+          SubtitleFile::Itt { header, .. } => header.as_deref(),
+          _ => None,
+        };
+        crate::itt::to_string(subs, header)
       }
       #[cfg(feature = "whisper")]
       Format::Whisper => crate::whisper::to_string(subs),

@@ -34,13 +34,15 @@
 - **库 (library)**: 可被任何 Rust 项目依赖，用于程序化处理字幕。
 - **CLI 二进制**: 名为 `subtitler` 的命令行工具，面向终端用户。
 
-### 支持的 15 种格式
+### 支持的 16 种格式
 
 | 领域 | 格式 | 扩展名 | Feature |
 |------|------|--------|---------|
 | Web | SRT | `.srt` | `srt` |
 | Web | WebVTT | `.vtt` | `vtt` |
 | Web | TTML/IMSC | `.ttml`, `.xml` | `ttml` |
+| Web | DFXP | `.dfxp` | `dfxp` |
+| Web | iTT (iTunes/IMSC1) | `.itt` | `itt` |
 | Web | SAMI | `.smi`, `.sami` | `sami` |
 | 视频编辑 | ASS | `.ass` | `ass` |
 | 视频编辑 | SSA | `.ssa` | `ssa` |
@@ -127,7 +129,7 @@ subtitler/
 ├── CHANGELOG.md            # 版本变更记录（newest-first）
 ├── MIGRATION.md            # 跨版本升级指南（含 2.0→2.1 行为变更）
 ├── AGENTS.md               # ★ 开发手册（14 条踩坑 + 发布 runbook）
-├── SKILL.md                # Skill 描述文件（15 格式）
+├── SKILL.md                # Skill 描述文件（16 格式）
 ├── LICENSE                 # Apache-2.0
 ├── rustfmt.toml            # 2 空格缩进配置
 ├── dist-workspace.toml     # cargo-dist 发布配置

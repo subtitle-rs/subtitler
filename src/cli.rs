@@ -36,6 +36,9 @@ pub enum Format {
   #[cfg(feature = "dfxp")]
   #[value(name = "dfxp")]
   Dfxp,
+  #[cfg(feature = "itt")]
+  #[value(name = "itt")]
+  Itt,
   #[cfg(feature = "whisper")]
   #[value(name = "whisper")]
   Whisper,
@@ -92,6 +95,18 @@ impl Format {
     if lower.ends_with(".stl") {
       return Some(Format::EbuStl);
     }
+    #[cfg(feature = "dfxp")]
+    if lower.ends_with(".dfxp") {
+      return Some(Format::Dfxp);
+    }
+    #[cfg(feature = "itt")]
+    if lower.ends_with(".itt") {
+      return Some(Format::Itt);
+    }
+    #[cfg(feature = "whisper")]
+    if lower.ends_with(".json") {
+      return Some(Format::Whisper);
+    }
     None
   }
 }
@@ -129,6 +144,8 @@ impl From<&subtitler::model::Format> for Format {
       M::EbuStl => Format::EbuStl,
       #[cfg(feature = "dfxp")]
       M::Dfxp => Format::Dfxp,
+      #[cfg(feature = "itt")]
+      M::Itt => Format::Itt,
       #[cfg(feature = "whisper")]
       M::Whisper => Format::Whisper,
     }
@@ -167,6 +184,8 @@ impl From<&Format> for subtitler::model::Format {
       Format::EbuStl => M::EbuStl,
       #[cfg(feature = "dfxp")]
       Format::Dfxp => M::Dfxp,
+      #[cfg(feature = "itt")]
+      Format::Itt => M::Itt,
       #[cfg(feature = "whisper")]
       Format::Whisper => M::Whisper,
     }
@@ -204,6 +223,8 @@ impl std::fmt::Display for Format {
       Format::EbuStl => write!(f, "EBU STL"),
       #[cfg(feature = "dfxp")]
       Format::Dfxp => write!(f, "DFXP"),
+      #[cfg(feature = "itt")]
+      Format::Itt => write!(f, "iTT"),
       #[cfg(feature = "whisper")]
       Format::Whisper => write!(f, "Whisper JSON"),
     }
@@ -296,7 +317,7 @@ impl From<&Language> for subtitler::normalize::Language {
 #[derive(Parser)]
 #[command(name = "subtitler")]
 #[command(
-  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 15 formats."
+  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 16 formats."
 )]
 #[command(version)]
 pub struct Cli {

@@ -132,6 +132,8 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     CliFormat::EbuStl => unreachable!("EBU STL handled above to skip text decoding"),
     #[cfg(feature = "dfxp")]
     CliFormat::Dfxp => Ok(subtitler::dfxp::parse_content(&text)?),
+    #[cfg(feature = "itt")]
+    CliFormat::Itt => Ok(subtitler::itt::parse_content(&text)?),
     #[cfg(feature = "whisper")]
     CliFormat::Whisper => Ok(subtitler::whisper::parse_content(&text)?),
   }
@@ -172,6 +174,8 @@ fn cmd_parse_text(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
     CliFormat::EbuStl => unreachable!("EBU STL is binary; handled by callers"),
     #[cfg(feature = "dfxp")]
     CliFormat::Dfxp => subtitler::dfxp::parse_content(&content)?,
+    #[cfg(feature = "itt")]
+    CliFormat::Itt => subtitler::itt::parse_content(&content)?,
     #[cfg(feature = "whisper")]
     CliFormat::Whisper => subtitler::whisper::parse_content(&content)?,
   };
@@ -556,6 +560,8 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
     Some(Format::EbuStl) => println!("ebu_stl"),
     #[cfg(feature = "dfxp")]
     Some(Format::Dfxp) => println!("dfxp"),
+    #[cfg(feature = "itt")]
+    Some(Format::Itt) => println!("itt"),
     #[cfg(feature = "whisper")]
     Some(Format::Whisper) => println!("whisper"),
     None => {

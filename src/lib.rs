@@ -10,6 +10,8 @@ pub mod error;
 pub mod guidelines;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
+#[cfg(feature = "itt")]
+pub mod itt;
 #[cfg(feature = "lrc")]
 pub mod lrc;
 #[cfg(feature = "microdvd")]
@@ -64,6 +66,10 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| subviewer::detect_format(data));
   #[cfg(feature = "dfxp")]
   let f = f.or_else(|| dfxp::detect_format(data));
+  // iTT must run BEFORE TTML: iTT files carry the plain TTML namespace
+  // and would otherwise be claimed by the TTML detector.
+  #[cfg(feature = "itt")]
+  let f = f.or_else(|| itt::detect_format(data));
   #[cfg(feature = "ttml")]
   let f = f.or_else(|| ttml::detect_format(data));
   #[cfg(feature = "whisper")]
@@ -126,6 +132,8 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     Format::EbuStl => Ok(ebu_stl::parse_bytes(data)?),
     #[cfg(feature = "dfxp")]
     Format::Dfxp => Ok(dfxp::parse_bytes(data)?),
+    #[cfg(feature = "itt")]
+    Format::Itt => Ok(itt::parse_bytes(data)?),
     #[cfg(feature = "whisper")]
     Format::Whisper => Ok(whisper::parse_bytes(data)?),
     #[allow(unreachable_patterns)]

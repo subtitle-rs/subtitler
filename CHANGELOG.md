@@ -49,7 +49,12 @@ adheres to [Semantic Versioning](https://semver.org/).
   progressive cues) are PipelineOps and `edit` CLI flags
   (`--reinterpret-timebase FROM TO`, `--snap-to-frames FPS`,
   `--convert-rollup`).
-- CLI `about` text corrected: 13 → 15 formats.
+- **iTT (iTunes Timed Text) format** (+1 → 16 formats, feature `itt`):
+  Apple's IMSC1 delivery profile. Parsing delegates to the TTML module;
+  detection matches the IMSC1 profile designator and runs before the TTML
+  detector (iTT files carry the shared TTML namespace). `to_string` emits
+  base TTML — strict Apple delivery validation is future work.
+- CLI `about` text corrected: 13 → 15 formats (now 16 with iTT).
 
 ### Changed
 
