@@ -38,6 +38,26 @@ pub enum ValidationIssue {
     cps: f64,
     max_cps: f64,
   },
+  TooShortDuration {
+    index: usize,
+    duration_ms: u64,
+    min_duration_ms: u64,
+  },
+  TooLongDuration {
+    index: usize,
+    duration_ms: u64,
+    max_duration_ms: u64,
+  },
+  TooShortGap {
+    index: usize,
+    gap_ms: u64,
+    min_gap_ms: u64,
+  },
+  LineCountExceeded {
+    index: usize,
+    lines: usize,
+    max_lines: usize,
+  },
 }
 
 impl std::fmt::Display for ValidationIssue {
@@ -95,6 +115,34 @@ impl ValidationIssue {
         max_cps,
       } => {
         format!("subtitle {index} has {cps:.1} chars/second (max recommended: {max_cps:.1})")
+      }
+      ValidationIssue::TooShortDuration {
+        index,
+        duration_ms,
+        min_duration_ms,
+      } => {
+        format!("subtitle {index} lasts {duration_ms}ms (minimum required: {min_duration_ms}ms)")
+      }
+      ValidationIssue::TooLongDuration {
+        index,
+        duration_ms,
+        max_duration_ms,
+      } => {
+        format!("subtitle {index} lasts {duration_ms}ms (maximum allowed: {max_duration_ms}ms)")
+      }
+      ValidationIssue::TooShortGap {
+        index,
+        gap_ms,
+        min_gap_ms,
+      } => {
+        format!("subtitle {index}: {gap_ms}ms gap before it (minimum required: {min_gap_ms}ms)")
+      }
+      ValidationIssue::LineCountExceeded {
+        index,
+        lines,
+        max_lines,
+      } => {
+        format!("subtitle {index} has {lines} lines (maximum recommended: {max_lines})")
       }
     }
   }

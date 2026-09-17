@@ -131,6 +131,18 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
     issues
   }
 
+  /// One-shot guideline check: structural timing issues from `validate()`
+  /// plus the broadcaster rule set (per-line length, line count, duration
+  /// bounds, minimum gap, reading speed).
+  fn validate_guideline(&self, guideline: &crate::guidelines::Guideline) -> Vec<ValidationIssue> {
+    let mut issues = self.validate();
+    issues.extend(crate::guidelines::validate(
+      SubtitleFormat::subtitles(self),
+      guideline,
+    ));
+    issues
+  }
+
   fn merge_adjacent(&mut self, max_gap_ms: u64) {
     self.sort();
     let subs = self.subtitles_mut();

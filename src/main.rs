@@ -257,7 +257,20 @@ async fn cmd_validate(args: cli::ValidateArgs) -> AnyResult<()> {
 
   let subs = file.subtitles();
 
-  let issues = if args.basic {
+  let issues = if let Some(preset) = args.guideline {
+    let guideline = subtitler::guidelines::GuidelinePreset::from(&preset).guideline();
+    eprintln!(
+      "Guideline preset: {} (max {} chars/line, {} lines, {}–{}ms duration, ≥{}ms gap, ≤{:.0} CPS)",
+      guideline.name,
+      guideline.max_chars_per_line,
+      guideline.max_lines,
+      guideline.min_duration_ms,
+      guideline.max_duration_ms,
+      guideline.min_gap_ms,
+      guideline.max_cps
+    );
+    file.validate_guideline(&guideline)
+  } else if args.basic {
     file.validate()
   } else {
     file.validate_extended(args.max_chars, args.max_gap, args.max_cps)
@@ -309,6 +322,10 @@ fn issue_kind(issue: &subtitler::model::ValidationIssue) -> &'static str {
     TooLongGap { .. } => "LONG_GAP",
     TextTooLong { .. } => "LONG_TEXT",
     CpsTooHigh { .. } => "HIGH_CPS",
+    TooShortDuration { .. } => "SHORT_DUR",
+    TooLongDuration { .. } => "LONG_DUR",
+    TooShortGap { .. } => "SHORT_GAP",
+    LineCountExceeded { .. } => "MANY_LINES",
   }
 }
 

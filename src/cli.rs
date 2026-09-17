@@ -210,6 +210,33 @@ impl std::fmt::Display for Format {
   }
 }
 
+/// Broadcaster guideline presets for `validate --guideline`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum GuidelinePreset {
+  #[value(name = "netflix")]
+  Netflix,
+  #[value(name = "bbc")]
+  Bbc,
+  #[value(name = "ted")]
+  Ted,
+  #[value(name = "ard")]
+  ArdOrfSrfZdf,
+  #[value(name = "channel4")]
+  Channel4,
+}
+
+impl From<&GuidelinePreset> for subtitler::guidelines::GuidelinePreset {
+  fn from(p: &GuidelinePreset) -> Self {
+    match p {
+      GuidelinePreset::Netflix => subtitler::guidelines::GuidelinePreset::Netflix,
+      GuidelinePreset::Bbc => subtitler::guidelines::GuidelinePreset::Bbc,
+      GuidelinePreset::Ted => subtitler::guidelines::GuidelinePreset::Ted,
+      GuidelinePreset::ArdOrfSrfZdf => subtitler::guidelines::GuidelinePreset::ArdOrfSrfZdf,
+      GuidelinePreset::Channel4 => subtitler::guidelines::GuidelinePreset::Channel4,
+    }
+  }
+}
+
 /// A CLI tool for parsing, converting, validating, and editing subtitles.
 #[derive(Parser)]
 #[command(name = "subtitler")]
@@ -313,6 +340,12 @@ pub struct ValidateArgs {
   /// Maximum characters per second
   #[arg(long, default_value = "25.0")]
   pub max_cps: f64,
+
+  /// Validate against a broadcaster guideline preset (replaces the
+  /// --max-chars/--max-gap/--max-cps thresholds with the preset's
+  /// published rule set, incl. duration bounds and minimum gap)
+  #[arg(long, value_enum)]
+  pub guideline: Option<GuidelinePreset>,
 
   /// Only show basic timing validation (no text checks)
   #[arg(long)]

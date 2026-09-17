@@ -7,6 +7,7 @@ pub mod dfxp;
 pub mod ebu_stl;
 pub mod encoding;
 pub mod error;
+pub mod guidelines;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
 #[cfg(feature = "lrc")]
@@ -41,6 +42,7 @@ pub mod whisper;
 pub use model::SubtitleFormat;
 
 // Re-export commonly used types for convenience
+pub use guidelines::{Guideline, GuidelinePreset};
 pub use model::{
   Format, ParseConfig, StreamingParser, Subtitle, SubtitleFile, SubtitleFileBuilder, TextPart,
   WritePolicy,
