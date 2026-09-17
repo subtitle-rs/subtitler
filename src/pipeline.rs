@@ -126,6 +126,20 @@ impl SubtitleBuilder {
     self.file.convert_rollup();
     self
   }
+
+  /// Trim cues to respect shot changes (Netflix-style guard frames).
+  pub fn apply_shot_changes(
+    mut self,
+    cuts_ms: &[u64],
+    before_frames: u64,
+    after_frames: u64,
+    fps: f64,
+  ) -> Self {
+    self
+      .file
+      .apply_shot_changes(cuts_ms, before_frames, after_frames, fps);
+    self
+  }
 }
 
 /// A single pipeline operation.
@@ -133,22 +147,52 @@ impl SubtitleBuilder {
 #[serde(tag = "op")]
 pub enum PipelineOp {
   Sort,
-  Shift { offset_ms: i64 },
-  MergeAdjacent { max_gap_ms: u64 },
-  SplitLong { max_chars: usize },
-  TransformFps { in_fps: f64, out_fps: f64 },
+  Shift {
+    offset_ms: i64,
+  },
+  MergeAdjacent {
+    max_gap_ms: u64,
+  },
+  SplitLong {
+    max_chars: usize,
+  },
+  TransformFps {
+    in_fps: f64,
+    out_fps: f64,
+  },
   RemoveOverlaps,
-  EnforceMinDuration { min_ms: u64 },
-  EnforceMaxDuration { max_ms: u64 },
-  EnforceMinGap { min_gap_ms: u64 },
-  AutoExtendCps { max_cps: f64 },
+  EnforceMinDuration {
+    min_ms: u64,
+  },
+  EnforceMaxDuration {
+    max_ms: u64,
+  },
+  EnforceMinGap {
+    min_gap_ms: u64,
+  },
+  AutoExtendCps {
+    max_cps: f64,
+  },
   FilterEmpty,
   RemoveDuplicates,
   RemoveRepeatingLines,
-  MergeIdentical { max_gap_ms: u64 },
-  SnapToFrames { fps: f64 },
-  ReinterpretTimebase { from: Timebase, to: Timebase },
+  MergeIdentical {
+    max_gap_ms: u64,
+  },
+  SnapToFrames {
+    fps: f64,
+  },
+  ReinterpretTimebase {
+    from: Timebase,
+    to: Timebase,
+  },
   ConvertRollup,
+  ApplyShotChanges {
+    cuts_ms: Vec<u64>,
+    before_frames: u64,
+    after_frames: u64,
+    fps: f64,
+  },
 }
 
 /// A declarative pipeline of subtitle transformation operations.
@@ -282,6 +326,22 @@ impl Pipeline {
     self
   }
 
+  pub fn apply_shot_changes(
+    mut self,
+    cuts_ms: Vec<u64>,
+    before_frames: u64,
+    after_frames: u64,
+    fps: f64,
+  ) -> Self {
+    self.operations.push(PipelineOp::ApplyShotChanges {
+      cuts_ms,
+      before_frames,
+      after_frames,
+      fps,
+    });
+    self
+  }
+
   pub fn apply(&self, file: SubtitleFile) -> SubtitleFile {
     let mut builder = SubtitleBuilder::from(file);
     for op in &self.operations {
@@ -306,6 +366,12 @@ impl Pipeline {
         PipelineOp::SnapToFrames { fps } => builder.snap_to_frames(*fps),
         PipelineOp::ReinterpretTimebase { from, to } => builder.reinterpret_framerate(*from, *to),
         PipelineOp::ConvertRollup => builder.convert_rollup(),
+        PipelineOp::ApplyShotChanges {
+          cuts_ms,
+          before_frames,
+          after_frames,
+          fps,
+        } => builder.apply_shot_changes(cuts_ms, *before_frames, *after_frames, *fps),
       };
     }
     builder.build()
@@ -705,5 +771,79 @@ mod tests {
     assert!(json.contains("ConvertRollup"));
     let parsed: Pipeline = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.operations.len(), 3);
+  }
+
+  // ── Shot changes ──
+  // 25 fps, before=2 frames (80 ms), after=12 frames (480 ms).
+  // Cut at 5000 → guard zone [4920, 5480].
+
+  #[test]
+  fn test_shot_change_spanning_keeps_larger_side() {
+    let mk = || SubtitleFile::Srt(vec![make_sub(4_000, 6_000, "spans")]);
+    // Before side larger (920 vs 520): end pulled to 4920.
+    let a = SubtitleBuilder::from(mk())
+      .apply_shot_changes(&[5_000], 2, 12, 25.0)
+      .build();
+    assert_eq!(a.subtitles()[0].end, 4_920);
+    assert_eq!(a.subtitles()[0].start, 4_000);
+    // After side larger (120 vs 520): start pushed to 5480.
+    let b = SubtitleFile::Srt(vec![make_sub(4_800, 6_000, "spans")]);
+    let b = SubtitleBuilder::from(b)
+      .apply_shot_changes(&[5_000], 2, 12, 25.0)
+      .build();
+    assert_eq!(b.subtitles()[0].start, 5_480);
+    assert_eq!(b.subtitles()[0].end, 6_000);
+  }
+
+  #[test]
+  fn test_shot_change_trims_guard_zone_edges() {
+    let file = SubtitleFile::Srt(vec![
+      make_sub(4_000, 4_950, "ends too close"), // end inside before-guard
+      make_sub(5_100, 6_000, "starts too close"), // start inside after-guard
+    ]);
+    let result = SubtitleBuilder::from(file)
+      .apply_shot_changes(&[5_000], 2, 12, 25.0)
+      .build();
+    let subs = result.subtitles();
+    assert_eq!(subs[0].end, 4_920);
+    assert_eq!(subs[1].start, 5_480);
+    // Text untouched — only timings move.
+    assert_eq!(subs[0].text, "ends too close");
+  }
+
+  #[test]
+  fn test_shot_change_leaves_compliant_cues() {
+    let file = SubtitleFile::Srt(vec![
+      make_sub(3_000, 4_500, "well before"),
+      make_sub(5_600, 7_000, "well after"),
+    ]);
+    let before = file.clone();
+    let result = SubtitleBuilder::from(file)
+      .apply_shot_changes(&[5_000], 2, 12, 25.0)
+      .build();
+    assert_eq!(result.subtitles(), before.subtitles());
+  }
+
+  #[test]
+  fn test_shot_change_sequential_cuts() {
+    let file = SubtitleFile::Srt(vec![make_sub(1_500, 8_500, "spans two cuts")]);
+    let result = SubtitleBuilder::from(file)
+      .apply_shot_changes(&[2_000, 8_000], 2, 12, 25.0)
+      .build();
+    let sub = &result.subtitles()[0];
+    // Cut 1 keeps the after side (6020 vs 420), cut 2 keeps the before side.
+    assert_eq!(sub.start, 2_480);
+    assert_eq!(sub.end, 7_920);
+  }
+
+  #[test]
+  fn test_shot_changes_pipeline_serde_round_trip() {
+    let pipeline = Pipeline::new().apply_shot_changes(vec![1_160, 5_000], 2, 12, 25.0);
+    let json = serde_json::to_string(&pipeline).unwrap();
+    assert!(json.contains("ApplyShotChanges"));
+    let parsed: Pipeline = serde_json::from_str(&json).unwrap();
+    let file = SubtitleFile::Srt(vec![make_sub(4_000, 6_000, "x")]);
+    let result = parsed.apply(file);
+    assert_eq!(result.subtitles()[0].end, 4_920);
   }
 }

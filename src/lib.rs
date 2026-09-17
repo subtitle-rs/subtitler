@@ -28,6 +28,7 @@ pub mod sami;
 pub mod sbv;
 #[cfg(feature = "scc")]
 pub mod scc;
+pub mod shotlist;
 #[cfg(feature = "spruce")]
 pub mod spruce;
 #[cfg(feature = "srt")]

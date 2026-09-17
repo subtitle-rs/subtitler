@@ -157,6 +157,7 @@ subtitler/
 │   ├── error.rs            # 结构化错误类型（ParseError + SubtitleError）
 │   ├── types.rs            # AnyResult 类型别名
 │   ├── normalize.rs        # 文本规范化
+│   ├── shotlist.rs         # CMX3600 EDL 切点解析（shot-change 规则输入）
 │   ├── quality.rs          # 质量报告 + Translator trait
 │   ├── guidelines.rs       # 广播机构规范预设（Netflix/BBC/TED/ARD/C4）
 │   │
@@ -505,7 +506,15 @@ CLI 入口：`subtitler pipeline input.srt output.vtt --config ops.json`。
 浏览器 demo 在 `examples/wasm/`（`index.html` 拖拽式）。**注意**：WASM 函数当前 0 测试覆盖（路线图 2.3 修）。
 
 
-### 5.13 [guidelines.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/guidelines.rs) — 广播机构规范预设（QC 批次）
+### 5.13 [shotlist.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/shotlist.rs) — EDL 切点解析（shot-change 批次）
+
+| 项 | 内容 |
+|------|------|
+| `parse_edl_cuts(bytes, fps)` | 从 CMX3600 EDL 提取排序去重的切点（ms）；取每个事件的 record in/out 时码 |
+| `SubtitleFormat::apply_shot_changes` | trim 规则：cue 须在切点前 ≥N 帧 / 后 ≥M 帧结束/开始；跨切保留较长侧；完全落入守卫区的 cue 不动 |
+| `PipelineOp::ApplyShotChanges` | serde 化，`edit --shot-changes <edl> --fps 25` |
+
+### 5.14 [guidelines.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/src/guidelines.rs) — 广播机构规范预设（QC 批次）
 
 | 项 | 内容 |
 |------|------|

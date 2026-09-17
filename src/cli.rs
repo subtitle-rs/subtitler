@@ -490,6 +490,25 @@ pub struct EditArgs {
   #[arg(long)]
   pub convert_rollup: bool,
 
+  /// CMX3600 EDL file (or URL/-) with shot changes; cues get trimmed to
+  /// respect the cuts (Netflix-style rules, see --before-frames/--after-frames)
+  #[arg(long)]
+  pub shot_changes: Option<String>,
+
+  /// Frames a cue must end before a shot change (with --shot-changes;
+  /// Netflix-style default: 2)
+  #[arg(long, default_value = "2")]
+  pub before_frames: u64,
+
+  /// Frames a cue must start after a shot change (with --shot-changes;
+  /// Netflix-style default: 12)
+  #[arg(long, default_value = "12")]
+  pub after_frames: u64,
+
+  /// FPS for --shot-changes EDL timecodes and guard frames (default 25)
+  #[arg(long)]
+  pub fps: Option<f64>,
+
   /// Force input format (auto-detect if not specified)
   #[arg(short, long)]
   pub from: Option<Format>,

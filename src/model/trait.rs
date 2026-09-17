@@ -412,4 +412,62 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
       }
     }
   }
+
+  /// Trim cues so they respect shot changes (Netflix-style rule: a cue
+  /// must end at least `before_frames` before a cut and start at least
+  /// `after_frames` after one).
+  ///
+  /// For each cut (ms) the guard zone is `[cut - before, cut + after]`:
+  /// - a cue that ends inside the before-guard or spans the cut is trimmed
+  ///   to `cut - before`;
+  /// - a cue that starts inside the after-guard is trimmed to
+  ///   `cut + after`;
+  /// - a cue spanning the cut keeps its **larger** side (before-side vs
+  ///   after-side) so the least text timing is lost;
+  /// - a cue entirely inside the guard zone cannot be trimmed without
+  ///   collapsing and is left untouched — report it separately if needed.
+  ///
+  /// Text is never altered; only timings move. Cuts are best applied in
+  /// chronological order ( [`crate::shotlist::parse_edl_cuts`] returns
+  /// them sorted).
+  fn apply_shot_changes(
+    &mut self,
+    cuts_ms: &[u64],
+    before_frames: u64,
+    after_frames: u64,
+    fps: f64,
+  ) {
+    if cuts_ms.is_empty() {
+      return;
+    }
+    let before_ms = frames_to_ms(before_frames, fps);
+    let after_ms = frames_to_ms(after_frames, fps);
+    self.sort();
+    let subs = self.subtitles_mut();
+    for cut in cuts_ms {
+      let guard_lo = cut.saturating_sub(before_ms);
+      let guard_hi = cut.saturating_add(after_ms);
+      for sub in subs.iter_mut() {
+        let (s, e) = (sub.start, sub.end);
+        if s < *cut && e > *cut {
+          // Spans the cut: keep the larger side of the guard zone.
+          let before_side = guard_lo.saturating_sub(s);
+          let after_side = e.saturating_sub(guard_hi);
+          if before_side >= after_side {
+            if guard_lo > s {
+              sub.end = guard_lo;
+            }
+          } else if guard_hi < e {
+            sub.start = guard_hi;
+          }
+        } else if e > guard_lo && e <= *cut && s < guard_lo {
+          // Ends inside the before-guard zone.
+          sub.end = guard_lo;
+        } else if s >= *cut && s < guard_hi && e > guard_hi {
+          // Starts inside the after-guard zone.
+          sub.start = guard_hi;
+        }
+      }
+    }
+  }
 }

@@ -430,10 +430,31 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
     builder = builder.convert_rollup();
     ops += 1;
   }
+  if let Some(edl_path) = args.shot_changes {
+    let fps = args.fps.unwrap_or(25.0);
+    let (data, _) = read_input(&edl_path).await?;
+    let cuts = subtitler::shotlist::parse_edl_cuts(&data, fps)?;
+    if cuts.is_empty() {
+      anyhow::bail!(
+        "No shot changes found in '{}'. Is it a CMX3600 EDL?",
+        edl_path
+      );
+    }
+    eprintln!(
+      "Shot changes: {} cuts from {} (before {}f, after {}f @ {:.3} fps)",
+      cuts.len(),
+      edl_path,
+      args.before_frames,
+      args.after_frames,
+      fps
+    );
+    builder = builder.apply_shot_changes(&cuts, args.before_frames, args.after_frames, fps);
+    ops += 1;
+  }
 
   if ops == 0 {
     anyhow::bail!(
-      "No edit operations specified. Use --sort, --shift, --merge, --split, --transform-fps, --snap-to-frames, --reinterpret-timebase, or --convert-rollup."
+      "No edit operations specified. Use --sort, --shift, --merge, --split, --transform-fps, --snap-to-frames, --reinterpret-timebase, --convert-rollup, or --shot-changes."
     );
   }
 

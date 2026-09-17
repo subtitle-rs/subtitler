@@ -8,7 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- TBD — next batch items live on feature branches until merged.
+- **Shot-change rules** (`shotlist` module + `SubtitleFormat::apply_shot_
+  changes` + `PipelineOp::ApplyShotChanges`): parse a CMX3600 EDL shot
+  list and trim cues so they end at least N frames before each cut and
+  start at least M frames after (Netflix-style; a cue spanning a cut
+  keeps its larger side; cues fully inside a guard zone are left
+  untouched). CLI: `subtitler edit --shot-changes cuts.edl --fps 25
+  [--before-frames 2] [--after-frames 12]`.
 
 ## [2.7.1] - 2026-09-18
 

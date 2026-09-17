@@ -318,7 +318,8 @@ editingtools 一半的格式面是 NLE 标记/标题互转（Premiere/FCP/Avid/R
 ├── P2#6 语言过滤 + P2#7 normalize 包    ✅ 已落地（21 语种 + 3 新函数 + CLI 补课）
 ├── P2#8 DF 感知变换 + P2#9 roll-up      ✅ 已落地（Timebase + reinterpret + snap + rollup）
 ├── P2#10 词级合并 + P2#12 iTT             ✅ 已落地（whisper --from-words + itt 格式，16 格式）
-└── P2#13 Spruce STL                        ✅ 已落地（spruce 格式，17 格式，fps 默认 25）
+├── P2#13 Spruce STL                        ✅ 已落地（spruce 格式，17 格式，fps 默认 25）
+└── P2#11 Shot change                        ✅ 已落地（shotlist + apply_shot_changes，Netflix 式守卫帧）
 
 3.0（已规划方向不变）
 ├── P2#14 AI 翻译 adapter（v3.0 AI 能力集成，已有 trait 底座）
