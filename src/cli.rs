@@ -237,6 +237,61 @@ impl From<&GuidelinePreset> for subtitler::guidelines::GuidelinePreset {
   }
 }
 
+/// Languages for `normalize --filter-language`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum Language {
+  English,
+  Spanish,
+  French,
+  German,
+  Italian,
+  Polish,
+  Portuguese,
+  Finnish,
+  Norwegian,
+  Swedish,
+  Danish,
+  Turkish,
+  Vietnamese,
+  Ukrainian,
+  Russian,
+  Hebrew,
+  Arabic,
+  Thai,
+  Japanese,
+  Korean,
+  Chinese,
+}
+
+impl From<&Language> for subtitler::normalize::Language {
+  fn from(l: &Language) -> Self {
+    use Language::*;
+    match l {
+      English => subtitler::normalize::Language::English,
+      Spanish => subtitler::normalize::Language::Spanish,
+      French => subtitler::normalize::Language::French,
+      German => subtitler::normalize::Language::German,
+      Italian => subtitler::normalize::Language::Italian,
+      Polish => subtitler::normalize::Language::Polish,
+      Portuguese => subtitler::normalize::Language::Portuguese,
+      Finnish => subtitler::normalize::Language::Finnish,
+      Norwegian => subtitler::normalize::Language::Norwegian,
+      Swedish => subtitler::normalize::Language::Swedish,
+      Danish => subtitler::normalize::Language::Danish,
+      Turkish => subtitler::normalize::Language::Turkish,
+      Vietnamese => subtitler::normalize::Language::Vietnamese,
+      Ukrainian => subtitler::normalize::Language::Ukrainian,
+      Russian => subtitler::normalize::Language::Russian,
+      Hebrew => subtitler::normalize::Language::Hebrew,
+      Arabic => subtitler::normalize::Language::Arabic,
+      Thai => subtitler::normalize::Language::Thai,
+      Japanese => subtitler::normalize::Language::Japanese,
+      Korean => subtitler::normalize::Language::Korean,
+      Chinese => subtitler::normalize::Language::Chinese,
+    }
+  }
+}
+
 /// A CLI tool for parsing, converting, validating, and editing subtitles.
 #[derive(Parser)]
 #[command(name = "subtitler")]
@@ -461,6 +516,16 @@ pub struct NormalizeArgs {
   /// Apply all normalizations (equivalent to --strip-hi --fix-ocr --quotes --whitespace)
   #[arg(long)]
   pub all: bool,
+
+  /// Remove letters that do not occur in the selected language (digits,
+  /// punctuation, symbols and emoji are kept; combine with
+  /// --second-language to keep two languages)
+  #[arg(long, value_enum)]
+  pub filter_language: Option<Language>,
+
+  /// Optional second language kept by --filter-language
+  #[arg(long, value_enum)]
+  pub second_language: Option<Language>,
 
   /// Force input format (auto-detected by default)
   #[arg(short, long)]

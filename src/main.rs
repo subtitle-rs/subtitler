@@ -552,7 +552,18 @@ async fn cmd_normalize(args: cli::NormalizeArgs) -> AnyResult<()> {
     .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format. Use --format to specify."))?;
   let mut file = parse_to_file(&data, format).await?;
 
+  let mut keep_languages: Vec<subtitler::normalize::Language> = Vec::new();
+  if let Some(lang) = args.filter_language {
+    keep_languages.push(subtitler::normalize::Language::from(&lang));
+  }
+  if let Some(lang) = args.second_language {
+    keep_languages.push(subtitler::normalize::Language::from(&lang));
+  }
+
   for sub in file.subtitles_mut() {
+    if !keep_languages.is_empty() {
+      sub.text = subtitler::normalize::remove_other_language_chars(&sub.text, &keep_languages);
+    }
     if args.all || args.fix_ocr {
       sub.text = subtitler::normalize::fix_ocr_errors(&sub.text);
     }

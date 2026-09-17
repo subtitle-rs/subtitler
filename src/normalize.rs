@@ -148,39 +148,141 @@ pub fn optimize_line_breaks(text: &str, max_chars: usize) -> String {
   result_parts.join("\n")
 }
 
+// ── Language character filtering ──
+
+/// Languages selectable for character filtering, mirroring the language
+/// list of editingtools.io's subtitle cleaner plus Chinese. Used by
+/// [`remove_other_language_chars`] to strip letters that do not occur in
+/// any kept language.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Language {
+  English,
+  Spanish,
+  French,
+  German,
+  Italian,
+  Polish,
+  Portuguese,
+  Finnish,
+  Norwegian,
+  Swedish,
+  Danish,
+  Turkish,
+  Vietnamese,
+  Ukrainian,
+  Russian,
+  Hebrew,
+  Arabic,
+  Thai,
+  Japanese,
+  Korean,
+  Chinese,
+}
+
+/// Basic Latin letters. Included only for Latin-script languages —
+/// selecting e.g. Chinese or Japanese must strip Latin letters (the main
+/// bilingual-cleanup use case), matching editingtools.io's behavior.
+const LATIN_BASE: &[(char, char)] = &[('A', 'Z'), ('a', 'z')];
+/// Latin-1 Supplement letters (ä ö ü ß é ñ ç ã å ø …).
+const LATIN_1: &[(char, char)] = &[('\u{C0}', '\u{FF}')];
+/// Latin Extended-A (Polish ą ć ę ł, Turkish ğ ı ş, Vietnamese đ ơ ư, œ …).
+const LATIN_EXT_A: &[(char, char)] = &[('\u{100}', '\u{17F}')];
+/// Latin Extended Additional (Vietnamese tone-marked vowels ạ ế ộ …).
+const LATIN_EXT_ADD: &[(char, char)] = &[('\u{1E00}', '\u{1EFF}')];
+/// Cyrillic + Cyrillic Supplement.
+const CYRILLIC: &[(char, char)] = &[('\u{400}', '\u{52F}')];
+/// Hebrew block.
+const HEBREW: &[(char, char)] = &[('\u{590}', '\u{5FF}')];
+/// Arabic block.
+const ARABIC: &[(char, char)] = &[('\u{600}', '\u{6FF}')];
+/// Thai block.
+const THAI: &[(char, char)] = &[('\u{E00}', '\u{E7F}')];
+const HIRAGANA: &[(char, char)] = &[('\u{3041}', '\u{309F}')];
+const KATAKANA: &[(char, char)] = &[('\u{30A0}', '\u{30FF}')];
+/// CJK Unified Ideographs + Extension A.
+const HAN: &[(char, char)] = &[('\u{3400}', '\u{4DBF}'), ('\u{4E00}', '\u{9FFF}')];
+/// Hangul Jamo + Compatibility Jamo + Syllables.
+const HANGUL: &[(char, char)] = &[
+  ('\u{1100}', '\u{11FF}'),
+  ('\u{3130}', '\u{318F}'),
+  ('\u{AC00}', '\u{D7A3}'),
+];
+
+impl Language {
+  /// Unicode blocks whose letters occur in this language.
+  fn letter_ranges(self) -> &'static [&'static [(char, char)]] {
+    match self {
+      Language::English => &[LATIN_BASE],
+      Language::Spanish
+      | Language::French
+      | Language::German
+      | Language::Italian
+      | Language::Polish
+      | Language::Portuguese
+      | Language::Finnish
+      | Language::Norwegian
+      | Language::Swedish
+      | Language::Danish
+      | Language::Turkish => &[LATIN_BASE, LATIN_1, LATIN_EXT_A],
+      Language::Vietnamese => &[LATIN_BASE, LATIN_1, LATIN_EXT_A, LATIN_EXT_ADD],
+      Language::Ukrainian | Language::Russian => &[CYRILLIC],
+      Language::Hebrew => &[HEBREW],
+      Language::Arabic => &[ARABIC],
+      Language::Thai => &[THAI],
+      Language::Japanese => &[HIRAGANA, KATAKANA, HAN],
+      Language::Korean => &[HANGUL, HAN],
+      Language::Chinese => &[HAN],
+    }
+  }
+}
+
+/// Remove letters that do not occur in any of `keep`.
+///
+/// Only *alphabetic* characters are filtered: digits, whitespace,
+/// punctuation, symbols and emoji are never touched, so e.g. CJK or
+/// Arabic punctuation survives an English filter. Unicode block ranges
+/// are coarse — a stray letter from an unlisted block of the same script
+/// family may survive, but the common cases (mixed bilingual subtitles)
+/// clean up correctly.
+pub fn remove_other_language_chars(text: &str, keep: &[Language]) -> String {
+  if keep.is_empty() {
+    return text.to_string();
+  }
+  let groups: Vec<&[(char, char)]> = keep
+    .iter()
+    .flat_map(|lang| lang.letter_ranges().iter().copied())
+    .collect();
+  text
+    .chars()
+    .filter(|c| {
+      if !c.is_alphabetic() {
+        return true;
+      }
+      groups
+        .iter()
+        .any(|ranges| ranges.iter().any(|&(lo, hi)| (lo..=hi).contains(c)))
+    })
+    .collect()
+}
+
 /// Filter text to keep only characters from a specified language Unicode block.
 ///
-/// Supported `lang`: `"en"` (Latin), `"zh"` (CJK Unified), `"ja"` (CJK +
-/// Hiragana + Katakana), `"ko"` (CJK + Hangul), `"ar"` (Arabic), `"he"`
-/// (Hebrew). Unknown `lang` returns the input unchanged.
+/// `lang` is an ISO-style code: `"en"`, `"zh"`, `"ja"`, `"ko"`, `"ar"`,
+/// `"he"` map to the corresponding [`Language`]; for the wider European
+/// set use [`remove_other_language_chars`] with [`Language`] directly.
+/// Unknown `lang` returns the input unchanged. Since v2.4.0 this no
+/// longer strips punctuation — only letters are filtered.
 pub fn filter_language(text: &str, lang: &str) -> String {
-  let keep = match lang {
-    "en" => |c: char| {
-      c.is_ascii_alphabetic() || c.is_ascii_digit() || c.is_ascii_punctuation() || c == ' '
-    },
-    "zh" => |c: char| {
-      ('\u{4E00}'..='\u{9FFF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
-    },
-    "ja" => |c: char| {
-      ('\u{4E00}'..='\u{9FFF}').contains(&c)
-        || ('\u{3040}'..='\u{309F}').contains(&c)
-        || ('\u{30A0}'..='\u{30FF}').contains(&c)
-        || c.is_ascii_digit()
-        || c == ' '
-        || c == '\n'
-    },
-    "ko" => |c: char| {
-      ('\u{AC00}'..='\u{D7AF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
-    },
-    "ar" => |c: char| {
-      ('\u{0600}'..='\u{06FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
-    },
-    "he" => |c: char| {
-      ('\u{0590}'..='\u{05FF}').contains(&c) || c.is_ascii_digit() || c == ' ' || c == '\n'
-    },
+  let language = match lang {
+    "en" => Language::English,
+    "zh" => Language::Chinese,
+    "ja" => Language::Japanese,
+    "ko" => Language::Korean,
+    "ar" => Language::Arabic,
+    "he" => Language::Hebrew,
     _ => return text.to_string(),
   };
-  text.chars().filter(|&c| keep(c)).collect()
+  remove_other_language_chars(text, &[language])
 }
 
 /// Merge short lines (≤ `max_chars` characters) by removing newlines within
@@ -383,6 +485,71 @@ mod tests {
   fn test_filter_language_chinese() {
     let input = "Hello 你好 World 世界";
     assert_eq!(filter_language(input, "zh"), " 你好  世界");
+  }
+
+  #[test]
+  fn test_filter_language_keeps_punctuation() {
+    // Non-ASCII punctuation and emoji survive — only letters are filtered.
+    assert_eq!(filter_language("¡Hola! 你好… 🎬", "en"), "¡Hola! … 🎬");
+  }
+
+  #[test]
+  fn test_filter_language_unknown_code_unchanged() {
+    assert_eq!(filter_language("Hello 你好", "xx"), "Hello 你好");
+  }
+
+  #[test]
+  fn test_remove_other_language_chars_mixed_scripts() {
+    use Language::*;
+    // Russian strips Latin base and Han — selecting a non-Latin language
+    // removes Latin letters (the main bilingual-cleanup use case).
+    assert_eq!(
+      remove_other_language_chars("Привет OK 世界", &[Russian]),
+      "Привет  "
+    );
+    // Japanese keeps kana + kanji, strips Latin letters, keeps digits/punct.
+    assert_eq!(
+      remove_other_language_chars("カタカナ test 42!", &[Japanese]),
+      "カタカナ  42!"
+    );
+    // Korean keeps Hangul (and Han).
+    assert_eq!(
+      remove_other_language_chars("한국어 한국", &[Korean]),
+      "한국어 한국"
+    );
+    // Hebrew plus English as second language keeps both scripts.
+    assert_eq!(
+      remove_other_language_chars("שלום peace", &[Hebrew, English]),
+      "שלום peace"
+    );
+    // Vietnamese keeps tone-marked vowels from Latin Extended Additional.
+    assert_eq!(
+      remove_other_language_chars("Xin chào thế giới", &[Vietnamese]),
+      "Xin chào thế giới"
+    );
+    // English drops accented Latin-1 letters.
+    assert_eq!(
+      remove_other_language_chars("café naïve", &[English]),
+      "caf nave"
+    );
+    // Turkish keeps ğ ı ş from Latin Extended-A / Latin-1.
+    assert_eq!(
+      remove_other_language_chars("yemek şişi", &[Turkish]),
+      "yemek şişi"
+    );
+  }
+
+  #[test]
+  fn test_remove_other_language_chars_empty_keep() {
+    assert_eq!(remove_other_language_chars("Hello 你好", &[]), "Hello 你好");
+  }
+
+  #[test]
+  fn test_language_serde_round_trip() {
+    let json = serde_json::to_string(&Language::Vietnamese).unwrap();
+    assert_eq!(json, "\"Vietnamese\"");
+    let back: Language = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, Language::Vietnamese);
   }
 
   #[test]
