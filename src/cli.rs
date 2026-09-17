@@ -33,6 +33,9 @@ pub enum Format {
   #[cfg(feature = "ebu_stl")]
   #[value(name = "stl")]
   EbuStl,
+  #[cfg(feature = "spruce")]
+  #[value(name = "spruce")]
+  Spruce,
   #[cfg(feature = "dfxp")]
   #[value(name = "dfxp")]
   Dfxp,
@@ -142,6 +145,8 @@ impl From<&subtitler::model::Format> for Format {
       M::Scc => Format::Scc,
       #[cfg(feature = "ebu_stl")]
       M::EbuStl => Format::EbuStl,
+      #[cfg(feature = "spruce")]
+      M::Spruce => Format::Spruce,
       #[cfg(feature = "dfxp")]
       M::Dfxp => Format::Dfxp,
       #[cfg(feature = "itt")]
@@ -182,6 +187,8 @@ impl From<&Format> for subtitler::model::Format {
       Format::Scc => M::Scc,
       #[cfg(feature = "ebu_stl")]
       Format::EbuStl => M::EbuStl,
+      #[cfg(feature = "spruce")]
+      Format::Spruce => M::Spruce,
       #[cfg(feature = "dfxp")]
       Format::Dfxp => M::Dfxp,
       #[cfg(feature = "itt")]
@@ -221,6 +228,8 @@ impl std::fmt::Display for Format {
       Format::Scc => write!(f, "SCC"),
       #[cfg(feature = "ebu_stl")]
       Format::EbuStl => write!(f, "EBU STL"),
+      #[cfg(feature = "spruce")]
+      Format::Spruce => write!(f, "Spruce STL"),
       #[cfg(feature = "dfxp")]
       Format::Dfxp => write!(f, "DFXP"),
       #[cfg(feature = "itt")]
@@ -317,7 +326,7 @@ impl From<&Language> for subtitler::normalize::Language {
 #[derive(Parser)]
 #[command(name = "subtitler")]
 #[command(
-  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 16 formats."
+  about = "Subtitle toolkit: parse, convert, validate, edit, and analyze subtitles across 17 formats."
 )]
 #[command(version)]
 pub struct Cli {

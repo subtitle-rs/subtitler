@@ -6,7 +6,7 @@
 ## 0. 项目快速画像
 
 - **单 crate** 在 `subtitler/`（仓库根只是 git 容器，根无 `Cargo.toml`）。
-- **16 种字幕格式**（SRT, VTT, ASS, SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL, DFXP, iTT, Whisper JSON），每个一个 feature flag。
+- **17 种字幕格式**（SRT, VTT, ASS, SSA, MicroDVD, SubViewer, TTML, SBV, LRC, SAMI, MPL2, SCC, EBU STL, Spruce STL, DFXP, iTT, Whisper JSON），每个一个 feature flag。
 - 时间戳统一用**毫秒 (`u64`)**，不是秒。
 - `src/lib.rs` = 库根，`src/main.rs` = CLI 二进制。
 - 当前 MSRV: **1.85**（Edition 2024）。
@@ -57,7 +57,7 @@ cargo bench
 ### CI 矩阵
 
 `.github/workflows/rust.yml` 跑两个 feature 组合：
-- `""`（default features，16 格式 + http）
+- `""`（default features，17 格式 + http）
 - `--no-default-features --features srt`（最小构建）
 
 **注意**：当前 CI 的 clippy job **只跑 default features**，最小构建的 `#[cfg]` 代码未被 lint。这是已知缺口（路线图 2.3 修）。

@@ -130,6 +130,8 @@ async fn parse_to_file(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile
     CliFormat::Scc => Ok(scc::parse_content(&text)?),
     #[cfg(feature = "ebu_stl")]
     CliFormat::EbuStl => unreachable!("EBU STL handled above to skip text decoding"),
+    #[cfg(feature = "spruce")]
+    CliFormat::Spruce => Ok(subtitler::spruce::parse_content(&text, None)?),
     #[cfg(feature = "dfxp")]
     CliFormat::Dfxp => Ok(subtitler::dfxp::parse_content(&text)?),
     #[cfg(feature = "itt")]
@@ -172,6 +174,8 @@ fn cmd_parse_text(data: &[u8], format: CliFormat) -> AnyResult<SubtitleFile> {
     CliFormat::Scc => subtitler::scc::parse_content(&content)?,
     #[cfg(feature = "ebu_stl")]
     CliFormat::EbuStl => unreachable!("EBU STL is binary; handled by callers"),
+    #[cfg(feature = "spruce")]
+    CliFormat::Spruce => subtitler::spruce::parse_content(&content, None)?,
     #[cfg(feature = "dfxp")]
     CliFormat::Dfxp => subtitler::dfxp::parse_content(&content)?,
     #[cfg(feature = "itt")]
@@ -558,6 +562,8 @@ async fn cmd_detect(args: cli::DetectArgs) -> AnyResult<()> {
     Some(Format::Scc) => println!("scc"),
     #[cfg(feature = "ebu_stl")]
     Some(Format::EbuStl) => println!("ebu_stl"),
+    #[cfg(feature = "spruce")]
+    Some(Format::Spruce) => println!("spruce"),
     #[cfg(feature = "dfxp")]
     Some(Format::Dfxp) => println!("dfxp"),
     #[cfg(feature = "itt")]

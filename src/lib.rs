@@ -28,6 +28,8 @@ pub mod sami;
 pub mod sbv;
 #[cfg(feature = "scc")]
 pub mod scc;
+#[cfg(feature = "spruce")]
+pub mod spruce;
 #[cfg(feature = "srt")]
 pub mod srt;
 #[cfg(feature = "subviewer")]
@@ -86,6 +88,8 @@ pub fn detect_format(data: &[u8]) -> Option<Format> {
   let f = f.or_else(|| scc::detect_format(data));
   #[cfg(feature = "ebu_stl")]
   let f = f.or_else(|| ebu_stl::detect_format(data));
+  #[cfg(feature = "spruce")]
+  let f = f.or_else(|| spruce::detect_format(data));
   f
 }
 
@@ -130,6 +134,8 @@ pub fn parse_bytes_as(data: &[u8], fmt: Format) -> Result<model::SubtitleFile, e
     Format::Scc => Ok(scc::parse_bytes(data)?),
     #[cfg(feature = "ebu_stl")]
     Format::EbuStl => Ok(ebu_stl::parse_bytes(data)?),
+    #[cfg(feature = "spruce")]
+    Format::Spruce => Ok(spruce::parse_bytes(data, None)?),
     #[cfg(feature = "dfxp")]
     Format::Dfxp => Ok(dfxp::parse_bytes(data)?),
     #[cfg(feature = "itt")]

@@ -15,6 +15,8 @@ pub enum Format {
   Ssa,
   #[cfg(feature = "microdvd")]
   MicroDvd,
+  #[cfg(feature = "spruce")]
+  Spruce,
   #[cfg(feature = "subviewer")]
   SubViewer,
   #[cfg(feature = "ttml")]
@@ -59,6 +61,9 @@ pub enum SubtitleFile {
 
   #[cfg(feature = "microdvd")]
   MicroDvd { fps: f64, subtitles: Vec<Subtitle> },
+
+  #[cfg(feature = "spruce")]
+  Spruce { fps: f64, subtitles: Vec<Subtitle> },
 
   #[cfg(feature = "subviewer")]
   SubViewer {
@@ -124,6 +129,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Ssa(data) => &data.subtitles,
       #[cfg(feature = "microdvd")]
       SubtitleFile::MicroDvd { subtitles, .. } => subtitles,
+      #[cfg(feature = "spruce")]
+      SubtitleFile::Spruce { subtitles, .. } => subtitles,
       #[cfg(feature = "subviewer")]
       SubtitleFile::SubViewer { subtitles, .. } => subtitles,
       #[cfg(feature = "ttml")]
@@ -161,6 +168,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Ssa(data) => &mut data.subtitles,
       #[cfg(feature = "microdvd")]
       SubtitleFile::MicroDvd { subtitles, .. } => subtitles,
+      #[cfg(feature = "spruce")]
+      SubtitleFile::Spruce { subtitles, .. } => subtitles,
       #[cfg(feature = "subviewer")]
       SubtitleFile::SubViewer { subtitles, .. } => subtitles,
       #[cfg(feature = "ttml")]
@@ -198,6 +207,8 @@ impl SubtitleFormat for SubtitleFile {
       SubtitleFile::Ssa(_) => Format::Ssa,
       #[cfg(feature = "microdvd")]
       SubtitleFile::MicroDvd { .. } => Format::MicroDvd,
+      #[cfg(feature = "spruce")]
+      SubtitleFile::Spruce { .. } => Format::Spruce,
       #[cfg(feature = "subviewer")]
       SubtitleFile::SubViewer { .. } => Format::SubViewer,
       #[cfg(feature = "ttml")]
@@ -246,6 +257,14 @@ impl SubtitleFormat for SubtitleFile {
           }
           _ => crate::microdvd::to_string(subs, fps),
         }
+      }
+      #[cfg(feature = "spruce")]
+      Format::Spruce => {
+        let fps = match self {
+          SubtitleFile::Spruce { fps, .. } => Some(*fps),
+          _ => None,
+        };
+        crate::spruce::to_string(subs, fps)
       }
       #[cfg(feature = "subviewer")]
       Format::SubViewer => {

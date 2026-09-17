@@ -123,6 +123,12 @@ impl SubtitleFileBuilder {
         })
       }
 
+      #[cfg(feature = "spruce")]
+      Format::Spruce => Some(SubtitleFile::Spruce {
+        fps: self.fps.unwrap_or(crate::spruce::DEFAULT_FPS),
+        subtitles: self.subtitles,
+      }),
+
       #[cfg(feature = "subviewer")]
       Format::SubViewer => Some(SubtitleFile::SubViewer {
         header: self.header,

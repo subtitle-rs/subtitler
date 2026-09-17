@@ -1,11 +1,11 @@
 ---
 name: subtitler
-description: Parse, convert, validate, edit, and generate subtitles using the subtitler CLI. Supports 16 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML/IMSC, SBV, LRC, SAMI, MPL2, SCC, EBU STL, DFXP, iTT, Whisper JSON).
+description: Parse, convert, validate, edit, and generate subtitles using the subtitler CLI. Supports 17 formats (SRT, VTT, ASS/SSA, MicroDVD, SubViewer, TTML/IMSC, SBV, LRC, SAMI, MPL2, SCC, EBU STL, Spruce STL, DFXP, iTT, Whisper JSON).
 ---
 
 # subtitler CLI
 
-Process subtitles from the command line — parse, convert, validate, edit, detect, and generate quality reports across 16 subtitle formats.
+Process subtitles from the command line — parse, convert, validate, edit, detect, and generate quality reports across 17 subtitle formats.
 
 ## Basic Commands
 
@@ -140,6 +140,7 @@ subtitler detect unknown.sub
 | EBU STL | `.stl` | ✅ | `ebu_stl` |
 | DFXP | `.dfxp` | ✅ | `dfxp` |
 | iTT (iTunes Timed Text) | `.itt` | ✅ | `itt` |
+| Spruce STL | `.stl`* | ✅ | `spruce` |
 | Whisper JSON | `.json` | ✅ | `whisper` |
 
 ## stdin/stdout Support

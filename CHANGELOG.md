@@ -54,7 +54,14 @@ adheres to [Semantic Versioning](https://semver.org/).
   detection matches the IMSC1 profile designator and runs before the TTML
   detector (iTT files carry the shared TTML namespace). `to_string` emits
   base TTML — strict Apple delivery validation is future work.
-- CLI `about` text corrected: 13 → 15 formats (now 16 with iTT).
+- **Spruce STL format** (+1 → 17 formats, feature `spruce`): the
+  text-based DVD Maestro / Spruce Technologies format. `$`-directives and
+  `//` comments are skipped; data lines are `HH:MM:SS:FF,HH:MM:SS:FF,
+  text` at the file's frame rate (`DEFAULT_FPS` = 25, override in the
+  library API); `|` marks line breaks. Content-signature detection
+  requires a data line plus a directive/comment; `.stl` stays mapped to
+  EBU STL in `--from`/`--to` (force with `--from spruce`).
+- CLI `about` text corrected: 13 → 15 formats (now 17 with iTT + Spruce STL).
 
 ### Changed
 
