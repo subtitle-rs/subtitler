@@ -345,6 +345,83 @@ pub fn replace_newlines(text: &str, separator: &str) -> String {
   text.lines().collect::<Vec<_>>().join(separator)
 }
 
+/// Ensure a dialogue dash at the start of a line is followed by a space:
+/// `-Hello` becomes `- Hello`. Only an ASCII `-` as the first
+/// non-whitespace character of a line and directly followed by a letter is
+/// touched — already-spaced dashes, minus signs and bullet dashes stay as
+/// they are (broadcast style guides, e.g. Netflix, require the spaced form).
+pub fn fix_opening_hyphen_spacing(text: &str) -> String {
+  text
+    .split('\n')
+    .map(|line| {
+      let indent = line.len() - line.trim_start().len();
+      let rest = &line[indent..];
+      let mut chars = rest.chars();
+      if let (Some('-'), Some(c)) = (chars.next(), chars.next()) {
+        if c.is_alphabetic() {
+          return format!("{}- {}", &line[..indent], &rest['-'.len_utf8()..]);
+        }
+      }
+      line.to_string()
+    })
+    .collect::<Vec<_>>()
+    .join("\n")
+}
+
+/// Convert an ALL-CAPS cue to sentence case (editingtools' "Caps lock to
+/// normal casing", experimental there too). Returns the input unchanged
+/// unless every alphabetic character is uppercase; sentence starts — cue
+/// start, after `. ! ?`, and at line starts — get an initial capital.
+/// Heuristic: a lone "I" mid-sentence becomes lowercase "i".
+pub fn normalize_all_caps(text: &str) -> String {
+  let letters: Vec<char> = text.chars().filter(|c| c.is_alphabetic()).collect();
+  if letters.is_empty() || letters.iter().any(|c| c.is_lowercase()) {
+    return text.to_string();
+  }
+  let lower = text.to_lowercase();
+  let mut out = String::with_capacity(lower.len());
+  let mut capitalize = true;
+  for c in lower.chars() {
+    if capitalize && c.is_alphabetic() {
+      out.extend(c.to_uppercase());
+      capitalize = false;
+    } else {
+      if matches!(c, '.' | '!' | '?' | '\n') {
+        capitalize = true;
+      }
+      out.push(c);
+    }
+  }
+  out
+}
+
+/// Remove every `open … close` span (markers included). Non-greedy: each
+/// span ends at the first `close` after its `open`. An `open` without a
+/// matching `close` is left in place. Generalizes the bracket patterns
+/// hardcoded in [`strip_hearing_impaired`] — e.g. `remove_text_between(
+/// text, "[", "]")`.
+pub fn remove_text_between(text: &str, open: &str, close: &str) -> String {
+  if open.is_empty() || close.is_empty() {
+    return text.to_string();
+  }
+  let mut out = String::with_capacity(text.len());
+  let mut rest = text;
+  while let Some(start) = rest.find(open) {
+    out.push_str(&rest[..start]);
+    let after_open = &rest[start + open.len()..];
+    match after_open.find(close) {
+      Some(end) => rest = &after_open[end + close.len()..],
+      None => {
+        // Unmatched open: keep it (and the remainder) verbatim.
+        out.push_str(&rest[start..]);
+        return out;
+      }
+    }
+  }
+  out.push_str(rest);
+  out
+}
+
 /// Find the best word boundary to split a sequence of words.
 /// Returns the index after the last word that fits in `max_chars`.
 fn find_best_split(words: &[&str], max_chars: usize) -> Option<usize> {
@@ -550,6 +627,58 @@ mod tests {
     assert_eq!(json, "\"Vietnamese\"");
     let back: Language = serde_json::from_str(&json).unwrap();
     assert_eq!(back, Language::Vietnamese);
+  }
+
+  #[test]
+  fn test_fix_opening_hyphen_spacing() {
+    assert_eq!(fix_opening_hyphen_spacing("-Hello there"), "- Hello there");
+    assert_eq!(
+      fix_opening_hyphen_spacing("- Are you sure?\n-Yes."),
+      "- Are you sure?\n- Yes."
+    );
+    // Indented dash keeps its indentation.
+    assert_eq!(fix_opening_hyphen_spacing("  -Sure"), "  - Sure");
+    // Already spaced, double dash, minus sign, bullet: untouched.
+    assert_eq!(fix_opening_hyphen_spacing("- spaced"), "- spaced");
+    assert_eq!(fix_opening_hyphen_spacing("-- note"), "-- note");
+    assert_eq!(fix_opening_hyphen_spacing("-3 degrees"), "-3 degrees");
+    assert_eq!(fix_opening_hyphen_spacing("- no change"), "- no change");
+  }
+
+  #[test]
+  fn test_normalize_all_caps() {
+    assert_eq!(normalize_all_caps("HELLO. WORLD!"), "Hello. World!");
+    // Apostrophes don't end sentences — one sentence stays one capital.
+    assert_eq!(normalize_all_caps("IT'S FINE"), "It's fine");
+    // Mixed or lower-case cues pass through unchanged.
+    assert_eq!(
+      normalize_all_caps("Already mixed Case"),
+      "Already mixed Case"
+    );
+    assert_eq!(normalize_all_caps("all lower"), "all lower");
+    // No letters at all: unchanged.
+    assert_eq!(normalize_all_caps("42!"), "42!");
+    // Multi-line: each line start capitalizes (sentence case, not title case).
+    assert_eq!(
+      normalize_all_caps("LINE ONE\nLINE TWO"),
+      "Line one\nLine two"
+    );
+  }
+
+  #[test]
+  fn test_remove_text_between() {
+    assert_eq!(
+      remove_text_between("[LAUGHS] hi [MUSIC] there", "[", "]"),
+      " hi  there"
+    );
+    assert_eq!(remove_text_between("(sighs) okay", "(", ")"), " okay");
+    // Unmatched open marker is kept.
+    assert_eq!(
+      remove_text_between("oops [ no close", "[", "]"),
+      "oops [ no close"
+    );
+    // Empty markers: no-op.
+    assert_eq!(remove_text_between("keep me", "", "]"), "keep me");
   }
 
   #[test]

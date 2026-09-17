@@ -527,6 +527,32 @@ pub struct NormalizeArgs {
   #[arg(long, value_enum)]
   pub second_language: Option<Language>,
 
+  /// Merge consecutive lines when they fit within MAX characters
+  /// (per line, paragraph breaks are preserved)
+  #[arg(long)]
+  pub merge_short_lines: Option<usize>,
+
+  /// Replace all line breaks with spaces (single line per cue)
+  #[arg(long)]
+  pub remove_linebreaks: bool,
+
+  /// Replace line breaks with the | symbol
+  #[arg(long)]
+  pub linebreaks_to_pipe: bool,
+
+  /// Ensure dialogue dashes at line starts are followed by a space
+  /// ("-Hello" -> "- Hello")
+  #[arg(long)]
+  pub fix_hyphens: bool,
+
+  /// Convert ALL-CAPS cues to sentence case (experimental heuristic)
+  #[arg(long)]
+  pub fix_caps: bool,
+
+  /// Remove every OPEN...CLOSE span (inclusive), e.g. --remove-between '[' ']'
+  #[arg(long, value_names = &["OPEN", "CLOSE"], number_of_values = 2)]
+  pub remove_between: Option<Vec<String>>,
+
   /// Force input format (auto-detected by default)
   #[arg(short, long)]
   pub format: Option<Format>,

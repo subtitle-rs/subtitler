@@ -564,6 +564,26 @@ async fn cmd_normalize(args: cli::NormalizeArgs) -> AnyResult<()> {
     if !keep_languages.is_empty() {
       sub.text = subtitler::normalize::remove_other_language_chars(&sub.text, &keep_languages);
     }
+    if let Some(max) = args.merge_short_lines {
+      sub.text = subtitler::normalize::merge_short_lines(&sub.text, max);
+    }
+    if args.remove_linebreaks {
+      sub.text = subtitler::normalize::remove_all_newlines(&sub.text);
+    }
+    if args.linebreaks_to_pipe {
+      sub.text = subtitler::normalize::replace_newlines(&sub.text, "|");
+    }
+    if args.fix_hyphens {
+      sub.text = subtitler::normalize::fix_opening_hyphen_spacing(&sub.text);
+    }
+    if args.fix_caps {
+      sub.text = subtitler::normalize::normalize_all_caps(&sub.text);
+    }
+    if let Some(between) = &args.remove_between {
+      if between.len() == 2 {
+        sub.text = subtitler::normalize::remove_text_between(&sub.text, &between[0], &between[1]);
+      }
+    }
     if args.all || args.fix_ocr {
       sub.text = subtitler::normalize::fix_ocr_errors(&sub.text);
     }
