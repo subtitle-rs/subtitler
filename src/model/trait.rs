@@ -197,6 +197,26 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
     }
   }
 
+  /// Ensure at least `min_gap_ms` between consecutive subtitles by pulling
+  /// back the earlier cue's end. Start times are sync-critical, so they stay
+  /// fixed. When shortening would invert the earlier cue's duration (the gap
+  /// is impossible without moving starts or shortening below zero), the pair
+  /// is left untouched — `validate_guideline` reports it as `TooShortGap`.
+  fn enforce_min_gap(&mut self, min_gap_ms: u64) {
+    self.sort();
+    let subs = self.subtitles_mut();
+    for i in 1..subs.len() {
+      let gap = subs[i].start.saturating_sub(subs[i - 1].end);
+      if gap >= min_gap_ms {
+        continue;
+      }
+      let new_end = subs[i].start.saturating_sub(min_gap_ms);
+      if new_end > subs[i - 1].start {
+        subs[i - 1].end = new_end;
+      }
+    }
+  }
+
   fn auto_extend_for_cps(&mut self, max_cps: f64) {
     self.sort();
     let subs = self.subtitles_mut();

@@ -67,6 +67,11 @@ impl SubtitleBuilder {
     self
   }
 
+  pub fn enforce_min_gap(mut self, min_gap_ms: u64) -> Self {
+    self.file.enforce_min_gap(min_gap_ms);
+    self
+  }
+
   pub fn auto_extend_cps(mut self, max_cps: f64) -> Self {
     self.file.auto_extend_for_cps(max_cps);
     self
@@ -103,6 +108,7 @@ pub enum PipelineOp {
   RemoveOverlaps,
   EnforceMinDuration { min_ms: u64 },
   EnforceMaxDuration { max_ms: u64 },
+  EnforceMinGap { min_gap_ms: u64 },
   AutoExtendCps { max_cps: f64 },
   FilterEmpty,
   RemoveDuplicates,
@@ -188,6 +194,13 @@ impl Pipeline {
     self
   }
 
+  pub fn enforce_min_gap(mut self, min_gap_ms: u64) -> Self {
+    self
+      .operations
+      .push(PipelineOp::EnforceMinGap { min_gap_ms });
+    self
+  }
+
   pub fn auto_extend_cps(mut self, max_cps: f64) -> Self {
     self.operations.push(PipelineOp::AutoExtendCps { max_cps });
     self
@@ -215,6 +228,7 @@ impl Pipeline {
         PipelineOp::RemoveOverlaps => builder.remove_overlaps(),
         PipelineOp::EnforceMinDuration { min_ms } => builder.enforce_min_duration(*min_ms),
         PipelineOp::EnforceMaxDuration { max_ms } => builder.enforce_max_duration(*max_ms),
+        PipelineOp::EnforceMinGap { min_gap_ms } => builder.enforce_min_gap(*min_gap_ms),
         PipelineOp::AutoExtendCps { max_cps } => builder.auto_extend_cps(*max_cps),
         PipelineOp::FilterEmpty => {
           builder = builder.filter(|sub| !sub.text.trim().is_empty());
@@ -375,5 +389,86 @@ mod tests {
     assert!(json.contains("RemoveDuplicates"));
     let parsed: Pipeline = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.operations.len(), 1);
+  }
+
+  #[test]
+  fn test_enforce_min_gap_pulls_back_previous_end() {
+    // 20 ms gap between the cues; enforce 83 ms (2 frames @ 24 fps).
+    let file = SubtitleFile::Srt(vec![
+      make_sub(1000, 2000, "first"),
+      make_sub(2020, 3000, "second"),
+    ]);
+    let result = SubtitleBuilder::from(file).enforce_min_gap(83).build();
+    let subs = result.subtitles();
+    assert_eq!(subs.len(), 2);
+    // Start times are sync-critical and must not move.
+    assert_eq!(subs[0].start, 1000);
+    assert_eq!(subs[1].start, 2020);
+    // The earlier cue's end is pulled back to 2020 - 83.
+    assert_eq!(subs[0].end, 1937);
+    assert_eq!(subs[1].end, 3000);
+  }
+
+  #[test]
+  fn test_enforce_min_gap_skips_impossible_pairs() {
+    // The cues overlap: creating a 200 ms gap would need "first" to end at
+    // 1850, before its own start (2000). The pair is left untouched and
+    // validate_guideline reports it instead.
+    let file = SubtitleFile::Srt(vec![
+      make_sub(2000, 2100, "first"),
+      make_sub(2050, 3000, "second"),
+    ]);
+    let result = SubtitleBuilder::from(file).enforce_min_gap(200).build();
+    let subs = result.subtitles();
+    assert_eq!(subs[0].end, 2100);
+  }
+
+  #[test]
+  fn test_enforce_min_gap_idempotent() {
+    let file = SubtitleFile::Srt(vec![
+      make_sub(1000, 2000, "first"),
+      make_sub(2020, 3000, "second"),
+      make_sub(3060, 4000, "third"),
+    ]);
+    let once = SubtitleBuilder::from(file.clone())
+      .enforce_min_gap(83)
+      .build();
+    let twice = SubtitleBuilder::from(once.clone())
+      .enforce_min_gap(83)
+      .build();
+    assert_eq!(once.subtitles(), twice.subtitles());
+  }
+
+  #[test]
+  fn test_enforce_min_gap_pipeline_round_trip() {
+    let pipeline = Pipeline::new().enforce_min_gap(83);
+    let json = serde_json::to_string(&pipeline).unwrap();
+    assert!(json.contains("EnforceMinGap"));
+    let parsed: Pipeline = serde_json::from_str(&json).unwrap();
+    let file = SubtitleFile::Srt(vec![
+      make_sub(0, 1000, "first"),
+      make_sub(1010, 2000, "second"),
+    ]);
+    let result = parsed.apply(file);
+    assert_eq!(result.subtitles()[0].end, 927); // 1010 - 83
+  }
+
+  #[test]
+  fn test_enforce_min_gap_then_validate_clean() {
+    use crate::guidelines::{Guideline, GuidelinePreset};
+    let file = SubtitleFile::Srt(vec![
+      make_sub(1000, 4000, "long enough first"),
+      make_sub(4020, 8000, "long enough second"),
+    ]);
+    let fixed = SubtitleBuilder::from(file).enforce_min_gap(83).build();
+    let g: Guideline = GuidelinePreset::Netflix.guideline();
+    let issues = fixed.validate_guideline(&g);
+    assert!(
+      !issues
+        .iter()
+        .any(|i| matches!(i, crate::model::ValidationIssue::TooShortGap { .. })),
+      "after enforcement no TooShortGap should remain: {:?}",
+      issues
+    );
   }
 }
