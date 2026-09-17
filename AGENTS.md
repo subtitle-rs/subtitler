@@ -182,13 +182,21 @@ cargo build --no-default-features --features srt
 cargo test --no-default-features --features srt --lib     # ★ 必须加，build 通过不等于 test 通过
 cargo build --no-default-features --features dfxp,ttml
 cargo build --no-default-features --features whisper
+cargo build --no-default-features --features itt,ttml
+cargo build --no-default-features --features spruce
 ```
+
+### 3.17 依赖更新后必须本地验证 MSRV——本地全绿不代表 MSRV 过
+
+**经历 v2.7.1**：`cargo update` 82 个包后，本地全套门禁（stable 工具链）全绿并已 push，CI 的 msrv job（1.85）却挂了——`yoke-derive 0.8.3` 用了 `str::from_utf8` 的固有方法形式（1.85 编译不过），但它**没有声明提升 rust_version**，MSRV-aware 解析器（edition 2024 默认按 rust-version 解析）只能看声明值，照选不误。
+
+**规则**：依赖更新（`cargo update` / dependabot 响应）后，跑 `cargo +1.85 build`（§6.2 已纳入）。声明 MSRV 不可信——未声明或谎报的 crate 只能用真 1.85 编译器抓。定位方法：`cargo +1.85 build` 的 E0599/E0432 指向 registry 里某个 crate → `cargo update -p <crate> --precise <旧版>` 回钉。
 
 ---
 
 ## 4. Feature Flags
 
-`default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "dfxp", "whisper", "http"]`
+`default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "dfxp", "itt", "spruce", "whisper", "http"]`
 
 每个格式一个 feature，通过 `#[cfg(feature = "xxx")]` 控制模块声明、`Format`/`SubtitleFile` 枚举变体、所有 `match` 分支。
 
@@ -237,6 +245,7 @@ cargo clippy --all-targets -- -D warnings         # 0 警告（注意 --all-targ
 cargo test --all-targets                          # 全过，且测试数不减少
 cargo build --no-default-features --features srt  # 最小构建仍工作
 cargo build --examples                            # 示例仍工作
+cargo +1.85 build                                 # MSRV 仍编译（一次性: rustup toolchain install 1.85 --profile minimal）
 ```
 
 ### 6.3 每个 bug 修复配套 regression 测试
