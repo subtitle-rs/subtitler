@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- TBD — next batch items live on feature branches until merged.
+
+## [2.7.0] - 2026-09-17
+
+### Added
+
 - **Broadcaster guideline presets** (`guidelines` module): Netflix / BBC /
   TED / ARD-ORF-SRF-ZDF / Channel 4 rule sets verified against each
   broadcaster's published style guide. `SubtitleFormat::validate_guideline()`

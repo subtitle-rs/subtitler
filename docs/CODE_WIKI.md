@@ -1,7 +1,7 @@
 # Subtitler Code Wiki
 
-> 版本: v2.4.0 · Rust Edition 2024 · MSRV 1.85
-> 15 字幕格式 · ~340 tests · WASM-ready · Pipeline DSL · API-unified · CI-hardened
+> 版本: v2.7.0 · Rust Edition 2024 · MSRV 1.85
+> 17 字幕格式 · 408 tests · WASM-ready · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设
 
 ---
 
@@ -171,7 +171,11 @@ subtitler/
 │   ├── sami.rs             # 格式: SAMI
 │   ├── mpl2.rs             # 格式: MPL2
 │   ├── scc.rs              # 格式: SCC (CEA-608，SMPTE 12M drop-frame 自 2.1)
-│   └── ebu_stl.rs          # 格式: EBU STL (二进制，round-trip 自 2.1 修复)
+│   ├── ebu_stl.rs          # 格式: EBU STL (二进制，round-trip 自 2.1 修复)
+│   ├── dfxp.rs             # 格式: DFXP (委托 TTML，自 2.4)
+│   ├── whisper.rs          # 格式: Whisper JSON (词级合并自 2.7)
+│   ├── itt.rs              # 格式: iTT (IMSC1，委托 TTML，自 2.7)
+│   └── spruce.rs           # 格式: Spruce STL (帧时码 fps=25 默认，自 2.7)
 │
 ├── examples/               # 23 使用示例 (每个 [[example]] 在 Cargo.toml 声明)
 │   └── wasm/               #   浏览器 WASM demo (index.html + README)
@@ -936,20 +940,22 @@ console.log(result.subtitle_count, result.format, result.output);
 
 ## 14. 测试体系
 
-### 14.1 测试分布（v2.1.0 快照）
+### 14.1 测试分布（v2.7.0 快照）
 
-- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 142 个）。
-- **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 144 个）:
-  - [integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/integration.rs) — 端到端流程（66 tests）
-  - [cross_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format.rs) — 跨格式转换（覆盖 ~3%，路线图 2.3 扩矩阵）
-  - [arch_unification.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/arch_unification.rs) — 架构统一性（12 tests）
-  - [cleanup_batch.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cleanup_batch.rs) — 清理批处理（6 tests）
-  - [error_assertions.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/error_assertions.rs) — 错误类型 Display（12 tests）
+- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 238 个）。
+- **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 170 个）:
+  - [integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/integration.rs) — 端到端流程（43 tests）
+  - [cross_format_matrix.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format_matrix.rs) — 跨格式矩阵（23 tests）
   - [pipeline_integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/pipeline_integration.rs) — Pipeline + Builder（16 tests，v2.0+）
   - [streaming_tests.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/streaming_tests.rs) — 流式解析（16 tests）
-  - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests，v2.1+）
-  - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（2 tests，仅 SRT/VTT）
-- **总测试数**: **293**（v1.4 时 216 → v2.0 时 273 → v2.1 时 286 → v2.2 时 293）。
+  - [arch_unification.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/arch_unification.rs) — 架构统一性（12 tests）
+  - [error_assertions.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/error_assertions.rs) — 错误类型 Display（12 tests）
+  - [api_surface.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/api_surface.rs) — API 表面（5 tests）
+  - [cleanup_batch.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cleanup_batch.rs) — 清理批处理（6 tests）
+  - [cross_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format.rs) — 跨格式转换（6 tests）
+  - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（6 tests）
+  - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests）
+- **总测试数**: **408**（v2.2 时 293 → v2.3 时 325 → v2.4 时 340 → v2.4.1/2.6 时 344 → v2.7 时 408）。
 
 ### 14.2 运行
 
@@ -1036,6 +1042,7 @@ gap analysis: [docs/subtitler-vs-editingtools-gap-analysis.md](file:///Users/man
 | **2.4.0** | ✅ 已发布 | gap analysis P1 收编：DFXP + Whisper JSON + 去重 PipelineOp + normalize 4 扩展。15 新测试，总 340 |
 | **2.4.1** | ✅ 已发布 | 外部测试修复：SCC 文本解码 P1、DFXP namespace、SubViewer 检测、SBV 两行格式、iTT SMPTE。344 测试 |
 | **2.6.x** | ✅ 已发布 | 代码质量优化：error 类型统一 + magic number 常量化 + MSRV 修复 + CI 修正。344 测试 |
+| **2.7.0** | ✅ 已发布 | editingtools.io 差距收编：Guideline QC 预设 + min-gap/dedup/DF 时基/roll-up + 21 语种过滤 + normalize 扩展 + 词级合并 + iTT + Spruce STL（17 格式）。64 新测试，总 408 |
 
 **当前专注打磨 2.x**，暂不规划 3.0。
 

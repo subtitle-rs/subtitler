@@ -1,5 +1,49 @@
 # Migration Guide
 
+## 2.6.x → 2.7.0
+
+### Behavior change (minor breaking)
+
+- **`normalize::filter_language` no longer strips punctuation.** It is now
+  a thin wrapper over the new `remove_other_language_chars`, which filters
+  only *alphabetic* characters; the v2.4.0 implementation also dropped
+  non-ASCII punctuation and symbols (e.g. CJK `，`, `…`, emoji) even when
+  they belonged to the kept language. Code that relied on punctuation
+  being removed should post-process with a punctuation sweep. The
+  supported codes (`en`/`zh`/`ja`/`ko`/`ar`/`he`) are unchanged.
+
+### Additions (non-breaking)
+
+- **Two new formats**: iTT (`.itt`, feature `itt`) and Spruce STL
+  (feature `spruce`). Format count: v2.6: 15 → v2.7: **17**.
+- **`guidelines` module**: broadcaster QC presets (Netflix / BBC / TED /
+  ARD-ORF-SRF-ZDF / Channel4) with `SubtitleFormat::validate_guideline`
+  and CLI `validate --guideline <preset>`. Four new `ValidationIssue`
+  variants: `TooShortDuration`, `TooLongDuration`, `TooShortGap`,
+  `LineCountExceeded` (non-exhaustive matches on this enum need arms).
+- **Timing APIs**: `model::convert::Timebase` (NDF/DropFrame timebases),
+  `reinterpret_framerate`, `snap_to_frames`, `enforce_min_gap`.
+- **Dedup / cleanup APIs**: `remove_repeating_lines`, `merge_identical`,
+  `remove_other_language_chars` (+ `Language` enum), `fix_opening_hyphen_spacing`,
+  `normalize_all_caps`, `remove_text_between`, Whisper word-level merging
+  (`merge_words`, `parse_content_as_words`).
+- **New PipelineOps**: `EnforceMinGap`, `RemoveRepeatingLines`,
+  `MergeIdentical`, `SnapToFrames`, `ReinterpretTimebase`, `ConvertRollup`
+  (serde-tagged; exhaustive matches need new arms).
+- **New CLI flags**: `validate --guideline`; `edit --snap-to-frames`,
+  `--reinterpret-timebase`, `--convert-rollup`; `normalize
+  --filter-language/--second-language/--merge-short-lines/
+  --remove-linebreaks/--linebreaks-to-pipe/--fix-hyphens/--fix-caps/
+  --remove-between`; `convert --from-words`.
+
+### Migration steps
+
+1. Exhaustive `match` on `ValidationIssue` or `PipelineOp`: add the new
+   arms (or a wildcard).
+2. If you used `filter_language` to strip punctuation, add an explicit
+   punctuation-removal step.
+3. Nothing else — all other additions are opt-in.
+
 ## 2.3 → 2.4
 
 ### Additions (non-breaking)
