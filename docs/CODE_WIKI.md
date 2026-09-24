@@ -1,7 +1,7 @@
 # Subtitler Code Wiki
 
-> 版本: v2.7.0 · Rust Edition 2024 · MSRV 1.85
-> 17 字幕格式 · 408 tests · WASM-ready · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设
+> 版本: v2.8.0 · Rust Edition 2024 · MSRV 1.85
+> 17 字幕格式 · 417 tests · WASM-ready · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则
 
 ---
 
@@ -949,9 +949,9 @@ console.log(result.subtitle_count, result.format, result.output);
 
 ## 14. 测试体系
 
-### 14.1 测试分布（v2.7.0 快照）
+### 14.1 测试分布（v2.8.0 快照）
 
-- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 238 个）。
+- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 247 个）。
 - **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 170 个）:
   - [integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/integration.rs) — 端到端流程（43 tests）
   - [cross_format_matrix.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format_matrix.rs) — 跨格式矩阵（23 tests）
@@ -964,7 +964,7 @@ console.log(result.subtitle_count, result.format, result.output);
   - [cross_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format.rs) — 跨格式转换（6 tests）
   - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（6 tests）
   - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests）
-- **总测试数**: **408**（v2.2 时 293 → v2.3 时 325 → v2.4 时 340 → v2.4.1/2.6 时 344 → v2.7 时 408）。
+- **总测试数**: **417**（v2.2 时 293 → v2.4 时 340 → v2.7 时 408 → v2.8 时 417；integration.rs 运行时 66 个，含参数化）。
 
 ### 14.2 运行
 
@@ -1052,6 +1052,8 @@ gap analysis: [docs/subtitler-vs-editingtools-gap-analysis.md](file:///Users/man
 | **2.4.1** | ✅ 已发布 | 外部测试修复：SCC 文本解码 P1、DFXP namespace、SubViewer 检测、SBV 两行格式、iTT SMPTE。344 测试 |
 | **2.6.x** | ✅ 已发布 | 代码质量优化：error 类型统一 + magic number 常量化 + MSRV 修复 + CI 修正。344 测试 |
 | **2.7.0** | ✅ 已发布 | editingtools.io 差距收编：Guideline QC 预设 + min-gap/dedup/DF 时基/roll-up + 21 语种过滤 + normalize 扩展 + 词级合并 + iTT + Spruce STL（17 格式）。64 新测试，总 408 |
+| **2.7.1** | ✅ 已发布 | 依赖漏洞刷新：cargo update 82 包（chacha20/rustls/quinn/aws-lc-rs 等）+ yoke-derive 0.8.2 MSRV 钉扎。408 测试 |
+| **2.8.0** | ✅ 已发布 | Shot-change 规则：shotlist EDL 解析 + apply_shot_changes 守卫帧 trim + PipelineOp/CLI。9 新测试，总 417 |
 
 **当前专注打磨 2.x**，暂不规划 3.0。
 

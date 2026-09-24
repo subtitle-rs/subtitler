@@ -1,5 +1,17 @@
 # Migration Guide
 
+## 2.7.x → 2.8.0
+
+### Additions only (non-breaking)
+
+- **Shot-change rules**: `shotlist::parse_edl_cuts` (CMX3600 EDL → cut
+  points), `SubtitleFormat::apply_shot_changes(cuts, before_frames,
+  after_frames, fps)` (Netflix-style guard frames; trim semantics, text
+  untouched), `PipelineOp::ApplyShotChanges`, and
+  `subtitler edit --shot-changes <edl> --fps 25 [--before-frames]
+  [--after-frames]`.
+- Nothing else changed; no migration steps required.
+
 ## 2.6.x → 2.7.0
 
 ### Behavior change (minor breaking)

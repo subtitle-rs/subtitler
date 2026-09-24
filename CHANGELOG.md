@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- TBD — next batch items live on feature branches until merged.
+
+## [2.8.0] - 2026-09-24
+
+### Added
+
 - **Shot-change rules** (`shotlist` module + `SubtitleFormat::apply_shot_
   changes` + `PipelineOp::ApplyShotChanges`): parse a CMX3600 EDL shot
   list and trim cues so they end at least N frames before each cut and
