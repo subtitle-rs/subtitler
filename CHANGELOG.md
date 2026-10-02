@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- TBD — next batch items live on feature branches until merged.
+
+## [2.9.0] - 2026-10-02
+
+### Added
+
 - **[Subtitle Workbench](https://subtitle-rs.github.io/subtitle-format-conversion/)**:
   an online, fully client-side subtitle converter/demo built on this crate
   compiled to WebAssembly (README now links it).
@@ -120,6 +126,16 @@ adheres to [Semantic Versioning](https://semver.org/).
   ASS spec allows floats (`Outline: 3.6`). Such styles were skipped
   entirely, leaving every cue that referenced them without `style_props`
   (so e.g. ASS → TTML conversion lost all styling).
+- **TTML `write_stream` bypassed the styling/position pipeline**: it
+  hand-emitted bare `<p>` elements without the output filtering,
+  `<styling>`/`<layout>` emission, dedup, or crossfade de-overlap that
+  `to_string` runs — dropping `style_props`/`position` and emitting empty
+  `<p></p>` for drawing cues. Both entry points now serialize through the
+  same pipeline and produce byte-identical documents (regression-tested).
+- **TTML region ids could collide with style ids**: a subtitle styled
+  `r_top` (or `pos1`) landing in the top band emitted two elements with
+  the same `xml:id` — invalid XML. Region ids are now minted against the
+  document's style ids; the internal region id yields (`r_top_2`).
 - **ASS `[Fonts]` block truncated by bracket-shaped data lines**: inside
   the `[Fonts]` section the parser treated any line shaped like
   `[...]` as a section header, but the uuencode alphabet includes `[`
