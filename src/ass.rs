@@ -272,16 +272,22 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
     }
 
     if trimmed.starts_with('[') && trimmed.ends_with(']') {
+      let section_name = &trimmed[1..trimmed.len() - 1].to_lowercase();
+      let known = known_section(section_name);
+      // libass compat (ass.c process_line): while inside [Fonts], an
+      // unknown "[...]" line is font data, not a section header — the
+      // uuencode alphabet includes `[` and `]`, so encoded payload can
+      // produce such lines. Only the known section names end the block.
+      if section == Section::Fonts && known.is_none() {
+        if font_name.is_some() {
+          font_lines.push(trimmed.to_string());
+        }
+        continue;
+      }
+
       flush_font(&mut font_name, &mut font_lines);
 
-      let section_name = &trimmed[1..trimmed.len() - 1].to_lowercase();
-      section = match section_name.as_str() {
-        "script info" => Section::Info,
-        "v4+ styles" | "v4 styles" => Section::Styles,
-        "events" => Section::Events,
-        "fonts" => Section::Fonts,
-        _ => Section::Other,
-      };
+      section = known.unwrap_or(Section::Other);
       continue;
     }
 
@@ -373,6 +379,19 @@ enum Section {
   Events,
   Fonts,
   Other,
+}
+
+/// Sections the parser recognizes as headers. Mirrors libass's fixed
+/// header list (`[Script Info]`, `[V4 Styles]`, `[V4+ Styles]`,
+/// `[Events]`, `[Fonts]`, case-insensitive); anything else is content.
+fn known_section(name: &str) -> Option<Section> {
+  match name {
+    "script info" => Some(Section::Info),
+    "v4+ styles" | "v4 styles" => Some(Section::Styles),
+    "events" => Some(Section::Events),
+    "fonts" => Some(Section::Fonts),
+    _ => None,
+  }
 }
 
 fn format_ass_color(color: &str) -> String {
@@ -826,6 +845,38 @@ mod tests {
     assert_eq!(data.fonts[0].data, vec![0, 16, 160, 134]);
     assert_eq!(data.fonts[1].name, "b.ttf");
     assert_eq!(data.fonts[1].data, vec![0xAB]);
+  }
+
+  #[test]
+  fn test_parse_fonts_bracket_shaped_payload_line_is_data() {
+    // Regression: the uuencode alphabet includes `[` (91) and `]` (93),
+    // so an encoded line can start with `[` and end with `]`. Data
+    // [232, 0, 60] encodes to exactly "[!!]" (vector verified in Python);
+    // libass treats such a line as font data, not a section header.
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[Fonts]\nfontname: tricky.ttf\n[!!]\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hi\n";
+    let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
+      panic!("expected ASS");
+    };
+    assert_eq!(data.fonts.len(), 1);
+    assert_eq!(data.fonts[0].name, "tricky.ttf");
+    assert_eq!(data.fonts[0].data, vec![232, 0, 60]);
+    // The following section still parses normally.
+    assert_eq!(data.subtitles.len(), 1);
+  }
+
+  #[test]
+  fn test_parse_fonts_round_trip_through_own_encoder() {
+    // Any payload the writer emits (including bracket-shaped lines) must
+    // survive a full write → parse round trip.
+    let data = vec![232u8, 0, 60, 0, 16, 130, 24, 0xAB, 0xCD];
+    let encoded = uuencode::encode(&data);
+    let content = format!(
+      "[Script Info]\nScriptType: v4.00+\n\n[Fonts]\nfontname: r.ttf\n{encoded}\n\n[Events]\n"
+    );
+    let SubtitleFile::Ass(parsed) = parse_content(&content).unwrap() else {
+      panic!("expected ASS");
+    };
+    assert_eq!(parsed.fonts[0].data, data);
   }
 
   #[test]
