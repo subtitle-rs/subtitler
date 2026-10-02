@@ -170,6 +170,7 @@ pub struct Subtitle {
     pub style: Option<String>,    // style name reference
     pub actor: Option<String>,    // speaker/actor name
     pub is_comment: bool,         // comment flag
+    pub style_props: Option<StyleProps>, // resolved cue styling (font family/size, color, bold/italic/underline)
 }
 
 pub struct TextPart {
