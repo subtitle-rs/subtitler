@@ -8,7 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- TBD — next batch items live on feature branches until merged.
+### Added
+
+- **ASS/SSA `[Fonts]` section support**: embedded fonts (uuencoded TTF/OTF
+  payloads) are now parsed into the new public `AssData.fonts` field
+  (`Vec<AssFont>`, name + decoded binary data) and written back by
+  `ass::to_string` / `ass::write_stream`. Malformed `fontname`/payload lines
+  are skipped; round-trip preserves fonts.
+
+### Changed
+
+- **Breaking**: `ass::to_string` and `ass::write_stream` gained a
+  `fonts: &[AssFont]` parameter to emit the `[Fonts]` section. Pass `&[]` if
+  you don't use embedded fonts. See MIGRATION.md for before/after.
 
 ## [2.8.0] - 2026-09-24
 

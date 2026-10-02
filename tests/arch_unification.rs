@@ -15,11 +15,13 @@ fn sample_of_each_variant() -> Vec<SubtitleFile> {
     SubtitleFile::Ass(AssData {
       info: Default::default(),
       styles: vec![],
+      fonts: vec![],
       subtitles: vec![sub(0, 2000, "a"), sub(3000, 5000, "b")],
     }),
     SubtitleFile::Ssa(AssData {
       info: Default::default(),
       styles: vec![],
+      fonts: vec![],
       subtitles: vec![sub(0, 2000, "a"), sub(3000, 5000, "b")],
     }),
     SubtitleFile::MicroDvd {
