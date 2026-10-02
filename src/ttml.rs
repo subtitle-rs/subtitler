@@ -640,12 +640,29 @@ fn pos_region_geometry(pos: &CuePosition) -> (String, String) {
   (format!("{ox}% {oy}%"), format!("{w}% {h}%"))
 }
 
-/// Region assignment result: per-subtitle region id, band-region usage
-/// flags (Top/Center/Bottom), and the deduplicated explicit pos regions.
+/// Region assignment result: per-subtitle region id, resolved band-region
+/// ids (Some only where used), and the deduplicated explicit pos regions.
 struct RegionAssignments {
   sub_regions: Vec<Option<String>>,
-  band_used: [bool; 3],
+  band_ids: [Option<String>; 3],
   pos_regions: Vec<(String, CuePosition)>,
+}
+
+/// Mint a region id that does not collide with any id in `taken` (style
+/// xml:ids and previously minted region ids); the minted id is inserted.
+///
+/// Region ids are purely internal, so on collision the region yields — a
+/// style named `r_top` must keep its id, while an internal `r_top` region
+/// can safely become `r_top_2`.
+fn fresh_region_id(base: String, taken: &mut std::collections::HashSet<String>) -> String {
+  let mut id = base.clone();
+  let mut n = 2;
+  while taken.contains(&id) {
+    id = format!("{base}_{n}");
+    n += 1;
+  }
+  taken.insert(id.clone());
+  id
 }
 
 /// Assign a region id to each positioned subtitle.
@@ -653,9 +670,13 @@ struct RegionAssignments {
 /// Cues with explicit coordinates share deduplicated `posN` regions keyed by
 /// (x, y, horizontal align, vertical align) — all four feed the region
 /// geometry; cues with only an alignment share one of the three band
-/// regions.
-fn assign_regions(subtitles: &[Subtitle]) -> RegionAssignments {
-  let mut band_used = [false; 3];
+/// regions. All ids are minted fresh against `taken` so they cannot collide
+/// with style `xml:id`s in the same document.
+fn assign_regions(
+  subtitles: &[Subtitle],
+  taken: &mut std::collections::HashSet<String>,
+) -> RegionAssignments {
+  let mut band_ids: [Option<String>; 3] = [None, None, None];
   let mut pos_regions: Vec<(String, CuePosition)> = Vec::new();
   let mut sub_regions: Vec<Option<String>> = Vec::with_capacity(subtitles.len());
 
@@ -670,7 +691,7 @@ fn assign_regions(subtitles: &[Subtitle]) -> RegionAssignments {
       }) {
         Some((id, _)) => id.clone(),
         None => {
-          let id = format!("pos{}", pos_regions.len() + 1);
+          let id = fresh_region_id(format!("pos{}", pos_regions.len() + 1), taken);
           pos_regions.push((id.clone(), pos.clone()));
           id
         }
@@ -681,14 +702,15 @@ fn assign_regions(subtitles: &[Subtitle]) -> RegionAssignments {
         VerticalAlign::Center => 1,
         VerticalAlign::Bottom => 2,
       };
-      band_used[idx] = true;
-      band_region_id(pos.v_align).to_string()
+      band_ids[idx]
+        .get_or_insert_with(|| fresh_region_id(band_region_id(pos.v_align).to_string(), taken))
+        .clone()
     };
     sub_regions.push(Some(id));
   }
   RegionAssignments {
     sub_regions,
-    band_used,
+    band_ids,
     pos_regions,
   }
 }
@@ -828,8 +850,10 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     sub_ids.push(Some(id));
   }
 
-  let regions = assign_regions(&subtitles);
-  let has_regions = regions.band_used.iter().any(|u| *u) || !regions.pos_regions.is_empty();
+  let mut style_id_set: std::collections::HashSet<String> =
+    entries.iter().map(|(id, _)| id.clone()).collect();
+  let regions = assign_regions(&subtitles, &mut style_id_set);
+  let has_regions = regions.band_ids.iter().any(Option::is_some) || !regions.pos_regions.is_empty();
 
   let header = header.filter(|s| !s.is_empty());
   if header.is_some() || !entries.is_empty() || has_regions {
@@ -866,22 +890,16 @@ pub fn to_string(subtitles: &[Subtitle], header: Option<&str>) -> String {
     }
     if has_regions {
       let _ = writer.write_event(Event::Start(BytesStart::new("layout")));
-      for v in [
-        VerticalAlign::Top,
-        VerticalAlign::Center,
-        VerticalAlign::Bottom,
-      ] {
-        let idx = match v {
-          VerticalAlign::Top => 0,
-          VerticalAlign::Center => 1,
-          VerticalAlign::Bottom => 2,
+      for (v, band_id) in regions.band_ids.iter().enumerate() {
+        let Some(id) = band_id else { continue };
+        let v = match v {
+          0 => VerticalAlign::Top,
+          1 => VerticalAlign::Center,
+          _ => VerticalAlign::Bottom,
         };
-        if !regions.band_used[idx] {
-          continue;
-        }
         let (origin, extent) = band_region_geometry(v);
         let region = BytesStart::new("region").with_attributes([
-          ("xml:id", band_region_id(v)),
+          ("xml:id", id.as_str()),
           ("tts:origin", origin),
           ("tts:extent", extent),
           ("tts:displayAlign", display_align_str(v)),
@@ -990,52 +1008,14 @@ where
 
 /// Write TTML subtitles to a synchronous writer streamingly.
 /// Note: TTML uses quick-xml which requires std::io::Write, not AsyncWrite.
+///
+/// Serializes through the same pipeline as [`to_string`] (output filtering,
+/// styling/region emission, dedup, de-overlap) so both entry points produce
+/// identical documents. quick-xml's Writer is inherently buffered — it
+/// never was an incremental stream — so delegation loses nothing.
 #[deprecated(since = "2.2.0", note = "use write_stream_async instead")]
 pub fn write_stream<W: std::io::Write>(subtitles: &[Subtitle], writer: &mut W) -> AnyResult<()> {
-  let mut xml_writer = Writer::new_with_indent(writer, b' ', 2);
-
-  xml_writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
-  let tt = BytesStart::new("tt").with_attributes([
-    ("xmlns", "http://www.w3.org/ns/ttml"),
-    ("xmlns:tts", "http://www.w3.org/ns/ttml#styling"),
-    ("xml:lang", "en"),
-  ]);
-  xml_writer.write_event(Event::Start(tt))?;
-  xml_writer.write_event(Event::Start(BytesStart::new("body")))?;
-  xml_writer.write_event(Event::Start(BytesStart::new("div")))?;
-
-  for sub in subtitles {
-    let start = crate::utils::format_timestamp(sub.start, "WebVTT");
-    let end = crate::utils::format_timestamp(sub.end, "WebVTT");
-
-    let p =
-      BytesStart::new("p").with_attributes([("begin", start.as_str()), ("end", end.as_str())]);
-    xml_writer.write_event(Event::Start(p))?;
-
-    if sub.text_parts.is_empty() {
-      xml_writer.write_event(Event::Text(BytesText::new(&sub.text)))?;
-    } else {
-      for part in &sub.text_parts {
-        if part.color.is_some() || part.bold() || part.italic() || part.underline() {
-          let mut span = BytesStart::new("span");
-          if let Some(ref color) = part.color {
-            span.push_attribute(("tts:color", color.as_str()));
-          }
-          xml_writer.write_event(Event::Start(span))?;
-          xml_writer.write_event(Event::Text(BytesText::new(&part.text)))?;
-          xml_writer.write_event(Event::End(BytesEnd::new("span")))?;
-        } else {
-          xml_writer.write_event(Event::Text(BytesText::new(&part.text)))?;
-        }
-      }
-    }
-    xml_writer.write_event(Event::End(BytesEnd::new("p")))?;
-  }
-
-  xml_writer.write_event(Event::End(BytesEnd::new("div")))?;
-  xml_writer.write_event(Event::End(BytesEnd::new("body")))?;
-  xml_writer.write_event(Event::End(BytesEnd::new("tt")))?;
-
+  writer.write_all(to_string(subtitles, None).as_bytes())?;
   Ok(())
 }
 
@@ -1552,6 +1532,119 @@ mod tests {
     assert!(!out.contains("<head>"), "got: {out}");
     assert!(!out.contains("region"), "got: {out}");
     assert!(!out.contains("textAlign"), "got: {out}");
+  }
+
+  #[test]
+  fn test_write_region_id_yields_to_style_id() {
+    // A subtitle whose style name sanitizes to a reserved region id
+    // ("r_top") plus a top-band cue must not emit two elements with the
+    // same xml:id. Regions are internal, so the region id yields.
+    let props = StyleProps {
+      bold: true,
+      ..StyleProps::default()
+    };
+    let sub = Subtitle::new(1000, 2000, "title")
+      .with_style("r_top")
+      .with_style_props(props)
+      .with_position(CuePosition {
+        x: None,
+        y: None,
+        h_align: HorizontalAlign::Center,
+        v_align: VerticalAlign::Top,
+      });
+    let out = to_string(&[sub], None);
+    assert_eq!(out.matches("xml:id=\"r_top\"").count(), 1, "got: {out}");
+    assert!(out.contains("xml:id=\"r_top_2\""), "got: {out}");
+    assert!(out.contains("style=\"r_top\""), "got: {out}");
+    assert!(out.contains("region=\"r_top_2\""), "got: {out}");
+    // The document is valid: it reparses with the cue's style resolved.
+    let reparsed = parse_content(&out).unwrap();
+    assert_eq!(reparsed.subtitles()[0].style.as_deref(), Some("r_top"));
+    assert!(reparsed.subtitles()[0].position.is_some());
+  }
+
+  #[test]
+  fn test_write_region_id_yields_to_style_id_pos() {
+    // Same class of collision for generated posN ids.
+    let props = StyleProps {
+      italic: true,
+      ..StyleProps::default()
+    };
+    let sub = Subtitle::new(1000, 2000, "body")
+      .with_style("pos1")
+      .with_style_props(props)
+      .with_position(CuePosition {
+        x: Some(50.0),
+        y: Some(25.0),
+        h_align: HorizontalAlign::Left,
+        v_align: VerticalAlign::Top,
+      });
+    let out = to_string(&[sub], None);
+    assert_eq!(out.matches("xml:id=\"pos1\"").count(), 1, "got: {out}");
+    assert!(out.contains("xml:id=\"pos1_2\""), "got: {out}");
+    assert!(out.contains("region=\"pos1_2\""), "got: {out}");
+  }
+
+  #[test]
+  fn test_band_alignment_round_trips_as_explicit_position() {
+    // Documented drift: an alignment-only (band) cue is written as a
+    // fixed-geometry band region; reparsing reconstructs an explicit
+    // anchor at the band edge, so `position` field equality (x/y None →
+    // Some) is not preserved — visual placement is. Band r_top: box
+    // origin "10% 10%" extent "80% 15%", displayAlign "before" → anchor
+    // at the band's top edge, horizontally centered: (50%, 10%).
+    let sub = Subtitle::new(1000, 2000, "title").with_position(CuePosition {
+      x: None,
+      y: None,
+      h_align: HorizontalAlign::Center,
+      v_align: VerticalAlign::Top,
+    });
+    let out = to_string(&[sub], None);
+    let reparsed = parse_content(&out).unwrap();
+    let pos = reparsed.subtitles()[0].position.as_ref().unwrap();
+    assert_eq!(pos.x, Some(50.0));
+    assert_eq!(pos.y, Some(10.0));
+    assert_eq!(pos.h_align, HorizontalAlign::Center);
+    assert_eq!(pos.v_align, VerticalAlign::Top);
+  }
+
+  #[test]
+  fn test_write_stream_matches_to_string() {
+    // Regression: write_stream used to hand-emit bare <p> elements,
+    // bypassing the styling/region pipeline that to_string runs — empty
+    // <p></p> for drawing cues, no <styling>/<layout>, dropped
+    // style_props/position. Both entry points must produce identical
+    // documents.
+    let props = StyleProps {
+      bold: true,
+      color: Some("#FF0000".into()),
+      ..StyleProps::default()
+    };
+    let styled = Subtitle::new(1000, 2000, "styled")
+      .with_style("Bold")
+      .with_style_props(props);
+    let positioned = Subtitle::new(3000, 4000, "positioned").with_position(CuePosition {
+      x: Some(50.0),
+      y: Some(25.0),
+      h_align: HorizontalAlign::Left,
+      v_align: VerticalAlign::Top,
+    });
+    let subs = vec![
+      styled,
+      positioned,
+      Subtitle::new(5000, 6000, ""), // invisible cue: filtered out
+    ];
+    let mut buf = Vec::new();
+    #[allow(deprecated)]
+    write_stream(&subs, &mut buf).unwrap();
+    let streamed = String::from_utf8(buf).unwrap();
+    assert_eq!(streamed, to_string(&subs, None));
+    assert!(streamed.contains("<styling>"), "got: {streamed}");
+    assert!(streamed.contains("<layout>"), "got: {streamed}");
+    assert!(
+      !streamed.contains("<p begin=\"00:00:05.000\""),
+      "got: {streamed}"
+    );
   }
 
   #[test]
