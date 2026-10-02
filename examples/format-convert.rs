@@ -41,6 +41,7 @@ What are your plans for the weekend?
     &Default::default(),
     &[subtitler::model::AssStyle::default_style()],
     subtitles.subtitles(),
+    &[],
   );
   info!("ASS output:\n{}", ass_output);
 

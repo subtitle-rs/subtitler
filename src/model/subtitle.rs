@@ -42,6 +42,9 @@ pub struct Subtitle {
   pub actor: Option<String>,
   #[serde(skip_serializing_if = "is_false", default)]
   pub is_comment: bool,
+  /// Resolved cue-level style properties (font family, size, color, …)
+  #[serde(skip_serializing_if = "Option::is_none", default)]
+  pub style_props: Option<StyleProps>,
 }
 
 impl Subtitle {
@@ -56,6 +59,7 @@ impl Subtitle {
       style: None,
       actor: None,
       is_comment: false,
+      style_props: None,
     }
   }
 
@@ -68,6 +72,12 @@ impl Subtitle {
   /// Builder-style: set the style name (ASS/SSA).
   pub fn with_style(mut self, style: impl Into<String>) -> Self {
     self.style = Some(style.into());
+    self
+  }
+
+  /// Builder-style: set the resolved style properties.
+  pub fn with_style_props(mut self, props: StyleProps) -> Self {
+    self.style_props = Some(props);
     self
   }
 
@@ -177,6 +187,51 @@ fn is_false(v: &bool) -> bool {
   !v
 }
 
+/// Resolved cue-level style properties, format-neutral.
+///
+/// Parsers carrying named styles (TTML `<style>` elements, ASS styles)
+/// resolve them onto `Subtitle::style_props` so any writer can emit
+/// cue-level styling without knowing the source format.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
+pub struct StyleProps {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub font_family: Option<String>,
+  /// Raw TTML value ("48px", "100%"); ASS fills "{fontsize}px".
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub font_size: Option<String>,
+  /// Normalized "#RRGGBB".
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub color: Option<String>,
+  #[serde(skip_serializing_if = "is_false", default)]
+  pub bold: bool,
+  #[serde(skip_serializing_if = "is_false", default)]
+  pub italic: bool,
+  #[serde(skip_serializing_if = "is_false", default)]
+  pub underline: bool,
+}
+
+impl StyleProps {
+  /// `other` wins: `Some` fields overwrite, `true` flags stick.
+  pub fn merge_from(&mut self, other: &StyleProps) {
+    if other.font_family.is_some() {
+      self.font_family = other.font_family.clone();
+    }
+    if other.font_size.is_some() {
+      self.font_size = other.font_size.clone();
+    }
+    if other.color.is_some() {
+      self.color = other.color.clone();
+    }
+    self.bold |= other.bold;
+    self.italic |= other.italic;
+    self.underline |= other.underline;
+  }
+
+  pub fn is_default(&self) -> bool {
+    self == &StyleProps::default()
+  }
+}
+
 impl TextPart {
   pub fn plain(text: impl Into<String>) -> Self {
     TextPart {
@@ -229,5 +284,37 @@ impl TextPart {
   /// Set underline formatting.
   pub fn set_underline(&mut self, value: bool) {
     self.format.set(TextFormat::UNDERLINE, value);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_style_props_merge_child_wins() {
+    let mut base = StyleProps {
+      font_family: Some("Arial".into()),
+      font_size: Some("48px".into()),
+      color: Some("#FFFFFF".into()),
+      bold: true,
+      italic: false,
+      underline: false,
+    };
+    let child = StyleProps {
+      font_family: None,
+      font_size: Some("24px".into()),
+      color: None,
+      bold: false,
+      italic: true,
+      underline: false,
+    };
+    base.merge_from(&child);
+    assert_eq!(base.font_family.as_deref(), Some("Arial"));
+    assert_eq!(base.font_size.as_deref(), Some("24px"));
+    assert_eq!(base.color.as_deref(), Some("#FFFFFF"));
+    assert!(base.bold);
+    assert!(base.italic);
+    assert!(!base.underline);
   }
 }
