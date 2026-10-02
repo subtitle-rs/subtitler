@@ -35,6 +35,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **ASS `[Fonts]` block truncated by bracket-shaped data lines**: inside
+  the `[Fonts]` section the parser treated any line shaped like
+  `[...]` as a section header, but the uuencode alphabet includes `[`
+  and `]` (data `[232, 0, 60]` encodes to exactly `[!!]`), so a real
+  font payload could end the block early and mis-parse the rest of the
+  file. Section switching inside `[Fonts]` now uses the known-header
+  whitelist that libass uses (verified against `libaegisub` and
+  `libass` sources); unknown `[...]` lines are font data.
 - **VTT cue text escaping**: `vtt::to_string`/`write_stream` escape `&`,
   `<`, `>` as `&amp;`/`&lt;`/`&gt;`, and the parser unescapes them.
   Previously a literal cue text like `<u>一` reparsed as `一` (found by
