@@ -1,6 +1,9 @@
 use crate::error::SubtitleError;
 use crate::model::convert::{MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND};
-use crate::model::{AssData, AssFont, AssStyle, Format, StyleProps, Subtitle, SubtitleFile};
+use crate::model::{
+  AssData, AssFont, AssStyle, CuePosition, Format, HorizontalAlign, StyleProps, Subtitle,
+  SubtitleFile, VerticalAlign,
+};
 use crate::types::AnyResult;
 use regex::Regex;
 use std::collections::HashMap;
@@ -13,7 +16,7 @@ static RE_DIALOGUE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static RE_STYLE: LazyLock<Regex> = LazyLock::new(|| {
-  Regex::new(r"^Style:\s*([^,]*),([^,]*),(\d+),([^,]*),([^,]*),([^,]*),([^,]*),(-?\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+)").unwrap()
+  Regex::new(r"^Style:\s*([^,]*),([^,]*),(\d+),([^,]*),([^,]*),([^,]*),([^,]*),(-?\d+),(-?\d+),(-?\d+),(-?\d+),(-?[\d.]+),(-?[\d.]+),(-?[\d.]+),(-?[\d.]+),(\d+),(-?[\d.]+),(-?[\d.]+),(\d+),(\d+),(\d+),(\d+),(\d+)").unwrap()
 });
 
 static RE_INFO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([^:]+):\s*(.*)").unwrap());
@@ -242,7 +245,76 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
   subtitle.style = style;
   subtitle.actor = actor;
   subtitle.is_comment = is_comment;
+  subtitle.text_parts = parse_ass_tags(text).into_iter().collect();
   Some(subtitle)
+}
+
+/// Scan ASS override tags for layout info: the first `\pos(x,y)` or
+/// `\move(x1,y1,…)` (collapsed to its start point — animation is not
+/// modeled) gives pixel coordinates, the first `\anN` gives a numpad
+/// alignment override. Tags inside `\t(...)` transforms are ignored,
+/// matching `parse_ass_tags`.
+fn scan_ass_layout(text: &str) -> (Option<(f64, f64)>, Option<u32>) {
+  let mut pos = None;
+  let mut an = None;
+  let mut in_transform = false;
+
+  for caps in RE_ASS_TAG_INLINE.captures_iter(text) {
+    for tag in caps[1].split('\\') {
+      let tag = tag.trim();
+      if in_transform {
+        if tag.contains(')') {
+          in_transform = false;
+        }
+        continue;
+      }
+      if let Some(rest) = tag.strip_prefix("t(") {
+        in_transform = !rest.contains(')');
+        continue;
+      }
+      if pos.is_none() {
+        let args = tag
+          .strip_prefix("pos(")
+          .or_else(|| tag.strip_prefix("move("));
+        if let Some(args) = args {
+          let mut nums = args
+            .trim_end_matches(')')
+            .split(',')
+            .filter_map(|n| n.trim().parse::<f64>().ok());
+          if let (Some(x), Some(y)) = (nums.next(), nums.next()) {
+            pos = Some((x, y));
+          }
+          continue;
+        }
+      }
+      let an_candidate = tag
+        .strip_prefix("an")
+        .and_then(|d| d.parse::<u32>().ok())
+        .filter(|n| (1..=9).contains(n));
+      if an.is_none() && an_candidate.is_some() {
+        an = an_candidate;
+      }
+    }
+  }
+  (pos, an)
+}
+
+fn ass_alignment_to_align(an: u32) -> (HorizontalAlign, VerticalAlign) {
+  let h = match an {
+    1 | 4 | 7 => HorizontalAlign::Left,
+    3 | 6 | 9 => HorizontalAlign::Right,
+    _ => HorizontalAlign::Center,
+  };
+  let v = match an {
+    7..=9 => VerticalAlign::Top,
+    4..=6 => VerticalAlign::Center,
+    _ => VerticalAlign::Bottom,
+  };
+  (h, v)
+}
+
+fn round2(v: f64) -> f64 {
+  (v * 100.0).round() / 100.0
 }
 
 pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
@@ -330,19 +402,51 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
 
   flush_font(&mut font_name, &mut font_lines);
 
+  // PlayRes defaults per the ASS spec (384x288) when [Script Info] omits them;
+  // \pos coordinates are converted to % of the play resolution.
+  let play_res_x = info
+    .get("PlayResX")
+    .and_then(|v| v.trim().parse::<f64>().ok())
+    .filter(|v| *v > 0.0)
+    .unwrap_or(384.0);
+  let play_res_y = info
+    .get("PlayResY")
+    .and_then(|v| v.trim().parse::<f64>().ok())
+    .filter(|v| *v > 0.0)
+    .unwrap_or(288.0);
+
   let style_map: HashMap<&str, &AssStyle> = styles.iter().map(|s| (s.name.as_str(), s)).collect();
   for sub in &mut subtitles {
-    let Some(style) = sub.style.as_deref().and_then(|name| style_map.get(name)) else {
-      continue;
-    };
-    sub.style_props = Some(StyleProps {
-      font_family: Some(style.fontname.clone()),
-      font_size: Some(format!("{}px", style.fontsize)),
-      color: ass_color_to_ttml(&style.primary_color),
-      bold: style.bold,
-      italic: style.italic,
-      underline: style.underline,
-    });
+    let style = sub.style.as_deref().and_then(|name| style_map.get(name));
+    if let Some(style) = style {
+      sub.style_props = Some(StyleProps {
+        font_family: Some(style.fontname.clone()),
+        font_size: Some(format!("{}px", style.fontsize)),
+        color: ass_color_to_ttml(&style.primary_color),
+        bold: style.bold,
+        italic: style.italic,
+        underline: style.underline,
+      });
+    }
+
+    let (pos, an) = scan_ass_layout(&sub.text);
+    let alignment = an.or(style.map(|s| s.alignment));
+    if pos.is_some() || alignment.is_some() {
+      let (h_align, v_align) = ass_alignment_to_align(alignment.unwrap_or(2));
+      let (x, y) = match pos {
+        Some((px, py)) => (
+          Some(round2(px / play_res_x * 100.0)),
+          Some(round2(py / play_res_y * 100.0)),
+        ),
+        None => (None, None),
+      };
+      sub.position = Some(CuePosition {
+        x,
+        y,
+        h_align,
+        v_align,
+      });
+    }
   }
 
   Ok(SubtitleFile::Ass(AssData {
@@ -537,13 +641,65 @@ pub fn to_string(
   buf
 }
 
+/// `\b`/`\i`/`\u` argument: empty means on, an integer means on, iff > 0
+/// (`\b700` is a bold weight). Non-numeric arguments (`ord3.6` from
+/// `\bord`, `lur5` from `\blur`, …) are ignored.
+fn parse_toggle(arg: &str, flag: &mut bool) {
+  if arg.is_empty() {
+    *flag = true;
+  } else if let Ok(n) = arg.parse::<u32>() {
+    *flag = n > 0;
+  }
+}
+
+fn normalize_ass_color(arg: &str) -> Option<String> {
+  let c = arg.trim_end_matches('&');
+  let raw = if c.starts_with(['H', 'h']) {
+    format!("&{c}")
+  } else {
+    format!("&H{c}")
+  };
+  ass_color_to_ttml(&raw)
+}
+
+/// Parse a `\alpha&HXX&`-style argument (alpha byte, hex) into u8.
+fn parse_ass_alpha(arg: &str) -> Option<u8> {
+  let h = arg.trim_end_matches('&').trim_start_matches(['H', 'h']);
+  u8::from_str_radix(h, 16).ok()
+}
+
+/// Parse ASS override tags into styled `TextPart`s.
 pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
   let mut parts = Vec::new();
   let mut bold = false;
   let mut italic = false;
   let mut underline = false;
   let mut color: Option<String> = None;
+  // Primary alpha (\alpha/\1a) and shadow channel (\4c/\4a): used to
+  // promote the shadow color when the primary is invisible.
+  let mut alpha: Option<u8> = None;
+  let mut shadow_color: Option<String> = None;
+  let mut shadow_alpha: Option<u8> = None;
+  // \pN (N>=1): following text is vector drawing commands, not visible text.
+  let mut drawing = false;
+  // Inside \t(...): inner tags are animated, don't apply them as state.
+  let mut in_transform = false;
+  let mut saw_drawing = false;
   let mut current = String::new();
+
+  let effective_color = |color: &Option<String>,
+                         alpha: Option<u8>,
+                         shadow_color: &Option<String>,
+                         shadow_alpha: Option<u8>|
+   -> Option<String> {
+    const INVISIBLE: u8 = 0xF0;
+    if alpha.is_some_and(|a| a >= INVISIBLE) && shadow_alpha.is_none_or(|a| a < INVISIBLE) {
+      if let Some(sc) = shadow_color {
+        return Some(sc.clone());
+      }
+    }
+    color.clone()
+  };
 
   let re = &RE_ASS_TAG_INLINE;
   let mut last_end = 0usize;
@@ -553,7 +709,7 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
     let tag_start = m.start();
     let tag_end = m.end();
 
-    if tag_start > last_end {
+    if tag_start > last_end && !drawing {
       let segment = &text[last_end..tag_start];
       let cleaned = segment
         .replace("\\N", "\n")
@@ -565,38 +721,78 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
     if !current.is_empty() {
       let mut part =
         crate::model::TextPart::new(std::mem::take(&mut current), bold, italic, underline);
-      part.color = color.clone();
+      part.color = effective_color(&color, alpha, &shadow_color, shadow_alpha);
       parts.push(part);
     }
 
     let tag_content = &caps[1];
     for tag in tag_content.split('\\') {
-      if tag == "b1" || tag == "b" {
-        bold = true;
-      } else if tag == "b0" {
-        bold = false;
-      } else if tag == "i1" || tag == "i" {
-        italic = true;
-      } else if tag == "i0" {
-        italic = false;
-      } else if tag == "u1" || tag == "u" {
-        underline = true;
-      } else if tag == "u0" {
-        underline = false;
-      } else if let Some(c) = tag.strip_prefix("c&") {
-        color = Some(format!("&{}", c));
-      } else if tag == "r" {
-        bold = false;
-        italic = false;
-        underline = false;
-        color = None;
+      let tag = tag.trim();
+      if in_transform {
+        if tag.contains(')') {
+          in_transform = false;
+        }
+        continue;
+      }
+
+      match tag {
+        "r" => {
+          bold = false;
+          italic = false;
+          underline = false;
+          color = None;
+          alpha = None;
+          shadow_color = None;
+          shadow_alpha = None;
+        }
+        "b" => bold = true,
+        "i" => italic = true,
+        "u" => underline = true,
+        // \t(...) transform; may be self-contained (\t(500,\bord1) splits
+        // into "t(500," and "bord1)").
+        t if t.starts_with("t(") => in_transform = !t[2..].contains(')'),
+        // \r<StyleName>: reset to the named style's defaults.
+        t if t.starts_with('r') && t[1..].starts_with(char::is_alphabetic) => {
+          bold = false;
+          italic = false;
+          underline = false;
+          color = None;
+          alpha = None;
+          shadow_color = None;
+          shadow_alpha = None;
+        }
+        // \b0/\b1/\b<weight>, \i0/\i1, \u0/\u1; non-numeric arguments
+        // (\bord, \blur, \iclip, …) are ignored.
+        t if t.starts_with('b') => parse_toggle(&t[1..], &mut bold),
+        t if t.starts_with('i') => parse_toggle(&t[1..], &mut italic),
+        t if t.starts_with('u') => parse_toggle(&t[1..], &mut underline),
+        // \c&HBBGGRR& / \1c&HBBGGRR& → primary text color.
+        t if t.starts_with("c&") || t.starts_with("1c&") => {
+          let c = t.strip_prefix("1c&").unwrap_or(&t[2..]);
+          color = normalize_ass_color(c);
+        }
+        // \4c&HBBGGRR&: shadow color — tracked for promotion when the
+        // primary channel is invisible (see effective_color).
+        t if t.starts_with("4c&") => shadow_color = normalize_ass_color(&t[3..]),
+        // \alpha&HXX& / \1a&HXX&: primary alpha; \4a&HXX&: shadow alpha.
+        t if t.starts_with("alpha&") => alpha = parse_ass_alpha(&t[6..]),
+        t if t.starts_with("1a&") => alpha = parse_ass_alpha(&t[3..]),
+        t if t.starts_with("4a&") => shadow_alpha = parse_ass_alpha(&t[3..]),
+        // \pN toggles drawing mode; \pos(/\pbo) fails the int parse.
+        t if t.starts_with('p') => {
+          if let Ok(n) = t[1..].parse::<u32>() {
+            drawing = n >= 1;
+            saw_drawing |= drawing;
+          }
+        }
+        _ => {}
       }
     }
 
     last_end = tag_end;
   }
 
-  if last_end < text.len() {
+  if last_end < text.len() && !drawing {
     let segment = &text[last_end..];
     let cleaned = segment
       .replace("\\N", "\n")
@@ -607,8 +803,12 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
 
   if !current.is_empty() {
     let mut part = crate::model::TextPart::new(current, bold, italic, underline);
-    part.color = color.clone();
+    part.color = effective_color(&color, alpha, &shadow_color, shadow_alpha);
     parts.push(part);
+  }
+
+  if parts.is_empty() && (saw_drawing || re.is_match(text)) {
+    parts.push(crate::model::TextPart::plain(""));
   }
 
   parts
@@ -785,6 +985,27 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_style_float_outline_shadow() {
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: OP,FOT-Rowdy Std EB,66,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3.9,0,8,30,30,69,1\nStyle: Default,LTFinnegan Medium,72,&H00FFFFFF,&H00FFFFFF,&H00000000,&HA0000000,0,0,0,0,100,100,0.5,0.5,1,3.6,1.5,2,200,200,60,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,OP,,0,0,0,,Hello\n";
+    let result = parse_content(content).unwrap();
+    let SubtitleFile::Ass(ass) = &result else {
+      panic!("expected ASS file");
+    };
+    assert_eq!(ass.styles.len(), 2);
+    assert_eq!(ass.styles[0].name, "OP");
+    assert_eq!(ass.styles[0].outline, 3.9);
+    assert_eq!(ass.styles[1].spacing, 0.5);
+    assert_eq!(ass.styles[1].shadow, 1.5);
+
+    // The dialogue's style_props must resolve against the parsed style.
+    let sub = &result.subtitles()[0];
+    let props = sub.style_props.as_ref().expect("style_props missing");
+    assert_eq!(props.font_family.as_deref(), Some("FOT-Rowdy Std EB"));
+    assert_eq!(props.font_size.as_deref(), Some("66px"));
+    assert_eq!(props.color.as_deref(), Some("#FFFFFF"));
+  }
+
+  #[test]
   fn test_ass_to_string_preserves_styles() {
     let content = "[Script Info]\nTitle: Test\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\nStyle: Custom,Arial,36,&H0000FFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Custom,,0,0,0,,Custom Style Text\n";
     let parsed = parse_content(content).unwrap();
@@ -930,5 +1151,130 @@ mod tests {
     let out = file.to_string_with_format(&Format::Ttml);
     assert!(out.contains("tts:fontFamily=\"Arial\""), "got: {}", out);
     assert!(out.contains("style=\"Custom\""), "got: {}", out);
+  }
+
+  fn parse_positioned(content: &str) -> Vec<Subtitle> {
+    let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
+      panic!("expected ASS");
+    };
+    data.subtitles
+  }
+
+  const ASS_HEADER: &str = "[Script Info]\nScriptType: v4.00+\nPlayResX: 384\nPlayResY: 288\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\nStyle: TopRight,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,9,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
+
+  #[test]
+  fn test_position_from_style_alignment() {
+    // Style alignment 2 (bottom-center): band position, no coordinates.
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hi\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.x, None);
+    assert_eq!(pos.y, None);
+    assert_eq!(pos.h_align, HorizontalAlign::Center);
+    assert_eq!(pos.v_align, VerticalAlign::Bottom);
+  }
+
+  #[test]
+  fn test_position_style_alignment_9() {
+    // Alignment 9 → top-right.
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,TopRight,,0,0,0,,Hi\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.h_align, HorizontalAlign::Right);
+    assert_eq!(pos.v_align, VerticalAlign::Top);
+  }
+
+  #[test]
+  fn test_position_an_overrides_style() {
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{{\\an8}}Top\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.h_align, HorizontalAlign::Center);
+    assert_eq!(pos.v_align, VerticalAlign::Top);
+  }
+
+  #[test]
+  fn test_position_pos_converts_via_playres() {
+    // \pos(192,144) on PlayRes 384x288 → 50%, 50% (verified with python3).
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{{\\pos(192,144)}}Mid\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.x, Some(50.0));
+    assert_eq!(pos.y, Some(50.0));
+  }
+
+  #[test]
+  fn test_position_move_uses_start_point() {
+    // \move(96,48,…) start point → 25%, 16.67 (rounded 2dp; verified with python3).
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{{\\move(96,48,192,144)\\an7}}Go\n"
+    ));
+    let pos = subs[0].position.as_ref().unwrap();
+    assert_eq!(pos.x, Some(25.0));
+    assert_eq!(pos.y, Some(16.67));
+    assert_eq!(pos.h_align, HorizontalAlign::Left);
+    assert_eq!(pos.v_align, VerticalAlign::Top);
+  }
+
+  #[test]
+  fn test_position_default_playres_when_missing() {
+    // No PlayRes in [Script Info] → spec default 384x288.
+    let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\pos(38,29)}Hi\n";
+    let subs = parse_positioned(content);
+    let pos = subs[0].position.as_ref().unwrap();
+    // 38/384 = 9.8958… → 9.9; 29/288 = 10.069… → 10.07 (verified with python3).
+    assert_eq!(pos.x, Some(9.9));
+    assert_eq!(pos.y, Some(10.07));
+  }
+
+  #[test]
+  fn test_shadow_color_promoted_when_primary_invisible() {
+    // \alpha&HFE& hides the primary channel; the visible color lives in
+    // \4c (shadow) — promote it. &H4C7BD3& is BGR → #D37B4C (verified
+    // with python3).
+    let parts = parse_ass_tags("{\\alpha&HFE&\\4c&H4C7BD3&\\4a&H00&}X");
+    assert_eq!(parts.len(), 1);
+    assert_eq!(parts[0].text, "X");
+    assert_eq!(parts[0].color.as_deref(), Some("#D37B4C"));
+  }
+
+  #[test]
+  fn test_shadow_color_not_promoted_when_primary_visible() {
+    // Opaque primary (\alpha&H00&) keeps the \c color; \4c is ignored.
+    // &H112233& BGR → #332211 (verified with python3).
+    let parts = parse_ass_tags("{\\alpha&H00&\\c&H112233&\\4c&H445566&}X");
+    assert_eq!(parts[0].color.as_deref(), Some("#332211"));
+  }
+
+  #[test]
+  fn test_shadow_color_not_promoted_when_shadow_also_invisible() {
+    let parts = parse_ass_tags("{\\alpha&HFF&\\4a&HFF&\\4c&H4C7BD3&}X");
+    assert_eq!(parts[0].color, None);
+  }
+
+  #[cfg(feature = "ttml")]
+  #[test]
+  fn test_ass_to_ttml_emits_layout() {
+    let subs = parse_positioned(&format!(
+      "{ASS_HEADER}Dialogue: 0,0:00:01.00,0:00:02.00,TopRight,,0,0,0,,{{\\pos(192,144)}}Mid\n"
+    ));
+    let file = SubtitleFile::Ass(AssData {
+      info: HashMap::new(),
+      styles: Vec::new(),
+      fonts: Vec::new(),
+      subtitles: subs,
+    });
+    let out = file.to_string_with_format(&Format::Ttml);
+    assert!(out.contains("<layout>"), "got: {out}");
+    // \pos(192,144) @384x288 = anchor (50%, 50%), \an9-style right/top:
+    // region ends at the anchor — origin "0% 50%", extent "50% 50%".
+    assert!(out.contains("tts:origin=\"0% 50%\""), "got: {out}");
+    assert!(out.contains("tts:extent=\"50% 50%\""), "got: {out}");
+    assert!(out.contains("tts:displayAlign=\"before\""), "got: {out}");
+    assert!(out.contains("tts:textAlign=\"right\""), "got: {out}");
   }
 }
