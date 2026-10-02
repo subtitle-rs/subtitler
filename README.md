@@ -4,6 +4,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/subtitler?style=flat-square)](https://crates.io/crates/subtitler)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
+[![Live demo](https://img.shields.io/badge/try%20it%20online-Subtitle%20Workbench-8A2BE2?style=flat-square)](https://subtitle-rs.github.io/subtitle-format-conversion/)
 
 - **17 subtitle formats**: SRT, WebVTT, ASS/SSA, MicroDVD, SubViewer, TTML/IMSC, SBV, LRC, SAMI, MPL2, SCC, EBU STL, Spruce STL, DFXP, iTT, Whisper JSON
 - Rich text extraction (bold, italic, underline, color, voice tags)
@@ -14,6 +15,10 @@
 - Utility operations: sort, merge, split, validate, framerate transform
 - Async I/O powered by `tokio`
 - Serialize/Deserialize via `serde`
+
+## Try it online
+
+[**Subtitle Workbench**](https://subtitle-rs.github.io/subtitle-format-conversion/) — a fully client-side subtitle tool built on this crate compiled to WebAssembly: format conversion with auto-detection, quality checks, text normalization, and file info. Everything runs in your browser — no backend, no uploads, files never leave your device.
 
 ## Installation
 

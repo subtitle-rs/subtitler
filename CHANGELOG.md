@@ -8,6 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **[Subtitle Workbench](https://subtitle-rs.github.io/subtitle-format-conversion/)**:
+  an online, fully client-side subtitle converter/demo built on this crate
+  compiled to WebAssembly (README now links it).
 - **Cue positioning model (`CuePosition`)**: `Subtitle` gains
   `position: Option<CuePosition>` with `x`/`y` (percent of the video frame),
   `h_align: HorizontalAlign` and `v_align: VerticalAlign`, plus a
