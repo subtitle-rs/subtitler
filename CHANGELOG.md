@@ -10,7 +10,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — next batch items live on feature branches until merged.
 
-## [2.10.0] - 2026-10-02
+## [2.10.0] - 2026-10-29
 
 ### Added
 
