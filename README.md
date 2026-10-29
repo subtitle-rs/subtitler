@@ -139,8 +139,15 @@ you don't need:
 subtitler = { version = "2.0", default-features = false, features = ["srt", "vtt"] }
 ```
 
+The default features include the `cli` feature so `cargo install subtitler`
+continues to install the command-line tool. Library consumers that disable
+default features do not compile the CLI dependencies unless they opt into
+`cli`. Enable `cli` explicitly when you need the binary with a reduced format
+set.
+
 | Flag         | Format           | Notes |
 |--------------|------------------|-------|
+| `cli`        | Command-line tool | Enabled by default; adds `clap` and `tracing-subscriber` |
 | `srt`        | SubRip (`.srt`)  | Most common format |
 | `vtt`        | WebVTT (`.vtt`)  | HTML5 standard |
 | `ass`        | Advanced SubStation Alpha (`.ass`) | Advanced styling |
