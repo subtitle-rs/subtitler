@@ -198,9 +198,9 @@ cargo build --no-default-features --features spruce
 
 ## 4. Feature Flags
 
-`default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "dfxp", "itt", "spruce", "whisper", "http"]`
+`default = ["cli", "srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "dfxp", "itt", "spruce", "whisper", "http"]`
 
-每个格式一个 feature，通过 `#[cfg(feature = "xxx")]` 控制模块声明、`Format`/`SubtitleFile` 枚举变体、所有 `match` 分支。
+每个格式一个 feature，通过 `#[cfg(feature = "xxx")]` 控制模块声明、`Format`/`SubtitleFile` 枚举变体、所有 `match` 分支。`cli` feature（默认启用）承载 `clap` + `tracing-subscriber` 并 gate 二进制（`[[bin]] required-features = ["cli"]`）——库消费者关掉 default 即可甩掉 CLI 依赖树。
 
 精简依赖：
 ```toml
@@ -473,8 +473,9 @@ cargo build --examples
 | **2.7.1** | ✅ | 依赖漏洞刷新：cargo update 82 包 + yoke-derive 0.8.2 MSRV 钉扎。408 测试 |
 | **2.8.0** | ✅ | Shot-change 规则：shotlist EDL 解析 + apply_shot_changes 守卫帧 trim + PipelineOp/CLI。9 新测试，总 417 |
 | **2.9.0** | ✅ | 社区 PR 收编（localcc）：ASS `[Fonts]` 嵌入字体 + StyleProps/TTML styling + CuePosition/位置发射 + VTT 实体转义 + `[Fonts]` 白名单 + write_stream 一致性 + region id 防碰撞。71 新测试，总 488 |
+| **2.10.0** | ✅ | TTML x-bg 背景人声空格修复（issue #9）+ `cli` feature 可选化（PR #8，huou07）。4 新测试，总 492 |
 
-**当前版本**：`2.9.0`（见 `Cargo.toml`）。**专注打磨 2.x**，暂不规划 3.0。
+**当前版本**：`2.10.0`（见 `Cargo.toml`）。**专注打磨 2.x**，暂不规划 3.0。
 
 **历史 commit 可参考**（开发范例）：
 - `019a423` AGENTS.md 手册化（文档型 commit 范例）
@@ -493,4 +494,4 @@ cargo build --examples
 - 路线图 spec: `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md`
 - 2.1 spec: `docs/superpowers/specs/2026-07-18-2.1-correctness-debt-design.md`
 - 2.1 plan: `docs/superpowers/plans/2026-07-18-v2.1-correctness-debt.md`
-- 当前版本: `2.9.0`（见 `Cargo.toml`）
+- 当前版本: `2.10.0`（见 `Cargo.toml`）

@@ -10,6 +10,29 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — next batch items live on feature branches until merged.
 
+## [2.10.0] - 2026-10-02
+
+### Added
+
+- **Opt-in `cli` feature** (PR #8, by @huou07): `clap` and
+  `tracing-subscriber` moved behind an opt-in `cli` feature that stays in
+  `default` — `cargo install subtitler` is unchanged, but library
+  consumers building with `default-features = false` no longer compile the
+  CLI dependency tree (−22 packages for `--no-default-features
+  --features srt,vtt`).
+
+### Fixed
+
+- **TTML background vocals glued to the main text** (issue #9, PR #10):
+  flattening `<span ttm:role="x-bg">` regions (Apple Music lyrics
+  convention) into `text`/`text_parts` — and any format converted from
+  them, e.g. LRC — joined the two voices with no separator when the
+  source carried no whitespace (`Ahahahaha(Oh, you like that?)`). The
+  parser now inserts one space before the first text of an `x-bg` region
+  when the preceding text does not already end in whitespace; inline
+  styling spans are unaffected, existing whitespace is never doubled,
+  and TTML round trips stay stable.
+
 ## [2.9.0] - 2026-10-02
 
 ### Added

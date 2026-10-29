@@ -1,7 +1,7 @@
 # Subtitler Code Wiki
 
-> 版本: v2.9.0 · Rust Edition 2024 · MSRV 1.85
-> 17 字幕格式 · 488 tests · WASM-ready · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则 · 嵌入字体/样式/位置发射
+> 版本: v2.10.0 · Rust Edition 2024 · MSRV 1.85
+> 17 字幕格式 · 492 tests · WASM-ready · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则 · 嵌入字体/样式/位置发射
 
 ---
 
@@ -661,14 +661,19 @@ let all = parser.collect_all()?;
 
 ```toml
 [features]
-default = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer",
-           "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "http"]
+default = ["cli", "srt", "vtt", "ass", "ssa", "microdvd", "subviewer",
+           "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl",
+           "dfxp", "itt", "spruce", "whisper", "http"]
 ```
 
 | Feature | 启用内容 | 额外依赖 |
 |---------|----------|----------|
+| `cli` | CLI 二进制（`[[bin]] required-features`） | `clap`、`tracing-subscriber` |
 | `srt` / `vtt` / `ass` / `ssa` / `microdvd` / `subviewer` / `sbv` / `lrc` / `sami` / `mpl2` / `scc` / `ebu_stl` | 对应格式模块 + `Format`/`SubtitleFile` 变体 | 无 |
 | `ttml` | TTML 模块 | `quick-xml` |
+| `dfxp` / `whisper` | DFXP / Whisper JSON 模块 | 无（serde 已有） |
+| `itt` | iTunes Timed Text（复用 TTML 模块） | 无 |
+| `spruce` | Spruce STL 模块 | 无 |
 | `http` | `parse_url` / `parse_url_with` | `reqwest` |
 
 **精简编译**:
@@ -949,9 +954,9 @@ console.log(result.subtitle_count, result.format, result.output);
 
 ## 14. 测试体系
 
-### 14.1 测试分布（v2.9.0 快照）
+### 14.1 测试分布（v2.10.0 快照）
 
-- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 311 个）。
+- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 315 个）。
 - **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 177 个）:
   - [integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/integration.rs) — 端到端流程（73 tests）
   - [cross_format_matrix.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format_matrix.rs) — 跨格式矩阵（23 tests）
@@ -964,7 +969,7 @@ console.log(result.subtitle_count, result.format, result.output);
   - [cross_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format.rs) — 跨格式转换（6 tests）
   - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（6 tests）
   - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests）
-- **总测试数**: **488**（v2.2 时 293 → v2.4 时 340 → v2.7 时 408 → v2.8 时 417 → v2.9 时 488；integration.rs 运行时更多，含参数化）。
+- **总测试数**: **492**（v2.2 时 293 → v2.4 时 340 → v2.7 时 408 → v2.8 时 417 → v2.9 时 488 → v2.10 时 492；integration.rs 运行时更多，含参数化）。
 
 ### 14.2 运行
 

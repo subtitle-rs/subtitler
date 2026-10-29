@@ -1,5 +1,27 @@
 # Migration Guide
 
+## 2.9 → 2.10
+
+### Additions (non-breaking)
+
+- **`cli` feature** (on by default): the CLI binary and its `clap` /
+  `tracing-subscriber` dependencies are now behind an opt-in feature.
+  `cargo install subtitler` and default builds are unchanged; library
+  consumers with `default-features = false` drop the CLI dependency tree
+  (22 packages for a `srt,vtt`-only build) and can restore the binary
+  with `features = ["...", "cli"]`.
+
+### Behavior change (minor)
+
+- **TTML `x-bg` background vocals get a separating space when
+  flattened.** Parsing an Apple Music-style TTML whose
+  `<span ttm:role="x-bg">` is glued to the main vocal with no whitespace
+  now inserts one space in `Subtitle::text`/`text_parts` (previously the
+  two voices concatenated: `Ahahahaha(Oh, you like that?)` →
+  `Ahahahaha (Oh, you like that?)`). Conversions to LRC/SRT/plain text
+  are affected accordingly. Code that relies on the glued form must
+  strip the space itself; round trips through TTML stay stable.
+
 ## 2.8 → 2.9
 
 ### Breaking: `ass::to_string` / `ass::write_stream` gain a `fonts` parameter
