@@ -380,6 +380,13 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   let mut current_text = String::new();
   let mut parts: SmallVec<[TextPart; 4]> = SmallVec::new();
   let mut span_props = StyleProps::default();
+  // Background vocals (`ttm:role="x-bg"`, Apple Music lyrics convention):
+  // per open span, whether it opened an x-bg region (may nest); while one
+  // is active, the first text segment gets a separating space when it
+  // would otherwise glue onto the main vocal text.
+  let mut span_stack: SmallVec<[bool; 4]> = SmallVec::new();
+  let mut bg_depth = 0usize;
+  let mut pending_bg_space = false;
 
   loop {
     match reader.read_event_into(&mut buf) {
@@ -390,6 +397,9 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
             in_p = true;
             current_text.clear();
             parts.clear();
+            span_stack.clear();
+            bg_depth = 0;
+            pending_bg_space = false;
             let attrs = read_paragraph_attrs(e, &styles, &regions);
             current_start = attrs.start;
             current_end = attrs.end;
@@ -401,11 +411,23 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           b"region" => parse_region_tag(e, &mut regions),
           b"span" => {
             span_props = StyleProps::default();
+            let mut is_bg = false;
             for attr in e.attributes().flatten() {
               let key = local_name(attr.key.as_ref());
               let val = String::from_utf8_lossy(&attr.value);
+              // `ttm:role` (TTML 1.0) / `role` (TTML2) — token list.
+              if key == b"role" && val.split_whitespace().any(|r| r == "x-bg") {
+                is_bg = true;
+              }
               merge_style_attribute(&mut span_props, key, &val);
             }
+            if is_bg {
+              bg_depth += 1;
+              if bg_depth == 1 {
+                pending_bg_space = true;
+              }
+            }
+            span_stack.push(is_bg);
           }
           b"br" if in_p => {
             current_text.push('\n');
@@ -442,7 +464,16 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           error: e.to_string(),
         })?;
         if in_p && !text.trim().is_empty() {
-          let segment = text.to_string();
+          let mut segment = text.to_string();
+          if pending_bg_space {
+            pending_bg_space = false;
+            if !current_text.is_empty()
+              && !current_text.ends_with(char::is_whitespace)
+              && !segment.starts_with(char::is_whitespace)
+            {
+              segment.insert(0, ' ');
+            }
+          }
           current_text.push_str(&segment);
           let mut part = TextPart::new(
             &segment,
@@ -473,9 +504,19 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
             }
           };
           if !resolved.trim().is_empty() {
-            current_text.push_str(&resolved);
+            let mut segment = resolved;
+            if pending_bg_space {
+              pending_bg_space = false;
+              if !current_text.is_empty()
+                && !current_text.ends_with(char::is_whitespace)
+                && !segment.starts_with(char::is_whitespace)
+              {
+                segment.insert(0, ' ');
+              }
+            }
+            current_text.push_str(&segment);
             let mut part = TextPart::new(
-              &resolved,
+              &segment,
               span_props.bold,
               span_props.italic,
               span_props.underline,
@@ -506,6 +547,12 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
           }
           b"span" => {
             span_props = StyleProps::default();
+            if span_stack.pop() == Some(true) {
+              bg_depth = bg_depth.saturating_sub(1);
+              if bg_depth == 0 {
+                pending_bg_space = false;
+              }
+            }
           }
           _ => {}
         }
@@ -1343,6 +1390,56 @@ mod tests {
     let parts = &file.subtitles()[0].text_parts;
     assert_eq!(parts.len(), 1);
     assert!(parts[0].underline());
+  }
+
+  #[test]
+  fn test_parse_xbg_span_gets_separating_space() {
+    // Issue #9: Apple Music-style lyrics put background vocals in
+    // <span ttm:role="x-bg"> glued to the main vocal with no whitespace.
+    // Flattening must not join the two voices into one word.
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\">\
+      <body><div>\
+      <p begin=\"00:00:55.546\" end=\"00:00:56.928\">Ahahahaha<span ttm:role=\"x-bg\"><span>(Oh, you like that?)</span></span></p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    assert_eq!(file.subtitles()[0].text, "Ahahahaha (Oh, you like that?)");
+  }
+
+  #[test]
+  fn test_parse_xbg_does_not_double_space() {
+    // A space already present before the x-bg span must not be doubled.
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\">\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\">Main text <span ttm:role=\"x-bg\"><span>(bg)</span></span></p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    assert_eq!(file.subtitles()[0].text, "Main text (bg)");
+  }
+
+  #[test]
+  fn test_parse_plain_span_glued_stays_glued() {
+    // Spans without an x-bg role are inline styling — no separator.
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\">\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\">don<span>&#8217;</span>t</p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    assert_eq!(file.subtitles()[0].text, "don\u{2019}t");
+  }
+
+  #[test]
+  fn test_parse_xbg_multi_role_token_and_round_trip() {
+    // ttm:role is a token list; "translation x-bg" must be recognized.
+    // A round trip through to_string must not accumulate extra spaces.
+    let content = "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\">\
+      <body><div>\
+      <p begin=\"00:00:01.000\" end=\"00:00:02.000\">Hey<span ttm:role=\"translation x-bg\"><span>&amp; ho</span></span></p>\
+      </div></body></tt>";
+    let file = parse_content(content).unwrap();
+    assert_eq!(file.subtitles()[0].text, "Hey & ho");
+    let out = to_string(file.subtitles(), None);
+    let reparsed = parse_content(&out).unwrap();
+    assert_eq!(reparsed.subtitles()[0].text, "Hey & ho");
   }
 
   #[test]
