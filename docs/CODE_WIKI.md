@@ -1,7 +1,7 @@
 # Subtitler Code Wiki
 
-> 版本: v2.12.0 · Rust Edition 2024 · MSRV 1.85
-> 17 字幕格式 · 519 tests · 锚点自动对轴 · 卡拉OK · WASM-tested · fuzz targets · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则 · 嵌入字体/样式/位置发射
+> 版本: v2.13.0 · Rust Edition 2024 · MSRV 1.85
+> 17 字幕格式 · 528 tests · IMSC 1.1 校验 · 锚点自动对轴 · 卡拉OK · WASM-tested · fuzz targets · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则 · 嵌入字体/样式/位置发射
 
 ---
 
@@ -954,7 +954,7 @@ console.log(result.subtitle_count, result.format, result.output);
 
 ## 14. 测试体系
 
-### 14.1 测试分布（v2.12.0 快照）
+### 14.1 测试分布（v2.13.0 快照）
 
 - **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 320 个）。
 - **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 177 个）:
@@ -970,7 +970,7 @@ console.log(result.subtitle_count, result.format, result.output);
   - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（6 tests）
   - [ssa_round_trip.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/ssa_round_trip.rs) — SSA v4.00 golden（4 tests，v2.11+）
   - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests）
-- **总测试数**: **519**（v2.2 时 293 → v2.9 时 488 → v2.10 时 492 → v2.11 时 501 → v2.12 时 519；integration.rs 运行时更多，含参数化）。
+- **总测试数**: **528**（v2.2 时 293 → v2.9 时 488 → v2.10 时 492 → v2.11 时 501 → v2.12 时 519 → v2.13 时 528（含 tests/ebu_tt_d.rs 3 个）；integration.rs 运行时更多，含参数化）。
 
 ### 14.2 运行
 
@@ -1141,6 +1141,8 @@ SRT/VTT/ASS 解析时会:
 - **SSA/ASS 解析由每段 `Format:` 行驱动（v2.11+）**：`[V4 Styles]` 的 18 字段序与 `[Events]` 的 Marked-first 布局按字段名映射（`TertiaryColour` → outline 槽位；SSA 的 0/1 bold 视为真；Text 允许含逗号——尾部定长字段从分割末尾取）。无 `Format:` 行时回退到 V4+ 固定正则。detect：`V4+ Styles` → Ass，纯 `V4 Styles` → Ssa（无 ssa feature 时为 Ass，与 parse 产物一致）。
 
 - **锚点对轴是分段仿射、非分段常数（v2.12+）**：帧率漂移下常数偏移只能修准锚点起点、端点残差随距离增长；每段最小二乘 `offset(t) = a·t + b`（前缀和 O(1) SSE）让起点与端点同时收敛（验收：40-cue 4% 漂移 ±1ms vs alass 272ms）。`SyncSegment.slope` 以 ms/s 表达，`from_ms` 处 offset = a·from + b。
+
+- **IMSC 1.1 校验是规范依据型检查（v2.13+）**：约束清单从 W3C Recommendation 原文提取（xml:lang 必需、media timebase、帧表达式需 ttp:frameRate、负长度仅 disparity/textShadow、textShadow ≤ 4、rh/rw 方向性），不是臆造规则；实现于 src/imsc.rs，validate --imsc 对 TTML 族文档生效（含 EBU-TT-D）。
 
 ### 17.11 TTML 发射一致性（v2.9+）
 

@@ -10,6 +10,33 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — next batch items live on feature branches until merged.
 
+## [2.13.0] - 2026-10-31
+
+> Theme: broadcast deep formats (v2.13 of the [2026-10-31 roadmap](docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md)).
+
+### Added
+
+- **IMSC 1.1 profile validation**: `validate --imsc` checks TTML-family
+  documents against the W3C IMSC 1.1 text-profile constraints that are
+  checkable statically (grounded in the Recommendation text): required
+  `xml:lang` on `<tt>`, media timebase, frame expressions require
+  `ttp:frameRate`, strictly negative lengths prohibited outside
+  `tts:disparity`/`tts:textShadow`, `tts:textShadow` ≤ 4 shadows, and
+  rh/rw root-container-relative unit direction. Two new
+  `ValidationIssue` variants (`ImscMissingAttribute`, `ImscProhibited`).
+- **EBU-TT-D read support**: EBU-TT-D documents are valid TTML with the
+  `urn:ebu:tt` metadata namespace — they parse and convert through the
+  TTML path, and the IMSC validation applies to them (golden read
+  tests in tests/ebu_tt_d.rs).
+
+### Deferred
+
+- **MCC (MacCaption) read**: the three real samples collected
+  (comcast/caption-inspector test media) are CEA-708 VANC payloads —
+  correct decoding needs the MCC run-length alphabet plus
+  ANC/CDP/DTVCC three-layer parsing (research notes preserved in the
+  roadmap spec §2.13). Deferred to v2.13.1/v3.0.
+
 ## [2.12.0] - 2026-10-31
 
 > Theme: intelligent timing (v2.12 of the [2026-10-31 roadmap](docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md) — the release that separates subtitler from every other subtitle crate).
