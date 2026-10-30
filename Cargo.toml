@@ -107,12 +107,6 @@ opt-level = "z"
 panic = "abort"
 strip = true
 
-# macos-14 runners are being retired (brownout Nov 2026) — the v2.11.0
-# release lost its aarch64-apple-darwin artifacts to the brownout. Pin
-# the arm64 macOS build to macos-15.
-[workspace.metadata.dist.github-custom-runners]
-aarch64-apple-darwin = "macos-15"
-
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"
