@@ -414,7 +414,7 @@ pub fn apply_to(subs: &mut [&mut Subtitle], segments: &[SyncSegment]) -> usize {
   apply_segments(subs, segments)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "srt"))]
 mod tests {
   use super::*;
 

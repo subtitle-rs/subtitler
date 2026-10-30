@@ -594,7 +594,7 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
   }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "srt"))]
 mod timing_ops_tests {
   use super::*;
   use crate::model::SubtitleFile;
