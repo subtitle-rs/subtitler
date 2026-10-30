@@ -193,6 +193,12 @@ pub enum PipelineOp {
     after_frames: u64,
     fps: f64,
   },
+  /// Anchor-based synchronization against a reference file on disk.
+  /// On wasm32 (no filesystem) this op is a no-op.
+  AutoSync {
+    reference_path: String,
+    min_score: Option<f64>,
+  },
 }
 
 /// A declarative pipeline of subtitle transformation operations.
@@ -342,6 +348,16 @@ impl Pipeline {
     self
   }
 
+  /// Anchor-based synchronization against a reference subtitle file on
+  /// disk (any format). See [`crate::sync`]. No-op on wasm32.
+  pub fn auto_sync(mut self, reference_path: impl Into<String>, min_score: Option<f64>) -> Self {
+    self.operations.push(PipelineOp::AutoSync {
+      reference_path: reference_path.into(),
+      min_score,
+    });
+    self
+  }
+
   pub fn apply(&self, file: SubtitleFile) -> SubtitleFile {
     let mut builder = SubtitleBuilder::from(file);
     for op in &self.operations {
@@ -372,6 +388,27 @@ impl Pipeline {
           after_frames,
           fps,
         } => builder.apply_shot_changes(cuts_ms, *before_frames, *after_frames, *fps),
+        PipelineOp::AutoSync {
+          reference_path,
+          min_score,
+        } => {
+          // std::fs is unavailable on wasm32-unknown-unknown; the op
+          // degrades to a no-op there (use the sync CLI/API instead).
+          #[cfg(not(target_arch = "wasm32"))]
+          {
+            if let Ok(data) = std::fs::read(reference_path) {
+              if let Ok(reference) = crate::parse_bytes(&data) {
+                let opts = crate::sync::SyncOptions {
+                  min_score: min_score.unwrap_or(crate::sync::SyncOptions::default().min_score),
+                  ..crate::sync::SyncOptions::default()
+                };
+                let _ = builder.file.auto_sync(&reference, &opts);
+              }
+            }
+          }
+          let _ = min_score;
+          builder
+        }
       };
     }
     builder.build()
@@ -847,5 +884,37 @@ mod tests {
     let file = SubtitleFile::Srt(vec![make_sub(4_000, 6_000, "x")]);
     let result = parsed.apply(file);
     assert_eq!(result.subtitles()[0].end, 4_920);
+  }
+}
+
+#[cfg(all(test, feature = "srt", not(target_arch = "wasm32")))]
+mod auto_sync_tests {
+  use super::*;
+  use crate::model::Subtitle;
+
+  #[test]
+  fn auto_sync_op_shifts_from_reference_file() {
+    let dir = std::env::temp_dir().join(format!("subtitler-sync-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let ref_path = dir.join("ref.srt");
+    std::fs::write(
+      &ref_path,
+      "1\n00:00:01,000 --> 00:00:03,000\nunique anchor text\n\n2\n00:00:04,000 --> 00:00:06,000\nsecond anchor line\n\n",
+    )
+    .unwrap();
+
+    // Wrong: 5s late.
+    let wrong = SubtitleFile::Srt(vec![
+      Subtitle::new(6000, 8000, "unique anchor text"),
+      Subtitle::new(9000, 11000, "second anchor line"),
+    ]);
+    let fixed = Pipeline::new()
+      .auto_sync(ref_path.to_string_lossy().to_string(), None)
+      .apply(wrong);
+
+    let subs = fixed.subtitles();
+    assert_eq!(subs[0].start, 1000);
+    assert_eq!(subs[1].start, 4000);
+    std::fs::remove_dir_all(&dir).ok();
   }
 }
