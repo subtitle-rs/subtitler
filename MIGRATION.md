@@ -1,5 +1,26 @@
 # Migration Guide
 
+## 2.10 → 2.11
+
+### Behavior change (minor)
+
+- **SSA v4.00 files now parse fully and detect as `Format::Ssa`.**
+  Previously SSA content detected as `Ass` and produced zero cues (the
+  parsers assumed the ASS V4+ field order). Code matching on
+  `Format::Ssa`/`Format::Ass` in detection results may see the new
+  value when ssa is enabled; without the `ssa` feature SSA still
+  detects as `Ass`.
+- **`ssa` feature now implies `ass`.** Enabling `ssa` alone previously
+  did not compile; enabling it now also enables the shared ass module.
+
+### Additions (non-breaking)
+
+- `normalize --fix-tags` (also in `--all`) and
+  `normalize --translit-cyr`; library functions
+  `normalize::fix_invalid_tags` / `normalize::transliterate_cyrillic`.
+- CI: `wasm-test` job, weekly fuzz smoke, test/clippy matrices upgraded
+  to `--all-targets` across feature combos.
+
 ## 2.9 → 2.10
 
 ### Additions (non-breaking)

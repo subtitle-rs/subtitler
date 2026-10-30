@@ -1,7 +1,7 @@
 # Subtitler Code Wiki
 
-> 版本: v2.10.0 · Rust Edition 2024 · MSRV 1.85
-> 17 字幕格式 · 492 tests · WASM-ready · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则 · 嵌入字体/样式/位置发射
+> 版本: v2.11.0 · Rust Edition 2024 · MSRV 1.85
+> 17 字幕格式 · 501 tests · WASM-tested · fuzz targets · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则 · 嵌入字体/样式/位置发射
 
 ---
 
@@ -954,9 +954,9 @@ console.log(result.subtitle_count, result.format, result.output);
 
 ## 14. 测试体系
 
-### 14.1 测试分布（v2.10.0 快照）
+### 14.1 测试分布（v2.11.0 快照）
 
-- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 315 个）。
+- **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 320 个）。
 - **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 177 个）:
   - [integration.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/integration.rs) — 端到端流程（73 tests）
   - [cross_format_matrix.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format_matrix.rs) — 跨格式矩阵（23 tests）
@@ -968,8 +968,9 @@ console.log(result.subtitle_count, result.format, result.output);
   - [cleanup_batch.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cleanup_batch.rs) — 清理批处理（6 tests）
   - [cross_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cross_format.rs) — 跨格式转换（6 tests）
   - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（6 tests）
+  - [ssa_round_trip.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/ssa_round_trip.rs) — SSA v4.00 golden（4 tests，v2.11+）
   - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests）
-- **总测试数**: **492**（v2.2 时 293 → v2.4 时 340 → v2.7 时 408 → v2.8 时 417 → v2.9 时 488 → v2.10 时 492；integration.rs 运行时更多，含参数化）。
+- **总测试数**: **501**（v2.2 时 293 → v2.4 时 340 → v2.7 时 408 → v2.9 时 488 → v2.10 时 492 → v2.11 时 501；integration.rs 运行时更多，含参数化）。
 
 ### 14.2 运行
 
@@ -998,11 +999,11 @@ cargo build --examples                       # 示例仍工作
 
 ### 14.5 已知测试盲区（路线图 2.3 补）
 
-- WASM 函数（`src/wasm.rs` 6 个）零覆盖。
-- SSA/SCC/EBU STL round-trip 测试（SCC/EBU STL 自 v2.1 起 round-trip 正确，但 SSA 仍无）。
+- ~~WASM 函数（`src/wasm.rs`）零覆盖~~ v2.11 已覆盖（7 个 wasm-bindgen 测试 + CI wasm-test job）。
+- ~~SSA round-trip 无~~ v2.11 已补（tests/ssa_round_trip.rs，含 Format: 行差异）。
 - chardetng 编码回退路径零测试（Shift_JIS/GBK/Big5/Windows-1252 fixture）。
 - 错误路径：`SubtitleError::Xml`/`InvalidFrame` + `ParseError::Http/Io/Decode/Anyhow/Unsupported` 多数未触发。
-- proptest 仅 ASCII，无 Unicode/换行/标签/CJK。
+- ~~proptest 仅 ASCII~~ v2.11 已扩展（Latin-1/组合附加符/CJK/片假名/韩文/RTL/emoji；标签类 `& < >` 仍排除，见策略注释）。
 
 ---
 
@@ -1061,7 +1062,7 @@ gap analysis: [docs/subtitler-vs-editingtools-gap-analysis.md](file:///Users/man
 | **2.8.0** | ✅ 已发布 | Shot-change 规则：shotlist EDL 解析 + apply_shot_changes 守卫帧 trim + PipelineOp/CLI。9 新测试，总 417 |
 | **2.9.0** | ✅ 已发布 | 社区 PR 收编（localcc，#2/#3/#4 → PR #5/#6/#7）：ASS `[Fonts]` 嵌入字体（uuencode 与 Aegisub/libass 逐字节对拍验证）+ StyleProps/TTML `<styling>` + CuePosition/`\pos`/`\an`/TTML layout + VTT 实体转义 + `[Fonts]` 白名单解析 + write_stream 管线一致性 + region id 防碰撞。71 新测试，总 488 |
 
-**下一程（2026-10-31 规划）：v2.11 还债 → v2.12 智能时序 → v2.13 广播深格式 → v3.0 生态与架构。见 `docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md`。**
+**下一程：v2.12 智能时序 → v2.13 广播深格式 → v3.0 生态与架构。见 `docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md`。**
 
 ---
 
@@ -1136,6 +1137,8 @@ SRT/VTT/ASS 解析时会:
 
 - **uuencode 采用 ASS 变体，不是经典 uuencode**：3 字节 → 4 字符、偏移 33、80 字符/行、按最后一组残余字符数推断尾部，**无 per-line 长度前缀**。依据是 Aegisub `libaegisub/ass/uuencode.cpp` 与 libass `ass.c decode_chars` 的一手实现（两者互相印证）；实现经 0..=400 全长度 × 双向 round-trip 逐字节对拍。
 - **`[Fonts]` 段内 section 切换用已知头白名单**：libass 的 `process_line` 只在 `[Script Info]` / `[V4 Styles]` / `[V4+ Styles]` / `[Events]` / `[Fonts]`（大小写不敏感）时离开字体状态，其余任何行（含形如 `[...]` 的数据行——uuencode 字母表含 `[` `]`）都算字体数据。通用 `starts_with('[')` 判定会提前截断字体块。
+
+- **SSA/ASS 解析由每段 `Format:` 行驱动（v2.11+）**：`[V4 Styles]` 的 18 字段序与 `[Events]` 的 Marked-first 布局按字段名映射（`TertiaryColour` → outline 槽位；SSA 的 0/1 bold 视为真；Text 允许含逗号——尾部定长字段从分割末尾取）。无 `Format:` 行时回退到 V4+ 固定正则。detect：`V4+ Styles` → Ass，纯 `V4 Styles` → Ssa（无 ssa feature 时为 Ass，与 parse 产物一致）。
 
 ### 17.11 TTML 发射一致性（v2.9+）
 

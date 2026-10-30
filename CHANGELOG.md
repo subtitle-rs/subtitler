@@ -10,6 +10,53 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — next batch items live on feature branches until merged.
 
+## [2.11.0] - 2026-10-31
+
+> Theme: debt & foundations (v2.11 of the [2026-10-31 roadmap](docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md)).
+
+### Fixed
+
+- **SSA v4.00 files parsed to zero subtitles**: style and dialogue
+  parsers hard-coded the ASS V4+ field order, so every line of a
+  well-formed SSA file ([V4 Styles], Marked-first dialogues with Text
+  in the middle) silently failed to match. Parsing is now driven by
+  each section's `Format:` line: `TertiaryColour` maps to the outline
+  slot, SSA's 0/1 bold flags are honoured, `Text` may contain commas,
+  and the missing `Style` column maps `Name` to the actor.
+  `detect_format` returns `Format::Ssa` for plain `V4 Styles` files
+  (previously `Ass`); without the `ssa` feature they still detect as
+  `Ass`, matching what parse constructs.
+- **Only the `srt` feature subset compiled its tests**: with any other
+  feature combination, tests, examples and lib tests failed with ~100
+  unresolved `Format` variants and module paths. All test targets,
+  examples (content-derived `required-features`) and the benchmark are
+  now feature-gated; `cargo test --all-targets` and clippy pass under
+  14 verified feature combinations, and the CI test/clippy matrices
+  run `--all-targets` on `srt` and `dfxp,ttml`.
+- **The `ssa` feature alone never compiled** (its dispatch referenced
+  the `ass` module). `ssa` now implies `ass`, reflecting that SSA is
+  implemented by the ass module.
+
+### Added
+
+- **`normalize --fix-tags`**: repair malformed `<i>/<b>/<u>` inline
+  tags (collapse whitespace inside brackets, close unclosed tags, drop
+  orphan closers). Part of `--all`.
+- **`normalize --translit-cyr`**: transliterate Cyrillic to Latin
+  (ISO 9-style, per-character, initial capital preserved).
+- **Fuzz targets** for the four riskiest parsers (`parse_any`,
+  `parse_ttml`, `parse_ass`, `parse_scc`) plus a weekly scheduled CI
+  fuzz job (60s per target, non-blocking).
+- **CI `wasm-test` job**: runs the `src/wasm.rs` wasm-bindgen test
+  suite (7 tests) in node with the Cargo.lock-matched
+  wasm-bindgen-cli; all integration tests are wasm32-gated.
+
+### Changed
+
+- **proptest round-trip strategy** expanded from ASCII+Latin-1+CJK to
+  Katakana, Hangul, Hebrew (RTL stress), combining diacritics and
+  emoji; 150k local cases green.
+
 ## [2.10.0] - 2026-10-29
 
 ### Added
