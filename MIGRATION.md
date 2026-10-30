@@ -1,5 +1,19 @@
 # Migration Guide
 
+## 2.12 → 2.13
+
+### Breaking (enum additions)
+
+- **`ValidationIssue` gains two variants**: `ImscMissingAttribute` and
+  `ImscProhibited` (IMSC 1.1 profile checks). Exhaustive matches need
+  the new arms.
+
+### Additions (non-breaking)
+
+- `imsc` module (`imsc_validate`) and `validate --imsc`.
+- EBU-TT-D documents read/convert through the TTML path (detection and
+  golden read tests).
+
 ## 2.11 → 2.12
 
 ### Breaking (struct additions)

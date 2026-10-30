@@ -280,11 +280,23 @@ async fn cmd_validate(args: cli::ValidateArgs) -> AnyResult<()> {
   let (data, ext) = read_input(&args.input).await?;
   let format =
     resolve_format(&data, ext).ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format."))?;
-  let file = parse_to_file(&data, format).await?;
+  let file = parse_to_file(&data, format.clone()).await?;
 
   let subs = file.subtitles();
 
-  let issues = if let Some(preset) = args.guideline {
+  let issues = if args.imsc {
+    // IMSC 1.1 profile validation applies to TTML-family documents.
+    if !matches!(format, CliFormat::Ttml | CliFormat::Dfxp | CliFormat::Itt) {
+      eprintln!(
+        "IMSC validation applies to TTML-family documents (ttml/dfxp/itt); got {:?} — running structural checks only.",
+        format
+      );
+      file.validate()
+    } else {
+      let content = String::from_utf8_lossy(&data).to_string();
+      subtitler::imsc::imsc_validate(&content)
+    }
+  } else if let Some(preset) = args.guideline {
     let guideline = subtitler::guidelines::GuidelinePreset::from(&preset).guideline();
     eprintln!(
       "Guideline preset: {} (max {} chars/line, {} lines, {}–{}ms duration, ≥{}ms gap, ≤{:.0} CPS)",
@@ -353,6 +365,8 @@ fn issue_kind(issue: &subtitler::model::ValidationIssue) -> &'static str {
     TooLongDuration { .. } => "LONG_DUR",
     TooShortGap { .. } => "SHORT_GAP",
     LineCountExceeded { .. } => "MANY_LINES",
+    ImscMissingAttribute { .. } => "IMSC_MISSING",
+    ImscProhibited { .. } => "IMSC_PROHIBITED",
   }
 }
 

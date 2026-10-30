@@ -114,6 +114,8 @@ minor         minor           minor            major
 
 ### 2.13 — v2.13.0「广播深格式」（minor，~3-4 周）
 
+> **实施记录（2026-10-31）**：B2 MCC 调研完成、实现推迟到 v2.13.1/v3.0。真实样本（comcast/caption-inspector 的 3 个 .mcc）是 **CEA-708 载荷**（VANC 变体）：自定义字母表（0-9A-F 十六进制 nibble；G–O = N×`FA 00 00` 填充；P/Q/R = FB/FC/FD 80 80；S = `96 69` CDP id；T = `61 01` ANC 头；U/Z = 填充）→ ANC 包（DID 0x61）→ CDP 头 7 字节 → 服务块/DTVCC 包。608-only 的 TIME= 变体（closedcaptionconverter 文档）是另一分支。参考解码器：`comcast/caption-inspector` src/xform/mcc_decode.c（Apache-2.0）。样本已缓存 /tmp/mcc-*.mcc。直接按 608 解码 708 载荷产出乱码——完整实现需 ANC/CDP/DTVCC 服务块三层解析。
+
 **主题**: 进军"深格式"空位——这些领域 Rust 现状全是 v0.1 玩具（↓60–2k），先到先得。
 
 | # | 项 | 内容 | 类型 |
