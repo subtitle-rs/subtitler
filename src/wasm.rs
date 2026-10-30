@@ -260,3 +260,17 @@ fn test_validate_and_info() {
   let info = get_info(srt);
   assert!(!info.is_null());
 }
+
+#[cfg(test)]
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn test_normalize_text_strips_tags() {
+  // normalize_text strips tags from detected-format input and passes
+  // undetectable content through unchanged.
+  let srt = "1\n00:00:01,000 --> 00:00:03,500\n<b>Bold</b> plain\n\n";
+  // Re-serialized: the trailing blank line is normalized away.
+  assert_eq!(
+    normalize_text(srt),
+    "1\n00:00:01,000 --> 00:00:03,500\nBold plain\n"
+  );
+  assert_eq!(normalize_text("garbage"), "garbage");
+}

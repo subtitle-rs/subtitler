@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PTX>
+  <Markers>
+    <Marker>
+      <Name>Hello, this is a test subtitle.</Name>
+      <Start>0:00:01:00</Start>
+      <Duration>0:00:03:00</Duration>
+    </Marker>
+    <Marker>
+      <Name>This is the second subtitle. With two lines.</Name>
+      <Start>0:00:05:00</Start>
+      <Duration>0:00:04:00</Duration>
+    </Marker>
+    <Marker>
+      <Name>Third subtitle here.</Name>
+      <Start>0:00:10:00</Start>
+      <Duration>0:00:04:15</Duration>
+    </Marker>
+  </Markers>
+</PTX>

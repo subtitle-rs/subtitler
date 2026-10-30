@@ -2,12 +2,16 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Subtitles one-at-a-time without full Vec allocation.
 
-use subtitler::model::{StreamingParser, SubtitleFormat};
+#[cfg(feature = "srt")]
+use subtitler::model::StreamingParser;
+#[cfg(any(feature = "srt", feature = "vtt"))]
+use subtitler::model::SubtitleFormat;
+#[cfg(feature = "srt")]
 use subtitler::srt;
+#[cfg(feature = "vtt")]
 use subtitler::vtt;
-
+#[cfg(feature = "srt")]
 // ── SRT Streaming ──
-
 #[test]
 fn srt_stream_basic_parse() {
   let content =
@@ -23,7 +27,7 @@ fn srt_stream_basic_parse() {
   assert_eq!(results[1].start, 4000);
   assert_eq!(results[1].end, 6500);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn srt_stream_empty_content() {
   let results: Vec<_> = srt::parse_stream("")
@@ -31,7 +35,7 @@ fn srt_stream_empty_content() {
     .unwrap();
   assert!(results.is_empty());
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn srt_stream_gather_same_as_batch() {
   let content =
@@ -49,7 +53,7 @@ fn srt_stream_gather_same_as_batch() {
     assert_eq!(a.index, b.index);
   }
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn srt_stream_missing_index() {
   let content = "00:00:01,000 --> 00:00:03,500\nNo index\n\n";
@@ -60,7 +64,7 @@ fn srt_stream_missing_index() {
   assert_eq!(results[0].index, None);
   assert_eq!(results[0].text, "No index");
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn srt_stream_with_bom() {
   let content = "\u{FEFF}1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
@@ -70,14 +74,14 @@ fn srt_stream_with_bom() {
   assert_eq!(results.len(), 1);
   assert_eq!(results[0].text, "Hello");
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn srt_stream_error_on_bad_timestamp() {
   let content = "00:00:01,000 --> not_a_time\nBad\n\n";
   let results: Vec<_> = srt::parse_stream(content).collect();
   assert!(results[0].is_err());
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn srt_stream_consecutive_blank_lines() {
   let content =
@@ -87,9 +91,8 @@ fn srt_stream_consecutive_blank_lines() {
     .unwrap();
   assert_eq!(results.len(), 2);
 }
-
+#[cfg(feature = "vtt")]
 // ── VTT Streaming ──
-
 #[test]
 fn vtt_stream_basic_parse() {
   let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld\n\n";
@@ -101,7 +104,7 @@ fn vtt_stream_basic_parse() {
   assert_eq!(results[0].start, 1000);
   assert_eq!(results[1].text, "World");
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_stream_empty() {
   let results: Vec<_> = vtt::parse_stream("WEBVTT\n\n")
@@ -109,7 +112,7 @@ fn vtt_stream_empty() {
     .unwrap();
   assert!(results.is_empty());
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_stream_gather_same_as_batch() {
   let content = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld\n\n";
@@ -125,7 +128,7 @@ fn vtt_stream_gather_same_as_batch() {
     assert_eq!(a.text, b.text);
   }
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_stream_header_access() {
   let content =
@@ -137,7 +140,7 @@ fn vtt_stream_header_access() {
   assert!(header.is_some());
   assert!(header.unwrap().contains("Kind: captions"));
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_stream_with_note_skipped() {
   let content = "WEBVTT\n\nNOTE This is a comment\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
@@ -147,7 +150,7 @@ fn vtt_stream_with_note_skipped() {
   assert_eq!(results.len(), 1);
   assert_eq!(results[0].text, "Hello");
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_stream_with_bom() {
   let content = "\u{FEFF}WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
@@ -156,16 +159,15 @@ fn vtt_stream_with_bom() {
     .unwrap();
   assert_eq!(results.len(), 1);
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_stream_error_on_bad_timestamp() {
   let content = "WEBVTT\n\n1\n00:00:01.000 --> not_a_time\nBad\n\n";
   let results: Vec<_> = vtt::parse_stream(content).collect();
   assert!(results[0].is_err());
 }
-
+#[cfg(feature = "srt")]
 // ── StreamingParser trait ──
-
 #[test]
 fn streaming_parser_collect_all() {
   let content =
@@ -174,7 +176,7 @@ fn streaming_parser_collect_all() {
   let results = parser.collect_all().unwrap();
   assert_eq!(results.len(), 2);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn streaming_parser_count_remaining() {
   let content = "1\n00:00:01,000 --> 00:00:03,500\nA\n\n2\n00:00:04,000 --> 00:00:06,500\nB\n\n3\n00:00:07,000 --> 00:00:09,500\nC\n\n";

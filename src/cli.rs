@@ -621,6 +621,15 @@ pub struct NormalizeArgs {
   #[arg(long, value_names = &["OPEN", "CLOSE"], number_of_values = 2)]
   pub remove_between: Option<Vec<String>>,
 
+  /// Repair malformed inline tags: collapse whitespace inside
+  /// <i>/<b>/<u>, close unclosed tags, drop orphan closers
+  #[arg(long)]
+  pub fix_tags: bool,
+
+  /// Transliterate Cyrillic letters to Latin (ISO 9-style)
+  #[arg(long)]
+  pub translit_cyr: bool,
+
   /// Force input format (auto-detected by default)
   #[arg(short, long)]
   pub format: Option<Format>,

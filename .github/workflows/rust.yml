@@ -5,6 +5,9 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  schedule:
+    - cron: "0 3 * * 1"  # Mondays 03:00 UTC — weekly fuzz smoke
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -32,11 +35,14 @@ jobs:
         features:
           - ""
           - "--no-default-features --features srt"
+          - "--no-default-features --features dfxp,ttml"
         include:
           - features: ""
-            test-args: ""
+            test-args: "--all-targets"
           - features: "--no-default-features --features srt"
-            test-args: "--lib"
+            test-args: "--all-targets"
+          - features: "--no-default-features --features dfxp,ttml"
+            test-args: "--all-targets"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +65,22 @@ jobs:
       - run: rustup target add wasm32-unknown-unknown
       - run: cargo build --target wasm32-unknown-unknown --lib --verbose
 
+  wasm-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-bindgen-cli matching the lockfile
+        run: |
+          VER=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$VER"
+      - name: Run wasm-bindgen tests (node)
+        run: |
+          export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=$(which wasm-bindgen-test-runner)
+          cargo test --target wasm32-unknown-unknown --lib --no-default-features --features srt,vtt
+
   msrv:
     runs-on: ubuntu-latest
     steps:
@@ -74,11 +96,12 @@ jobs:
           # Full feature set: check all targets (lib, tests, examples, benches)
           - features: ""
             targets: "--all-targets"
-          # Minimal builds: only check lib (examples/tests reference multi-format modules)
+          # Minimal builds: all targets now compile under feature gates
+          # (tests/examples/benches carry per-format cfgs since v2.11)
           - features: "--no-default-features --features srt"
-            targets: "--lib"
+            targets: "--all-targets"
           - features: "--no-default-features --features dfxp,ttml"
-            targets: "--lib"
+            targets: "--all-targets"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,3 +117,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - run: cargo bench --no-run
+
+  fuzz:
+    # Weekly non-blocking fuzz run (results visible in the Actions log;
+    # crashes are triaged into regression tests on main).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: cargo install cargo-fuzz
+      - name: Smoke each target (60s)
+        run: |
+          for t in parse_any parse_ttml parse_ass parse_scc; do
+            cargo fuzz run $t -- -max_total_time=60
+          done

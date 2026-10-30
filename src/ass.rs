@@ -154,10 +154,35 @@ mod uuencode {
 pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
   if let Some(text) = crate::encoding::try_decode_for_detection(data) {
     if text.contains("[Script Info]") {
-      if text.contains("V4+ Styles") || text.contains("V4 Styles") {
+      // V4+ styles → ASS (Advanced SSA); plain V4 styles → SSA v4.00.
+      // Check + first: an SSA file does not contain "V4+ Styles", but
+      // reading the two branches in the wrong order misclassifies it.
+      if text.contains("V4+ Styles") {
         return Some(crate::model::Format::Ass);
       }
-      return Some(crate::model::Format::Ssa);
+      if text.contains("V4 Styles") {
+        // `Format::Ssa` only exists with the ssa feature; without it SSA
+        // content parses through the ass module as Format::Ass, matching
+        // what parse_content constructs.
+        #[cfg(feature = "ssa")]
+        {
+          return Some(crate::model::Format::Ssa);
+        }
+        #[cfg(not(feature = "ssa"))]
+        {
+          return Some(crate::model::Format::Ass);
+        }
+      }
+      // [Script Info] without a styles section: fall back to SSA, the
+      // original SubStation Alpha format (pre-existing behavior).
+      #[cfg(feature = "ssa")]
+      {
+        return Some(crate::model::Format::Ssa);
+      }
+      #[cfg(not(feature = "ssa"))]
+      {
+        return Some(crate::model::Format::Ass);
+      }
     }
   }
   None
@@ -183,7 +208,20 @@ fn parse_ass_time(h: &str, m: &str, s: &str, ms: &str) -> Result<u64, SubtitleEr
   Ok(hours * MS_PER_HOUR + minutes * MS_PER_MINUTE + seconds * MS_PER_SECOND + centiseconds * 10)
 }
 
-fn parse_ass_style_line(line: &str) -> Option<AssStyle> {
+/// Normalize a `Format:` field list (lowercased, trimmed names).
+fn split_format_fields(rest: &str) -> Vec<String> {
+  rest.split(',').map(|s| s.trim().to_lowercase()).collect()
+}
+
+/// Parse a `Style:` line. With a section field map (from the `Format:`
+/// line) fields are mapped by name — SSA `[V4 Styles]` uses an 18-field
+/// order where `TertiaryColour` fills the outline slot — otherwise the
+/// ASS V4+ order is assumed via the fixed regex.
+fn parse_ass_style_line(line: &str, fields: Option<&[String]>) -> Option<AssStyle> {
+  if let Some(fields) = fields {
+    let payload = line.strip_prefix("Style:")?.trim();
+    return style_from_fields(fields, payload);
+  }
   let caps = RE_STYLE.captures(line)?;
   Some(AssStyle {
     name: caps[1].to_string(),
@@ -212,7 +250,85 @@ fn parse_ass_style_line(line: &str) -> Option<AssStyle> {
   })
 }
 
-fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
+/// Build a style from a `Format:` field map + comma-split values. SSA's
+/// bold/italic use 0/1 (ASS uses -1/0), so any non-zero counts as on.
+fn style_from_fields(fields: &[String], payload: &str) -> Option<AssStyle> {
+  let values: Vec<&str> = payload.split(',').map(str::trim).collect();
+  let get = |field: &str| -> Option<&str> {
+    let idx = fields.iter().position(|f| f == field)?;
+    values.get(idx).copied().filter(|v| !v.is_empty())
+  };
+  let flag = |field: &str| get(field).and_then(|v| v.parse::<i32>().ok()).unwrap_or(0) != 0;
+  let num = |field: &str, default: i64| {
+    get(field)
+      .and_then(|v| v.parse::<i64>().ok())
+      .unwrap_or(default)
+  };
+  let fnum = |field: &str, default: f64| {
+    get(field)
+      .and_then(|v| v.parse::<f64>().ok())
+      .unwrap_or(default)
+  };
+  Some(AssStyle {
+    name: get("name")?.to_string(),
+    fontname: get("fontname")?.to_string(),
+    fontsize: get("fontsize").and_then(|v| v.parse().ok()).unwrap_or(48),
+    primary_color: get("primarycolour").unwrap_or("").to_string(),
+    secondary_color: get("secondarycolour").unwrap_or("").to_string(),
+    // SSA names the outline slot `TertiaryColour`; ASS calls it OutlineColour.
+    outline_color: get("outlinecolour")
+      .or_else(|| get("tertiarycolour"))
+      .unwrap_or("")
+      .to_string(),
+    back_color: get("backcolour").unwrap_or("").to_string(),
+    bold: flag("bold"),
+    italic: flag("italic"),
+    underline: flag("underline"),
+    strikeout: flag("strikeout"),
+    scale_x: fnum("scalex", 100.0),
+    scale_y: fnum("scaley", 100.0),
+    spacing: fnum("spacing", 0.0),
+    angle: fnum("angle", 0.0),
+    border_style: num("borderstyle", 1) as u32,
+    outline: fnum("outline", 2.0),
+    shadow: fnum("shadow", 2.0),
+    alignment: num("alignment", 2) as u32,
+    margin_l: num("marginl", 10) as i32,
+    margin_r: num("marginr", 10) as i32,
+    margin_v: num("marginv", 10) as i32,
+    encoding: num("encoding", 1) as i32,
+  })
+}
+
+/// Parse an `H:MM:SS.cc` timestamp (also accepts `H:MM:SS,cc`).
+fn parse_ass_time_str(tc: &str) -> Option<u64> {
+  let mut parts = tc.trim().split(':');
+  let h = parts.next()?;
+  let m = parts.next()?;
+  let rest = parts.next()?;
+  let mut sec = rest.split(['.', ',']);
+  let s = sec.next()?;
+  let cs = sec.next().unwrap_or("0");
+  if parts.next().is_some() {
+    return None;
+  }
+  parse_ass_time(h, m, s, cs).ok()
+}
+
+/// Parse a `Dialogue:`/`Comment:` line. With a section field map the
+/// fields are mapped by name — SSA puts `Text` third after a `Marked`
+/// column and has no `Style` field — otherwise the ASS V4+ order is
+/// assumed via the fixed regex. Text may contain commas: fields listed
+/// after `Text` in the map are taken from the end of the split.
+fn parse_ass_dialogue(line: &str, fields: Option<&[String]>) -> Option<Subtitle> {
+  if let Some(fields) = fields {
+    let payload = line
+      .strip_prefix("Dialogue:")
+      .or_else(|| line.strip_prefix("Comment:"))?
+      .trim();
+    let is_comment = line.trim().to_lowercase().starts_with("comment:");
+    return dialogue_from_fields(fields, payload, is_comment);
+  }
   let caps = RE_DIALOGUE.captures(line)?;
   let start = parse_ass_time(&caps[1], &caps[2], &caps[3], &caps[4]).ok()?;
   let end = parse_ass_time(&caps[5], &caps[6], &caps[7], &caps[8]).ok()?;
@@ -246,6 +362,56 @@ fn parse_ass_dialogue(line: &str) -> Option<Subtitle> {
   subtitle.actor = actor;
   subtitle.is_comment = is_comment;
   subtitle.text_parts = parse_ass_tags(text).into_iter().collect();
+  Some(subtitle)
+}
+
+/// Build a subtitle from a `Format:` field map + comma-split values.
+fn dialogue_from_fields(fields: &[String], payload: &str, is_comment: bool) -> Option<Subtitle> {
+  let values: Vec<&str> = payload.split(',').map(str::trim).collect();
+  let idx = |field: &str| fields.iter().position(|f| f == field);
+  let ti = idx("text")?;
+  let si = idx("start")?;
+  let ei = idx("end")?;
+  if values.len() <= ti || values.len() <= si || values.len() <= ei {
+    return None;
+  }
+  // Fields after `Text` are fixed-count trailing columns (Name, margins,
+  // Effect in SSA): take them from the end so Text may contain commas.
+  let trailing = fields.len() - ti - 1;
+  if values.len() < fields.len() {
+    return None;
+  }
+  let start = parse_ass_time_str(values[si])?;
+  let end = parse_ass_time_str(values[ei])?;
+  let text = values[ti..values.len() - trailing].join(",");
+  let style = idx("style")
+    .and_then(|i| values.get(i).copied())
+    .and_then(|s| {
+      let s = s.trim();
+      if s.is_empty() {
+        None
+      } else {
+        Some(s.to_string())
+      }
+    });
+  let actor = idx("name")
+    .and_then(|i| values.get(i).copied())
+    .and_then(|s| {
+      let s = s.trim();
+      if s.is_empty() {
+        None
+      } else {
+        Some(s.to_string())
+      }
+    });
+  let effect_comment = idx("effect")
+    .and_then(|i| values.get(i).copied())
+    .is_some_and(|v| v.to_lowercase().contains("comment"));
+  let mut subtitle = Subtitle::new(start, end, &text);
+  subtitle.style = style;
+  subtitle.actor = actor;
+  subtitle.is_comment = is_comment || effect_comment;
+  subtitle.text_parts = parse_ass_tags(&text).into_iter().collect();
   Some(subtitle)
 }
 
@@ -336,6 +502,11 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
   };
 
   let mut section = Section::None;
+  // Per-section `Format:` field maps (SSA files declare different field
+  // orders than ASS: `[V4 Styles]` style lines are 18 fields, dialogue
+  // lines put `Text` third after a `Marked` column).
+  let mut style_fields: Option<Vec<String>> = None;
+  let mut event_fields: Option<Vec<String>> = None;
 
   for line in content.lines() {
     let trimmed = line.trim();
@@ -358,13 +529,19 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
       }
 
       flush_font(&mut font_name, &mut font_lines);
+      style_fields = None;
+      event_fields = None;
 
       section = known.unwrap_or(Section::Other);
       continue;
     }
 
-    // Skip Format: lines in Events section
+    // `Format:` lines declare the field order for the section that
+    // follows (SSA and ASS use different orders — see the field maps).
     if section == Section::Events && trimmed.starts_with("Format:") {
+      event_fields = Some(split_format_fields(
+        trimmed.strip_prefix("Format:").unwrap(),
+      ));
       continue;
     }
 
@@ -375,15 +552,16 @@ pub fn parse_content(content: &str) -> AnyResult<SubtitleFile> {
         }
       }
       Section::Styles => {
-        if trimmed.starts_with("Format:") {
+        if let Some(rest) = trimmed.strip_prefix("Format:") {
+          style_fields = Some(split_format_fields(rest));
           continue;
         }
-        if let Some(style) = parse_ass_style_line(trimmed) {
+        if let Some(style) = parse_ass_style_line(trimmed, style_fields.as_deref()) {
           styles.push(style);
         }
       }
       Section::Events => {
-        if let Some(subtitle) = parse_ass_dialogue(trimmed) {
+        if let Some(subtitle) = parse_ass_dialogue(trimmed, event_fields.as_deref()) {
           subtitles.push(subtitle);
         }
       }
@@ -938,6 +1116,7 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
 
 #[cfg(test)]
 mod tests {
+  #![allow(irrefutable_let_patterns)]
   use super::*;
   use crate::model::SubtitleFormat;
 
@@ -977,13 +1156,13 @@ mod tests {
     assert_eq!(reparsed.subtitles()[1].start, 4000);
     assert_eq!(reparsed.subtitles()[1].text, "World");
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_detect_format_ass() {
     let data = b"[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\n";
     assert_eq!(detect_format(data), Some(crate::model::Format::Ass));
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_style_float_outline_shadow() {
     let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: OP,FOT-Rowdy Std EB,66,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3.9,0,8,30,30,69,1\nStyle: Default,LTFinnegan Medium,72,&H00FFFFFF,&H00FFFFFF,&H00000000,&HA0000000,0,0,0,0,100,100,0.5,0.5,1,3.6,1.5,2,200,200,60,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,OP,,0,0,0,,Hello\n";
@@ -1041,7 +1220,7 @@ mod tests {
     // Text must be "Visible text" even though "Comment" appears in the Effect column
     assert_eq!(parsed.subtitles()[0].text, "Visible text");
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_section() {
     let content = "[Script Info]\nScriptType: v4.00+\n\n[Fonts]\nfontname: tiny.ttf\n!\"#\nABC\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hi\n";
@@ -1053,7 +1232,7 @@ mod tests {
     assert_eq!(data.fonts[0].data, vec![0, 16, 160, 134]);
     assert_eq!(data.subtitles.len(), 1);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_multiple_and_odd_byte_tail() {
     // Second font exercises the 2-char group encoding a single byte (0xAB).
@@ -1067,7 +1246,7 @@ mod tests {
     assert_eq!(data.fonts[1].name, "b.ttf");
     assert_eq!(data.fonts[1].data, vec![0xAB]);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_bracket_shaped_payload_line_is_data() {
     // Regression: the uuencode alphabet includes `[` (91) and `]` (93),
@@ -1084,7 +1263,7 @@ mod tests {
     // The following section still parses normally.
     assert_eq!(data.subtitles.len(), 1);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_round_trip_through_own_encoder() {
     // Any payload the writer emits (including bracket-shaped lines) must
@@ -1099,7 +1278,7 @@ mod tests {
     };
     assert_eq!(parsed.fonts[0].data, data);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_skips_malformed_payload() {
     let content =
@@ -1109,7 +1288,7 @@ mod tests {
     };
     assert!(data.fonts.is_empty());
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_fonts_round_trip_via_to_string() {
     // Odd length on purpose: crosses the 80-char wrap and ends on a 2-char group.
@@ -1126,7 +1305,7 @@ mod tests {
     assert_eq!(parsed.fonts.len(), 1);
     assert_eq!(parsed.fonts[0].data, data);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fills_style_props() {
     let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Custom,Arial,36,&H00463827,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Custom,,0,0,0,,Styled\nDialogue: 0,0:00:03.00,0:00:04.00,Missing,,0,0,0,,No such style\n";
@@ -1152,7 +1331,8 @@ mod tests {
     assert!(out.contains("tts:fontFamily=\"Arial\""), "got: {}", out);
     assert!(out.contains("style=\"Custom\""), "got: {}", out);
   }
-
+  #[cfg(feature = "ass")]
+  #[allow(dead_code)]
   fn parse_positioned(content: &str) -> Vec<Subtitle> {
     let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
       panic!("expected ASS");
@@ -1161,7 +1341,7 @@ mod tests {
   }
 
   const ASS_HEADER: &str = "[Script Info]\nScriptType: v4.00+\nPlayResX: 384\nPlayResY: 288\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\nStyle: TopRight,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,9,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_from_style_alignment() {
     // Style alignment 2 (bottom-center): band position, no coordinates.
@@ -1174,7 +1354,7 @@ mod tests {
     assert_eq!(pos.h_align, HorizontalAlign::Center);
     assert_eq!(pos.v_align, VerticalAlign::Bottom);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_style_alignment_9() {
     // Alignment 9 → top-right.
@@ -1185,7 +1365,7 @@ mod tests {
     assert_eq!(pos.h_align, HorizontalAlign::Right);
     assert_eq!(pos.v_align, VerticalAlign::Top);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_an_overrides_style() {
     let subs = parse_positioned(&format!(
@@ -1195,7 +1375,7 @@ mod tests {
     assert_eq!(pos.h_align, HorizontalAlign::Center);
     assert_eq!(pos.v_align, VerticalAlign::Top);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_pos_converts_via_playres() {
     // \pos(192,144) on PlayRes 384x288 → 50%, 50% (verified with python3).
@@ -1206,7 +1386,7 @@ mod tests {
     assert_eq!(pos.x, Some(50.0));
     assert_eq!(pos.y, Some(50.0));
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_move_uses_start_point() {
     // \move(96,48,…) start point → 25%, 16.67 (rounded 2dp; verified with python3).
@@ -1219,7 +1399,7 @@ mod tests {
     assert_eq!(pos.h_align, HorizontalAlign::Left);
     assert_eq!(pos.v_align, VerticalAlign::Top);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_default_playres_when_missing() {
     // No PlayRes in [Script Info] → spec default 384x288.

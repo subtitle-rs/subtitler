@@ -78,7 +78,7 @@ pub async fn generate(
 mod tests {
   use super::*;
   use crate::model::SubtitleFormat;
-
+  #[cfg(feature = "itt")]
   #[test]
   fn test_detect_itt_imsc1_profile() {
     let data = br#"<?xml version="1.0" encoding="UTF-8"?>
@@ -102,7 +102,7 @@ mod tests {
 </tt>"#;
     assert_eq!(detect_format(data), None);
   }
-
+  #[cfg(feature = "itt")]
   #[test]
   fn test_detect_precedes_ttml_in_chain() {
     // With both features on, the IMSC1 profile must route to Itt before
@@ -110,7 +110,7 @@ mod tests {
     let data = br#"<tt xmlns="http://www.w3.org/ns/ttml" ttp:profile="http://www.w3.org/ns/ttml/profile/imsc1"><body><div><p begin="00:00:01.000" end="00:00:02.000">Hi</p></div></body></tt>"#;
     assert_eq!(crate::detect_format(data), Some(Format::Itt));
   }
-
+  #[cfg(feature = "itt")]
   #[test]
   fn test_parse_and_round_trip() {
     let xml = r#"<?xml version="1.0" encoding="UTF-8"?>

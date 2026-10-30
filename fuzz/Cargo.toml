@@ -1,0 +1,44 @@
+[package]
+name = "subtitler-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.subtitler]
+path = ".."
+default-features = false
+features = ["srt", "vtt", "ass", "ssa", "microdvd", "subviewer", "ttml", "sbv", "lrc", "sami", "mpl2", "scc", "ebu_stl", "dfxp", "itt", "spruce", "whisper"]
+
+[[bin]]
+name = "parse_any"
+path = "fuzz_targets/parse_any.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_ttml"
+path = "fuzz_targets/parse_ttml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_ass"
+path = "fuzz_targets/parse_ass.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_scc"
+path = "fuzz_targets/parse_scc.rs"
+test = false
+doc = false
+bench = false

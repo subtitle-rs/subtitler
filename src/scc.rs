@@ -516,7 +516,7 @@ impl<'a> crate::model::StreamingParser for SccStream<'a> {}
 #[cfg(test)]
 mod tests {
   use super::*;
-
+  #[cfg(feature = "scc")]
   #[test]
   fn test_parse_basic() {
     let content = r#"Scenarist_SCC V1.0

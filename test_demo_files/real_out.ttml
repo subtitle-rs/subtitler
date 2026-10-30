@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xml:lang="en">
+  <body>
+    <div>
+      <p begin="00:00:13.280" end="00:00:17.920">The past isn&apos;t dead.</p>
+      <p begin="00:00:20.720" end="00:00:25.840">James. Fate draws us back together.</p>
+      <p begin="00:00:26.000" end="00:00:31.400">Now your enemy is my enemy.</p>
+      <p begin="00:00:32.000" end="00:00:36.040">-His name is Safin.
+-And what does he want?</p>
+      <p begin="00:00:36.640" end="00:00:37.840">Revenge. Me.</p>
+      <p begin="00:00:38.480" end="00:00:41.120">When our secret finds its way out,</p>
+      <p begin="00:00:42.000" end="00:00:44.000">it&apos;ll be the death of you.</p>
+      <p begin="00:00:44.520" end="00:00:48.360">You can imagine why
+I&apos;ve come back to play.</p>
+      <p begin="00:00:48.480" end="00:00:51.000">There&apos;s a young lady in Santiago
+I want you to meet.</p>
+      <p begin="00:00:51.400" end="00:00:54.960">-You&apos;re late.
+-When you&apos;re ready.</p>
+      <p begin="00:00:56.840" end="00:01:00.320">Salute!</p>
+      <p begin="00:01:01.000" end="00:01:03.600">I met your new Double O.
+She&apos;s a disarming young woman.</p>
+      <p begin="00:01:04.000" end="00:01:06.480">I get why you shot him.</p>
+      <p begin="00:01:08.000" end="00:01:13.520">Yeah well, everyone tries at least once.</p>
+      <p begin="00:01:14.000" end="00:01:16.560">James Bond.</p>
+    </div>
+  </body>
+</tt>

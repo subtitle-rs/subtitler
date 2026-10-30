@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" ttp:timeBase="media" xmlns:tts="http://www.w3.org/ns/ttml#style" xml:lang="en" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+  <head>
+    <metadata>
+      <ttm:title></ttm:title>
+    </metadata><styling>
+	      <style id="s0" tts:backgroundColor="black" tts:fontStyle="normal" tts:fontSize="16" tts:fontFamily="sansSerif" tts:color="white" />
+	    </styling></head>
+  <body style="s0">
+    <div>
+      <p begin="13.3s" id="p0" end="17.9s">The past isn't dead.</p>
+      <p begin="20.7s" id="p1" end="25.8s">James. Fate draws us back together.</p>
+      <p begin="26.0s" id="p2" end="31.4s">Now your enemy is my enemy.</p>
+      <p begin="32.0s" id="p3" end="36.0s">-His name is Safin.<br />-And what does he want?</p>
+      <p begin="36.6s" id="p4" end="37.8s">Revenge. Me.</p>
+      <p begin="38.5s" id="p5" end="41.1s">When our secret finds its way out,</p>
+      <p begin="42.0s" id="p6" end="44.0s">it'll be the death of you.</p>
+      <p begin="44.5s" id="p7" end="48.4s">You can imagine why<br />I've come back to play.</p>
+      <p begin="48.5s" id="p8" end="51.0s">There's a young lady in Santiago<br />I want you to meet.</p>
+      <p begin="51.4s" id="p9" end="55.0s">-You're late.<br />-When you're ready.</p>
+      <p begin="56.8s" id="p10" end="60.3s">Salute!</p>
+      <p begin="61.0s" id="p11" end="63.6s">I met your new Double O.<br />She's a disarming young woman.</p>
+      <p begin="64.0s" id="p12" end="66.5s">I get why you shot him.</p>
+      <p begin="68.0s" id="p13" end="73.5s">Yeah well, everyone tries at least once.</p>
+      <p begin="74.0s" id="p14" end="76.6s">James Bond.</p>
+    </div>
+  </body>
+</tt>

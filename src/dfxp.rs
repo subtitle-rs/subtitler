@@ -75,7 +75,7 @@ pub async fn generate(
 mod tests {
   use super::*;
   use crate::model::SubtitleFormat;
-
+  #[cfg(feature = "dfxp")]
   #[test]
   fn test_detect_dfxp() {
     let data = br#"<?xml version="1.0" encoding="UTF-8"?>
@@ -89,7 +89,7 @@ mod tests {
 </tt>"#;
     assert_eq!(detect_format(data), Some(Format::Dfxp));
   }
-
+  #[cfg(feature = "dfxp")]
   #[test]
   fn test_detect_dfxp_v10() {
     // DFXP 1.0 namespace (http://www.w3.org/2006/10/ttaf1)

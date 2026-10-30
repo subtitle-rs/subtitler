@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <head>    
+    <metadata>
+      <ttm:title>demo_subtitle_v01-28.srt</ttm:title>
+    </metadata>
+    <styling>
+      <style tts:fontStyle="normal" tts:fontWeight="normal" xml:id="normal" tts:color="white" tts:fontFamily="Arial" tts:fontSize="100%"></style>
+      <style tts:textAlign="center" xml:id="center"/>
+      <style tts:fontStyle="italic" xml:id="italic"/>
+    </styling>
+    <layout>
+      <region tts:extent="80% 40%" tts:origin="10% 10%" tts:displayAlign="before" tts:textAlign="center" xml:id="topCenter" />
+      <region tts:extent="80% 40%" tts:origin="10% 50%" tts:displayAlign="after" tts:textAlign="center" xml:id="bottomCenter" />
+    </layout>
+  </head>
+  <body>
+    <div style="normal" xml:id="d1">
+    <p xml:id="subtitle1" begin="00:00:13.280" end="00:00:17.920" region="bottomCenter">The past isn't dead.</p>
+    <p xml:id="subtitle2" begin="00:00:20.720" end="00:00:25.840" region="bottomCenter">James. Fate draws us back together.</p>
+    <p xml:id="subtitle3" begin="00:00:26.000" end="00:00:31.400" region="bottomCenter">Now your enemy is my enemy.</p>
+    <p xml:id="subtitle4" begin="00:00:32.000" end="00:00:36.040" region="bottomCenter">-His name is Safin.<br/>-And what does he want?</p>
+    <p xml:id="subtitle5" begin="00:00:36.640" end="00:00:37.840" region="bottomCenter">Revenge. Me.</p>
+    <p xml:id="subtitle6" begin="00:00:38.480" end="00:00:41.120" region="bottomCenter">When our secret finds its way out,</p>
+    <p xml:id="subtitle7" begin="00:00:42.000" end="00:00:44.000" region="bottomCenter">it'll be the death of you.</p>
+    <p xml:id="subtitle8" begin="00:00:44.520" end="00:00:48.360" region="bottomCenter">You can imagine why<br/>I've come back to play.</p>
+    <p xml:id="subtitle9" begin="00:00:48.480" end="00:00:51.000" region="bottomCenter">There's a young lady in Santiago<br/>I want you to meet.</p>
+    <p xml:id="subtitle10" begin="00:00:51.400" end="00:00:54.960" region="bottomCenter">-You're late.<br/>-When you're ready.</p>
+    <p xml:id="subtitle11" begin="00:00:56.840" end="00:01:00.320" region="bottomCenter">Salute!</p>
+    <p xml:id="subtitle12" begin="00:01:01.000" end="00:01:03.600" region="bottomCenter">I met your new Double O.<br/>She's a disarming young woman.</p>
+    <p xml:id="subtitle13" begin="00:01:04.000" end="00:01:06.480" region="bottomCenter">I get why you shot him.</p>
+    <p xml:id="subtitle14" begin="00:01:08.000" end="00:01:13.520" region="bottomCenter">Yeah well, everyone tries at least once.</p>
+    <p xml:id="subtitle15" begin="00:01:14.000" end="00:01:16.560" region="bottomCenter">James Bond.</p>
+  </div>
+  </body>
+</tt>

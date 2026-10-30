@@ -67,7 +67,7 @@ pub enum SubtitleError {
 #[cfg(test)]
 mod tests {
   use super::*;
-
+  #[cfg(feature = "srt")]
   #[test]
   fn invalid_timestamp_display() {
     let e = SubtitleError::InvalidTimestamp {
@@ -76,7 +76,7 @@ mod tests {
     };
     assert_eq!(e.to_string(), "invalid timestamp in Srt: nope");
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn unexpected_line_display() {
     let e = SubtitleError::UnexpectedLine {

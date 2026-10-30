@@ -1061,7 +1061,7 @@ gap analysis: [docs/subtitler-vs-editingtools-gap-analysis.md](file:///Users/man
 | **2.8.0** | ✅ 已发布 | Shot-change 规则：shotlist EDL 解析 + apply_shot_changes 守卫帧 trim + PipelineOp/CLI。9 新测试，总 417 |
 | **2.9.0** | ✅ 已发布 | 社区 PR 收编（localcc，#2/#3/#4 → PR #5/#6/#7）：ASS `[Fonts]` 嵌入字体（uuencode 与 Aegisub/libass 逐字节对拍验证）+ StyleProps/TTML `<styling>` + CuePosition/`\pos`/`\an`/TTML layout + VTT 实体转义 + `[Fonts]` 白名单解析 + write_stream 管线一致性 + region id 防碰撞。71 新测试，总 488 |
 
-**当前专注打磨 2.x**，暂不规划 3.0。
+**下一程（2026-10-31 规划）：v2.11 还债 → v2.12 智能时序 → v2.13 广播深格式 → v3.0 生态与架构。见 `docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md`。**
 
 ---
 

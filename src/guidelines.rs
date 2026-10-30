@@ -195,7 +195,7 @@ pub fn validate(subs: &[Subtitle], guideline: &Guideline) -> Vec<ValidationIssue
 #[cfg(test)]
 mod tests {
   use super::*;
-
+  #[allow(dead_code)]
   fn netflix() -> Guideline {
     GuidelinePreset::Netflix.guideline()
   }
