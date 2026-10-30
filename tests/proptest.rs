@@ -18,12 +18,12 @@ fn arb_subtitle() -> impl Strategy<Value = Subtitle> {
   (
     0u64..3_600_000u64,
     0u64..3_600_000u64,
-    // Text: expanded from original ASCII-only to include Latin-1+ and
-    // Unicode CJK ranges. The ASCII range is \x20-\x7E minus & < > (tag
-    // markers: SRT/VTT parse normalizes them into text_parts, so exact
-    // text round-trip only holds for tag-free input) and minus nothing
-    // else — \n \r are outside \x20.. already.
-    "[\x20-\x25\x27-\x3B\x3D\x3F-\x7E\u{80}-\u{FF}\u{4E00}-\u{9FFF}\u{3040}-\u{309F}]{0,60}",
+    // Text: expanded over successive versions — ASCII printable minus
+    // & < > (tag markers: SRT/VTT parse normalizes them into text_parts,
+    // so exact text round-trip only holds for tag-free input), Latin-1+,
+    // CJK, Hiragana/Katakana, Hangul, combining diacritics, Hebrew (RTL
+    // stress) and emoji. \n \r are outside \x20.. already.
+    "[\x20-\x25\x27-\x3B\x3D\x3F-\x7E\u{80}-\u{FF}\u{300}-\u{36F}\u{4E00}-\u{9FFF}\u{3040}-\u{30FF}\u{AC00}-\u{D7A3}\u{5D0}-\u{5EA}\u{1F300}-\u{1F64F}]{0,60}",
   )
     .prop_map(|(start, end, text)| {
       let (s, e) = if start <= end {
