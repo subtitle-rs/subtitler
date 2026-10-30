@@ -140,6 +140,27 @@ impl SubtitleBuilder {
       .apply_shot_changes(cuts_ms, before_frames, after_frames, fps);
     self
   }
+
+  /// Anchor-based timeline stretch (see
+  /// [`crate::model::SubtitleFormat::stretch_timeline`]).
+  pub fn stretch_timeline(mut self, scale: f64, anchor_ms: u64) -> Self {
+    self.file.stretch_timeline(scale, anchor_ms);
+    self
+  }
+
+  /// Snap cue boundaries to shot cuts (see
+  /// [`crate::model::SubtitleFormat::snap_to_shot_changes`]).
+  pub fn snap_to_shot_changes(mut self, cuts_ms: &[u64], tolerance_ms: u64) -> Self {
+    self.file.snap_to_shot_changes(cuts_ms, tolerance_ms);
+    self
+  }
+
+  /// Split overlong cues without text loss (see
+  /// [`crate::model::SubtitleFormat::split_overlong`]).
+  pub fn split_overlong(mut self, max_ms: u64) -> Self {
+    self.file.split_overlong(max_ms);
+    self
+  }
 }
 
 /// A single pipeline operation.
@@ -198,6 +219,20 @@ pub enum PipelineOp {
   AutoSync {
     reference_path: String,
     min_score: Option<f64>,
+  },
+  /// Anchor-based timeline stretch: t' = anchor + (t − anchor) × scale.
+  Stretch {
+    scale: f64,
+    anchor_ms: u64,
+  },
+  /// Snap cue boundaries within tolerance_ms of a shot cut onto the cut.
+  SnapToShotChanges {
+    cuts_ms: Vec<u64>,
+    tolerance_ms: u64,
+  },
+  /// Split cues longer than max_ms into equal pieces (no text loss).
+  SplitOverlong {
+    max_ms: u64,
   },
 }
 
@@ -358,6 +393,31 @@ impl Pipeline {
     self
   }
 
+  /// Anchor-based timeline stretch (see [`crate::model::SubtitleFormat::stretch_timeline`]).
+  pub fn stretch_timeline(mut self, scale: f64, anchor_ms: u64) -> Self {
+    self
+      .operations
+      .push(PipelineOp::Stretch { scale, anchor_ms });
+    self
+  }
+
+  /// Snap boundaries to shot cuts (see
+  /// [`crate::model::SubtitleFormat::snap_to_shot_changes`]).
+  pub fn snap_to_shot_changes(mut self, cuts_ms: Vec<u64>, tolerance_ms: u64) -> Self {
+    self.operations.push(PipelineOp::SnapToShotChanges {
+      cuts_ms,
+      tolerance_ms,
+    });
+    self
+  }
+
+  /// Split overlong cues without text loss (see
+  /// [`crate::model::SubtitleFormat::split_overlong`]).
+  pub fn split_overlong(mut self, max_ms: u64) -> Self {
+    self.operations.push(PipelineOp::SplitOverlong { max_ms });
+    self
+  }
+
   pub fn apply(&self, file: SubtitleFile) -> SubtitleFile {
     let mut builder = SubtitleBuilder::from(file);
     for op in &self.operations {
@@ -409,6 +469,12 @@ impl Pipeline {
           let _ = min_score;
           builder
         }
+        PipelineOp::Stretch { scale, anchor_ms } => builder.stretch_timeline(*scale, *anchor_ms),
+        PipelineOp::SnapToShotChanges {
+          cuts_ms,
+          tolerance_ms,
+        } => builder.snap_to_shot_changes(cuts_ms, *tolerance_ms),
+        PipelineOp::SplitOverlong { max_ms } => builder.split_overlong(*max_ms),
       };
     }
     builder.build()

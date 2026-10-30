@@ -419,6 +419,21 @@ async fn cmd_edit(args: cli::EditArgs) -> AnyResult<()> {
     builder = builder.snap_to_frames(fps);
     ops += 1;
   }
+  if let Some(scale) = args.stretch {
+    builder = builder.stretch_timeline(scale, args.stretch_anchor.unwrap_or(0));
+    ops += 1;
+  }
+  if let Some(max_ms) = args.split_overlong {
+    builder = builder.split_overlong(max_ms);
+    ops += 1;
+  }
+  if let Some(tolerance) = args.snap_tolerance {
+    if let Some(edl_path) = &args.shot_changes {
+      let cuts = subtitler::shotlist::parse_edl_cuts(&std::fs::read(edl_path)?, 25.0)?;
+      builder = builder.snap_to_shot_changes(&cuts, tolerance);
+      ops += 1;
+    }
+  }
   if let Some(pair) = args.reinterpret_timebase {
     if pair.len() == 2 {
       let from = parse_timebase(&pair[0])?;

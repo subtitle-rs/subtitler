@@ -483,6 +483,25 @@ pub struct EditArgs {
   #[arg(long)]
   pub snap_to_frames: Option<f64>,
 
+  /// Anchor-based timeline stretch: t' = anchor + (t − anchor) × scale
+  /// (scale > 1 slows the timeline down)
+  #[arg(long)]
+  pub stretch: Option<f64>,
+
+  /// Stretch anchor in ms (default 0)
+  #[arg(long)]
+  pub stretch_anchor: Option<u64>,
+
+  /// Snap cue boundaries within TOLERANCE ms of an EDL shot cut exactly
+  /// onto the cut (requires --shot-changes)
+  #[arg(long)]
+  pub snap_tolerance: Option<u64>,
+
+  /// Split cues longer than this many ms into equal pieces (text
+  /// distributed at word boundaries, nothing truncated)
+  #[arg(long)]
+  pub split_overlong: Option<u64>,
+
   /// Retime between timebase interpretations, FROM/TO each one of
   /// 23.976, 24, 25, 29.97, 29.97df, 59.94df (repairs drop-frame files
   /// parsed as non-drop and vice versa)
