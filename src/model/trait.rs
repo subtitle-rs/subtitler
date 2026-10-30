@@ -188,6 +188,24 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
     }
   }
 
+  /// Synchronize this file in place against `reference` (any format),
+  /// matching cues 1:1 by normalized text similarity and fitting
+  /// piecewise-constant offsets (alass-style, text + time only). See
+  /// [`crate::sync`] for the algorithm and tuning knobs.
+  fn auto_sync(
+    &mut self,
+    reference: &crate::model::SubtitleFile,
+    opts: &crate::sync::SyncOptions,
+  ) -> crate::sync::SyncReport {
+    let wrong: Vec<Subtitle> = self.subtitles().to_vec();
+    let reference_subs: Vec<Subtitle> = reference.subtitles().to_vec();
+    let mut report = crate::sync::plan_sync(&wrong, &reference_subs, opts);
+    let subs = self.subtitles_mut();
+    let mut views: Vec<&mut Subtitle> = subs.iter_mut().collect();
+    report.matched = crate::sync::apply_to(&mut views, &report.segments);
+    report
+  }
+
   fn enforce_max_duration(&mut self, max_ms: u64) {
     for sub in self.subtitles_mut().iter_mut() {
       let dur = sub.duration_ms();
