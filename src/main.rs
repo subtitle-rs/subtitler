@@ -685,6 +685,12 @@ async fn cmd_normalize(args: cli::NormalizeArgs) -> AnyResult<()> {
     if args.all || args.whitespace {
       sub.text = subtitler::normalize::normalize_whitespace(&sub.text);
     }
+    if args.all || args.fix_tags {
+      sub.text = subtitler::normalize::fix_invalid_tags(&sub.text);
+    }
+    if args.translit_cyr {
+      sub.text = subtitler::normalize::transliterate_cyrillic(&sub.text);
+    }
   }
 
   let output = file.to_string();

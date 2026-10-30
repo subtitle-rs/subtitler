@@ -15,6 +15,9 @@ static RE_REPEATED_PUNCT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([.!?,
 
 static RE_ELLIPSIS_SPACED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\.\s*\.\s*\.").unwrap());
 
+static RE_FORMATTING_TAG: LazyLock<Regex> =
+  LazyLock::new(|| Regex::new(r"(?i)<\s*/?\s*(?:i|b|u)\s*>").unwrap());
+
 static RE_HI_PAREN: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r"\s*[\(\[][^)\]]{2,60}[\)\]]").unwrap());
 
@@ -92,6 +95,104 @@ pub fn normalize_text(text: &str) -> String {
   let result = normalize_quotes(text);
   let result = normalize_punctuation(&result);
   normalize_whitespace(&result)
+}
+
+/// Repair malformed simple-formatting tags (`<i>`, `<b>`, `<u>`):
+/// collapse whitespace inside the brackets (`< i >` → `<i>`), drop orphan
+/// closers and close unclosed tags at the end of the text.
+pub fn fix_invalid_tags(text: &str) -> String {
+  let mut out = String::with_capacity(text.len());
+  let mut open: Vec<String> = Vec::new();
+  let mut last = 0usize;
+  for m in RE_FORMATTING_TAG.find_iter(text) {
+    out.push_str(&text[last..m.start()]);
+    last = m.end();
+    let raw = m.as_str();
+    let tag = raw
+      .trim_matches(|c| c == '<' || c == '>' || c == ' ' || c == '/')
+      .to_lowercase();
+    if raw.contains('/') {
+      // Closer: emit only when something is open; orphans are dropped.
+      if let Some(pos) = open.iter().rposition(|t| t == &tag) {
+        open.remove(pos);
+        out.push_str(&format!("</{tag}>"));
+      }
+    } else {
+      open.push(tag.clone());
+      out.push_str(&format!("<{tag}>"));
+    }
+  }
+  out.push_str(&text[last..]);
+  for tag in open.iter().rev() {
+    out.push_str(&format!("</{tag}>"));
+  }
+  out
+}
+
+/// Transliterate Cyrillic letters to Latin (ISO 9-style, letter by
+/// letter, keeping an initial capital). Non-Cyrillic characters pass
+/// through unchanged.
+pub fn transliterate_cyrillic(text: &str) -> String {
+  text
+    .chars()
+    .map(
+      |c| match translit_lower(c.to_lowercase().next().unwrap_or(c)) {
+        Some(t) if c.is_uppercase() => {
+          let mut cs = t.chars();
+          match cs.next() {
+            Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
+            None => String::new(),
+          }
+        }
+        Some(t) => t.to_string(),
+        None => c.to_string(),
+      },
+    )
+    .collect()
+}
+
+fn translit_lower(c: char) -> Option<&'static str> {
+  Some(match c {
+    'а' => "a",
+    'б' => "b",
+    'в' => "v",
+    'г' => "g",
+    'д' => "d",
+    'е' => "e",
+    'ё' => "yo",
+    'ж' => "zh",
+    'з' => "z",
+    'и' => "i",
+    'й' => "j",
+    'к' => "k",
+    'л' => "l",
+    'м' => "m",
+    'н' => "n",
+    'о' => "o",
+    'п' => "p",
+    'р' => "r",
+    'с' => "s",
+    'т' => "t",
+    'у' => "u",
+    'ф' => "f",
+    'х' => "kh",
+    'ц' => "ts",
+    'ч' => "ch",
+    'ш' => "sh",
+    'щ' => "shch",
+    'ъ' => "",
+    'ы' => "y",
+    'ь' => "",
+    'э' => "e",
+    'ю' => "yu",
+    'я' => "ya",
+    'і' => "i",
+    'ї' => "yi",
+    'є' => "ye",
+    'ґ' => "g",
+    'ў' => "u",
+    _ => return None,
+  })
 }
 
 pub fn normalize_subtitle(sub: &mut Subtitle) {
@@ -710,4 +811,49 @@ fn test_optimize_line_breaks_order() {
     "got: {:?} — lines are in wrong order",
     result
   );
+}
+
+#[cfg(test)]
+mod tag_and_translit_tests {
+  use super::*;
+
+  #[test]
+  fn fix_invalid_tags_collapses_spaces_in_brackets() {
+    assert_eq!(
+      fix_invalid_tags("hello < i >world< /i >"),
+      "hello <i>world</i>"
+    );
+    assert_eq!(fix_invalid_tags("< b >bold< /b > text"), "<b>bold</b> text");
+  }
+
+  #[test]
+  fn fix_invalid_tags_closes_unclosed_and_drops_orphans() {
+    assert_eq!(fix_invalid_tags("<i>never closed"), "<i>never closed</i>");
+    assert_eq!(fix_invalid_tags("orphan</i> closer"), "orphan closer");
+    assert_eq!(fix_invalid_tags("<b><i>both"), "<b><i>both</i></b>");
+  }
+
+  #[test]
+  fn fix_invalid_tags_is_case_insensitive_and_preserves_rest() {
+    assert_eq!(fix_invalid_tags("A < I >B< /I > C"), "A <i>B</i> C");
+    assert_eq!(fix_invalid_tags("plain text"), "plain text");
+  }
+
+  #[test]
+  fn transliterate_cyrillic_maps_letters_preserving_case() {
+    assert_eq!(transliterate_cyrillic("Привет мир"), "Privet mir");
+    // Per-character capitalization: an uppercase letter yields a
+    // capitalized transliteration ("Жук" → "Zhuk"; an all-caps word
+    // yields "ZhUK" — combine with --fix-caps if needed).
+    assert_eq!(transliterate_cyrillic("Жук"), "Zhuk");
+    assert_eq!(transliterate_cyrillic("Щи да каша"), "Shchi da kasha");
+  }
+
+  #[test]
+  fn transliterate_cyrillic_passes_non_cyrillic_through() {
+    assert_eq!(transliterate_cyrillic("Hello 世界 123!"), "Hello 世界 123!");
+    // Mixed scripts transliterate only the Cyrillic run ("Т" here is
+    // Cyrillic Te, so only that letter maps).
+    assert_eq!(transliterate_cyrillic("Тaxis"), "Taxis");
+  }
 }
