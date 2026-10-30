@@ -50,6 +50,8 @@ impl Default for SyncOptions {
 pub struct SyncSegment {
   pub from_ms: u64,
   pub offset_ms: i64,
+  #[serde(default)]
+  pub slope: f64,
 }
 
 /// Result of an auto-sync pass.
@@ -239,28 +241,52 @@ fn match_anchors(
   anchors
 }
 
-/// Fit a piecewise-constant offset over `anchors` (sorted by wrong
-/// start) with an L2 DP: `cost(i..j)` is the squared deviation from the
-/// segment mean, computable in O(1) from prefix sums; each additional
-/// segment costs `split_penalty`.
+/// Fit piecewise-affine offsets over `anchors` (sorted by wrong start)
+/// with an L2 DP: each segment solves `offset(t) = a·t + b` by least
+/// squares (O(1) per candidate segment from prefix sums), and each
+/// additional segment costs `split_penalty`. Constant shifts fall out
+/// as a = 0; framerate drift as a ≈ scale − 1.
 fn fit_segments(anchors: &[(u64, i64)], opts: &SyncOptions) -> Vec<SyncSegment> {
   if anchors.is_empty() {
     return Vec::new();
   }
   let n = anchors.len();
-  let offsets: Vec<f64> = anchors.iter().map(|(_, o)| *o as f64).collect();
-  let mut prefix = vec![0f64; n + 1];
-  let mut prefix_sq = vec![0f64; n + 1];
+  let t: Vec<f64> = anchors.iter().map(|(s, _)| *s as f64).collect();
+  let o: Vec<f64> = anchors.iter().map(|(_, off)| *off as f64).collect();
+  let (mut pt, mut pt2, mut po, mut pto, mut po2) = (
+    vec![0f64; n + 1],
+    vec![0f64; n + 1],
+    vec![0f64; n + 1],
+    vec![0f64; n + 1],
+    vec![0f64; n + 1],
+  );
   for i in 0..n {
-    prefix[i + 1] = prefix[i] + offsets[i];
-    prefix_sq[i + 1] = prefix_sq[i] + offsets[i] * offsets[i];
+    pt[i + 1] = pt[i] + t[i];
+    pt2[i + 1] = pt2[i] + t[i] * t[i];
+    po[i + 1] = po[i] + o[i];
+    pto[i + 1] = pto[i] + t[i] * o[i];
+    po2[i + 1] = po2[i] + o[i] * o[i];
   }
-  // cost of using anchors i..j (exclusive end) as one segment
-  let cost = |i: usize, j: usize| -> f64 {
+
+  // Least-squares affine fit of anchors i..j (exclusive end): returns
+  // (a, b, sse) for offset(t) = a·t + b. n == 1 degenerates to a = 0.
+  let fit = |i: usize, j: usize| -> (f64, f64, f64) {
     let count = (j - i) as f64;
-    let sum = prefix[j] - prefix[i];
-    let sum_sq = prefix_sq[j] - prefix_sq[i];
-    (sum_sq - sum * sum / count).max(0.0)
+    let st = pt[j] - pt[i];
+    let st2 = pt2[j] - pt2[i];
+    let so = po[j] - po[i];
+    let sto = pto[j] - pto[i];
+    let so2 = po2[j] - po2[i];
+    if count == 1.0 || (st2 * count - st * st).abs() < 1e-9 {
+      let b = so / count;
+      return (0.0, b, 0.0);
+    }
+    let denom = count * st2 - st * st;
+    let a = (count * sto - st * so) / denom;
+    let b = (so - a * st) / count;
+    let sse = (so2 - 2.0 * a * sto - 2.0 * b * so + a * a * st2 + 2.0 * a * b * st + b * b * count)
+      .max(0.0);
+    (a, b, sse)
   };
 
   let lambda = opts.split_penalty;
@@ -270,7 +296,7 @@ fn fit_segments(anchors: &[(u64, i64)], opts: &SyncOptions) -> Vec<SyncSegment> 
     let mut best = f64::INFINITY;
     let mut best_k = 0usize;
     for (k, fk) in f[..i].iter().enumerate() {
-      let candidate = fk + lambda + cost(k, i);
+      let candidate = fk + lambda + fit(k, i).2;
       if candidate < best {
         best = candidate;
         best_k = k;
@@ -291,41 +317,19 @@ fn fit_segments(anchors: &[(u64, i64)], opts: &SyncOptions) -> Vec<SyncSegment> 
   let mut segments = Vec::with_capacity(bounds.len() - 1);
   for w in bounds.windows(2) {
     let (from_idx, to_idx) = (w[0], w[1]);
-    let sum: f64 = offsets[from_idx..to_idx].iter().sum();
-    let offset = (sum / (to_idx - from_idx) as f64).round() as i64;
+    let (a, b, _) = fit(from_idx, to_idx);
+    let from_ms = anchors[from_idx].0;
     segments.push(SyncSegment {
-      from_ms: anchors[from_idx].0,
-      offset_ms: offset,
+      from_ms,
+      offset_ms: (a * from_ms as f64 + b).round() as i64,
+      slope: a * 1000.0,
     });
   }
   segments
 }
 
-/// Apply offset segments to cues; returns the number of cues changed.
-fn apply_segments(subs: &mut [&mut Subtitle], segments: &[SyncSegment]) -> usize {
-  if segments.is_empty() {
-    return 0;
-  }
-  let mut changed = 0usize;
-  for sub in subs.iter_mut() {
-    let offset = segments
-      .iter()
-      .rev()
-      .find(|seg| seg.from_ms <= sub.start)
-      .map(|seg| seg.offset_ms)
-      .unwrap_or(segments[0].offset_ms);
-    let new_start = (sub.start as i64 + offset).max(0) as u64;
-    let new_end = (sub.end as i64 + offset).max(new_start as i64) as u64;
-    if new_start != sub.start || new_end != sub.end {
-      changed += 1;
-    }
-    sub.start = new_start;
-    sub.end = new_end;
-  }
-  changed
-}
-
-/// Compute the sync plan for two cue lists (see [`auto_sync_file`]).
+/// Compute the sync plan for two cue lists: anchors, mean score and the
+/// fitted segments (see [`auto_sync_file`]).
 pub fn plan_sync(wrong: &[Subtitle], reference: &[Subtitle], opts: &SyncOptions) -> SyncReport {
   let total = wrong.len();
   let matches = match_anchors(wrong, reference, opts);
@@ -375,6 +379,33 @@ pub fn auto_sync_file(
   let mut views: Vec<&mut Subtitle> = subs.iter_mut().collect();
   report.matched = apply_segments(&mut views, &report.segments);
   report
+}
+
+/// Apply offset segments to cues; returns the number of cues changed.
+fn apply_segments(subs: &mut [&mut Subtitle], segments: &[SyncSegment]) -> usize {
+  if segments.is_empty() {
+    return 0;
+  }
+  let mut changed = 0usize;
+  for sub in subs.iter_mut() {
+    let seg = segments
+      .iter()
+      .rev()
+      .find(|seg| seg.from_ms <= sub.start)
+      .unwrap_or(&segments[0]);
+    let transform = |t: u64| -> u64 {
+      let shifted = seg.offset_ms as f64 + seg.slope * (t as f64 - seg.from_ms as f64) / 1000.0;
+      ((t as i64) + shifted.round() as i64).max(0) as u64
+    };
+    let new_start = transform(sub.start);
+    let new_end = transform(sub.end).max(new_start);
+    if new_start != sub.start || new_end != sub.end {
+      changed += 1;
+    }
+    sub.start = new_start;
+    sub.end = new_end;
+  }
+  changed
 }
 
 /// Apply offset segments to any trait object's cues (see
@@ -447,17 +478,20 @@ mod tests {
     let reference_file = SubtitleFile::Srt(reference);
     let report = auto_sync_file(&mut wrong_file, &reference_file, &SyncOptions::default());
     assert!(report.anchors >= 20, "anchors: {}", report.anchors);
-    assert!(
-      report.segments.len() >= 3,
-      "segments: {:?}",
-      report.segments
-    );
-    // Spot-check alignment: every cue's new start within 600ms of truth.
+    // The affine fit nails the drift with few segments: both cue starts
+    // and ends land within 50ms of truth.
     let subs = wrong_file.subtitles();
-    let truth: Vec<u64> = (0..40).map(|i| i * 10_000).collect();
+    let truth: Vec<(u64, u64)> = (0..40).map(|i| (i * 10_000, i * 10_000 + 5_000)).collect();
     for (i, sub) in subs.iter().enumerate() {
-      let err = sub.start.abs_diff(truth[i]);
-      assert!(err <= 600, "cue {} off by {}ms", i, err);
+      let start_err = sub.start.abs_diff(truth[i].0);
+      let end_err = sub.end.abs_diff(truth[i].1);
+      assert!(
+        start_err <= 50 && end_err <= 50,
+        "cue {} off by {}/{}ms",
+        i,
+        start_err,
+        end_err
+      );
     }
   }
 
@@ -530,6 +564,7 @@ mod tests {
       segments: vec![SyncSegment {
         from_ms: 0,
         offset_ms: -5000,
+        slope: 0.0,
       }],
       anchors: 2,
       matched: 2,
@@ -549,10 +584,12 @@ mod tests {
         SyncSegment {
           from_ms: 0,
           offset_ms: 0,
+          slope: 0.0,
         },
         SyncSegment {
           from_ms: 60_000,
           offset_ms: 30_000,
+          slope: 0.0,
         },
       ],
       ..Default::default()

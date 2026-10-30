@@ -360,6 +360,9 @@ pub enum Commands {
   /// Generate a quality report (JSON or human-readable)
   Quality(QualityArgs),
 
+  /// Synchronize against a reference subtitle file (anchor-based)
+  Sync(SyncArgs),
+
   /// Normalize subtitle text (OCR fix, hearing-impaired removal, whitespace)
   Normalize(NormalizeArgs),
 
@@ -652,6 +655,48 @@ pub struct ShiftArgs {
   /// Force input format (auto-detected by default)
   #[arg(short, long)]
   pub format: Option<Format>,
+}
+
+/// Synchronize a subtitle file against a reference version of the same
+/// content (anchor-based, text + time only).
+#[derive(clap::Args)]
+pub struct SyncArgs {
+  /// The mis-timed subtitle file
+  pub input: String,
+
+  /// Reference subtitle file with correct timing (any format)
+  #[arg(short, long)]
+  pub reference: String,
+
+  /// Output file path (use "-" for stdout; default: overwrite the input)
+  #[arg(short, long)]
+  pub output: Option<String>,
+
+  /// Print the sync report as JSON instead of human-readable text
+  #[arg(long)]
+  pub json: bool,
+
+  /// Search window around each cue's own start (ms)
+  #[arg(long)]
+  pub max_offset: Option<u64>,
+
+  /// Minimum text similarity for anchors (0..1)
+  #[arg(long)]
+  pub min_score: Option<f64>,
+
+  /// Cost of one extra offset segment (ms²); higher = prefer a single
+  /// constant shift
+  #[arg(long)]
+  pub split_penalty: Option<f64>,
+
+  /// Force input format (auto-detected by default)
+  #[arg(short, long)]
+  pub format: Option<Format>,
+
+  /// Output format (default: the input's format, except Whisper JSON
+  /// inputs default to SRT)
+  #[arg(long)]
+  pub to: Option<Format>,
 }
 
 /// Process subtitles through a pipeline of operations defined in a JSON config file.

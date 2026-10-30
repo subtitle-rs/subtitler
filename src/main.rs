@@ -41,6 +41,7 @@ async fn main() -> AnyResult<()> {
     Commands::Quality(args) => cmd_quality(args).await?,
     Commands::Normalize(args) => cmd_normalize(args).await?,
     Commands::Shift(args) => cmd_shift(args).await?,
+    Commands::Sync(args) => cmd_sync(args).await?,
   }
 
   Ok(())
@@ -702,6 +703,72 @@ async fn cmd_normalize(args: cli::NormalizeArgs) -> AnyResult<()> {
       "Wrote: {} ({} subtitles)",
       args.output,
       file.subtitles().len()
+    );
+  }
+  Ok(())
+}
+
+async fn cmd_sync(args: cli::SyncArgs) -> AnyResult<()> {
+  let (data, ext) = read_input(&args.input).await?;
+  let format = resolve_format(&data, args.format.or(ext))
+    .ok_or_else(|| anyhow::anyhow!("Cannot detect subtitle format. Use --format to specify."))?;
+  let mut wrong = parse_to_file(&data, format).await?;
+
+  let (ref_data, ref_ext) = read_input(&args.reference).await?;
+  let ref_format = resolve_format(&ref_data, ref_ext)
+    .ok_or_else(|| anyhow::anyhow!("Cannot detect the reference's subtitle format."))?;
+  let reference = parse_to_file(&ref_data, ref_format).await?;
+
+  let opts = subtitler::sync::SyncOptions {
+    max_offset_ms: args
+      .max_offset
+      .unwrap_or(subtitler::sync::SyncOptions::default().max_offset_ms),
+    min_score: args
+      .min_score
+      .unwrap_or(subtitler::sync::SyncOptions::default().min_score),
+    split_penalty: args
+      .split_penalty
+      .unwrap_or(subtitler::sync::SyncOptions::default().split_penalty),
+    max_anchors: subtitler::sync::SyncOptions::default().max_anchors,
+  };
+  let report = wrong.auto_sync(&reference, &opts);
+
+  if args.json {
+    println!("{}", serde_json::to_string_pretty(&report)?);
+  } else {
+    eprintln!(
+      "Anchors: {} / {} cues (mean similarity {:.2})",
+      report.anchors, report.total, report.mean_score
+    );
+    for seg in &report.segments {
+      eprintln!(
+        "  from {: >10} ms: shift {:+} ms",
+        seg.from_ms, seg.offset_ms
+      );
+    }
+    if report.segments.is_empty() {
+      eprintln!("  No anchors found — output left unchanged.");
+    }
+  }
+
+  let output_path = args.output.clone().unwrap_or_else(|| args.input.clone());
+  // Transcript formats (Whisper JSON) are not useful outputs for a
+  // sync pass — default those to SRT; otherwise keep the input format.
+  let output = if matches!(wrong, subtitler::model::SubtitleFile::Whisper(_)) && args.to.is_none() {
+    wrong.to_string_with_format(&subtitler::model::Format::Srt)
+  } else if let Some(to) = args.to {
+    wrong.to_string_with_format(&subtitler::model::Format::from(&to))
+  } else {
+    wrong.to_string()
+  };
+  if output_path == "-" {
+    print!("{output}");
+  } else {
+    tokio::fs::write(&output_path, &output).await?;
+    eprintln!(
+      "Wrote: {} ({} subtitles)",
+      output_path,
+      wrong.subtitles().len()
     );
   }
   Ok(())
