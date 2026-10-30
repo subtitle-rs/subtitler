@@ -1,3 +1,4 @@
+#![cfg(not(target_arch = "wasm32"))]
 //! SSA v4.00 round-trip golden tests.
 //!
 //! Real SSA files use `[V4 Styles]` (18-field style lines) and a

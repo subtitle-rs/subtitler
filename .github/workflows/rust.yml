@@ -62,6 +62,22 @@ jobs:
       - run: rustup target add wasm32-unknown-unknown
       - run: cargo build --target wasm32-unknown-unknown --lib --verbose
 
+  wasm-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-bindgen-cli matching the lockfile
+        run: |
+          VER=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$VER"
+      - name: Run wasm-bindgen tests (node)
+        run: |
+          export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=$(which wasm-bindgen-test-runner)
+          cargo test --target wasm32-unknown-unknown --lib --no-default-features --features srt,vtt
+
   msrv:
     runs-on: ubuntu-latest
     steps:
