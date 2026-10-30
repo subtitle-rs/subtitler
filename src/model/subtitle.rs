@@ -191,6 +191,9 @@ pub struct TextPart {
   pub color: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub voice: Option<String>,
+  /// ASS karaoke timing (`\k`/`\kf`/`\ko`), set by the ass parser.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub karaoke: Option<KaraokeSpan>,
 }
 
 fn is_false(v: &bool) -> bool {
@@ -289,6 +292,26 @@ impl CuePosition {
   }
 }
 
+/// Karaoke tag type: `\k` (hard cut), `\kf` (fill sweep), `\ko`
+/// (outline swap). The timing semantics of `kf`/`ko` collapse to the
+/// duration here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KaraokeKind {
+  K,
+  Kf,
+  Ko,
+}
+
+/// Karaoke timing carried by a [`TextPart`]: the ASS tag that produced
+/// it (`\k<duration_cs>` family) and the syllable's duration in
+/// centiseconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct KaraokeSpan {
+  pub kind: KaraokeKind,
+  pub duration_cs: u32,
+}
+
 impl TextPart {
   pub fn plain(text: impl Into<String>) -> Self {
     TextPart {
@@ -296,6 +319,7 @@ impl TextPart {
       format: TextFormat::empty(),
       color: None,
       voice: None,
+      karaoke: None,
     }
   }
 
@@ -310,6 +334,7 @@ impl TextPart {
       format,
       color: None,
       voice: None,
+      karaoke: None,
     }
   }
 

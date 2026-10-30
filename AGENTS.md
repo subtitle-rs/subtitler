@@ -485,8 +485,9 @@ cargo build --examples
 | **2.9.0** | ✅ | 社区 PR 收编（localcc）：ASS `[Fonts]` 嵌入字体 + StyleProps/TTML styling + CuePosition/位置发射 + VTT 实体转义 + `[Fonts]` 白名单 + write_stream 一致性 + region id 防碰撞。71 新测试，总 488 |
 | **2.10.0** | ✅ | TTML x-bg 背景人声空格修复（issue #9）+ `cli` feature 可选化（PR #8，huou07）。4 新测试，总 492 |
 | **2.11.0** | ✅ | 还债与地基：全 feature 组合测试门禁（14 组合）+ 真 SSA v4.00 解析 + proptest Unicode + wasm 测试进 CI + fuzz targets。5 新测试，总 501 |
+| **2.12.0** | ✅ | 智能时序：锚点对轴（分段仿射 DP）+ sync CLI + \k 卡拉OK/LRC 词级 + stretch/snap/split_overlong。18 新测试，总 519 |
 
-**当前版本**：`2.11.1`（见 `Cargo.toml`）。**下一程（2026-10-31 规划）**：v2.11 还债 → v2.12 智能时序 → v2.13 广播深格式 → v3.0 生态与架构（workspace 拆分 + zero-copy + PyO3/napi/C-FFI 绑定）。见 `docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md`，取代 07-18 spec 的 3.0/3.1 章节。
+**当前版本**：`2.12.0`（见 `Cargo.toml`）。**下一程（2026-10-31 规划）**：v2.11 还债 → v2.12 智能时序 → v2.13 广播深格式 → v3.0 生态与架构（workspace 拆分 + zero-copy + PyO3/napi/C-FFI 绑定）。见 `docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md`，取代 07-18 spec 的 3.0/3.1 章节。
 
 **历史 commit 可参考**（开发范例）：
 - `019a423` AGENTS.md 手册化（文档型 commit 范例）
@@ -506,4 +507,4 @@ cargo build --examples
 - 路线图 spec（前作，已归档）: `docs/superpowers/specs/2026-07-18-post-2.0-roadmap-design.md`
 - 2.1 spec: `docs/superpowers/specs/2026-07-18-2.1-correctness-debt-design.md`
 - 2.1 plan: `docs/superpowers/plans/2026-07-18-v2.1-correctness-debt.md`
-- 当前版本: `2.11.1`（见 `Cargo.toml`）
+- 当前版本: `2.12.0`（见 `Cargo.toml`）

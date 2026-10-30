@@ -37,6 +37,10 @@ pub mod srt;
 pub mod subviewer;
 #[cfg(feature = "ttml")]
 pub mod ttml;
+
+/// Anchor-based subtitle synchronization (text + time only).
+pub mod sync;
+
 pub mod types;
 pub mod utils;
 #[cfg(feature = "vtt")]

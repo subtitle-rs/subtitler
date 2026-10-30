@@ -188,6 +188,128 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
     }
   }
 
+  /// Synchronize this file in place against `reference` (any format),
+  /// matching cues 1:1 by normalized text similarity and fitting
+  /// piecewise-constant offsets (alass-style, text + time only). See
+  /// [`crate::sync`] for the algorithm and tuning knobs.
+  fn auto_sync(
+    &mut self,
+    reference: &crate::model::SubtitleFile,
+    opts: &crate::sync::SyncOptions,
+  ) -> crate::sync::SyncReport {
+    let wrong: Vec<Subtitle> = self.subtitles().to_vec();
+    let reference_subs: Vec<Subtitle> = reference.subtitles().to_vec();
+    let mut report = crate::sync::plan_sync(&wrong, &reference_subs, opts);
+    let subs = self.subtitles_mut();
+    let mut views: Vec<&mut Subtitle> = subs.iter_mut().collect();
+    report.matched = crate::sync::apply_to(&mut views, &report.segments);
+    report
+  }
+
+  /// Anchor-based timeline stretch: `t' = anchor + (t − anchor) × scale`
+  /// for every cue start and end. `scale > 1` slows the timeline down
+  /// (longer durations), `scale < 1` speeds it up. Useful for fixing
+  /// framerate conversions applied to video but not subtitles.
+  fn stretch_timeline(&mut self, scale: f64, anchor_ms: u64) {
+    let transform = |t: u64| -> u64 {
+      let delta = t as f64 - anchor_ms as f64;
+      let stretched = anchor_ms as f64 + delta * scale;
+      stretched.max(0.0).round() as u64
+    };
+    for sub in self.subtitles_mut().iter_mut() {
+      sub.start = transform(sub.start);
+      sub.end = transform(sub.end);
+    }
+    self.sort();
+  }
+
+  /// Snap cue boundaries that sit within `tolerance_ms` of a shot cut
+  /// exactly onto the cut. Cue starts snap to cuts at/after them, ends
+  /// to cuts at/before them; cues are left alone when nothing is in
+  /// range. Complements [`SubtitleFormat::apply_shot_changes`] (guard
+  /// frames) with exact-boundary alignment.
+  fn snap_to_shot_changes(&mut self, cuts_ms: &[u64], tolerance_ms: u64) {
+    if cuts_ms.is_empty() {
+      return;
+    }
+    for sub in self.subtitles_mut().iter_mut() {
+      // Nearest cut to the end that is >= end - tolerance.
+      if let Some(cut) = cuts_ms
+        .iter()
+        .filter(|c| **c <= sub.end && sub.end - **c <= tolerance_ms)
+        .max()
+      {
+        sub.end = *cut.max(&sub.start);
+      }
+      // Nearest cut to the start that is <= start + tolerance. The snap
+      // keeps the cue positive-duration: never move the start past the
+      // (possibly just-snapped) end.
+      if let Some(cut) = cuts_ms
+        .iter()
+        .filter(|c| **c >= sub.start && **c - sub.start <= tolerance_ms)
+        .min()
+      {
+        if *cut < sub.end {
+          sub.start = *cut;
+        }
+      }
+    }
+  }
+
+  /// Split cues longer than `max_ms` into equal-duration pieces with the
+  /// text distributed at word boundaries. Unlike
+  /// [`SubtitleFormat::enforce_max_duration`] (which truncates), no
+  /// content is lost.
+  fn split_overlong(&mut self, max_ms: u64) {
+    self.sort();
+    if max_ms == 0 {
+      return;
+    }
+    let subs = self.subtitles_mut();
+    let mut i = 0;
+    while i < subs.len() {
+      let dur = subs[i].duration_ms();
+      if dur <= max_ms {
+        i += 1;
+        continue;
+      }
+      let start = subs[i].start;
+      let end = subs[i].end;
+      let style = subs[i].style.clone();
+      let actor = subs[i].actor.clone();
+      let text = std::mem::take(&mut subs[i].text);
+
+      let num_chunks = dur.div_ceil(max_ms);
+      let char_count = text.chars().count().max(1);
+      let chunks =
+        crate::model::convert::split_text_chunks(&text, char_count.div_ceil(num_chunks as usize));
+      let chunk_count = chunks.len() as u64;
+      let chunk_duration = (dur / chunk_count).max(1);
+
+      subs[i].text = chunks[0].clone();
+      subs[i].end = start + chunk_duration;
+
+      let mut new_subs: Vec<Subtitle> = Vec::with_capacity(chunks.len() - 1);
+      for (chunk_idx, chunk) in chunks.iter().enumerate().skip(1) {
+        let new_start = start + (chunk_idx as u64) * chunk_duration;
+        let new_end = if chunk_idx + 1 == chunks.len() {
+          end.max(new_start + 1)
+        } else {
+          start + ((chunk_idx + 1) as u64) * chunk_duration
+        };
+        let mut new_sub = Subtitle::new(new_start, new_end, chunk);
+        new_sub.style = style.clone();
+        new_sub.actor = actor.clone();
+        new_subs.push(new_sub);
+      }
+      let tail = std::mem::take(&mut new_subs);
+      for (offset, sub) in tail.into_iter().enumerate() {
+        subs.insert(i + 1 + offset, sub);
+      }
+      i += chunks.len();
+    }
+  }
+
   fn enforce_max_duration(&mut self, max_ms: u64) {
     for sub in self.subtitles_mut().iter_mut() {
       let dur = sub.duration_ms();
@@ -468,6 +590,81 @@ pub trait SubtitleFormat: std::fmt::Debug + Clone + Send + Sync {
           sub.start = guard_hi;
         }
       }
+    }
+  }
+}
+
+#[cfg(test)]
+mod timing_ops_tests {
+  use super::*;
+  use crate::model::SubtitleFile;
+  #[test]
+  fn stretch_anchors_at_zero_and_reorders() {
+    let mut file = SubtitleFile::Srt(vec![
+      Subtitle::new(1000, 2000, "a"),
+      Subtitle::new(9000, 10000, "b"),
+    ]);
+    file.stretch_timeline(1.5, 0);
+    let subs = file.subtitles();
+    assert_eq!(subs[0].start, 1500);
+    assert_eq!(subs[0].end, 3000);
+    assert_eq!(subs[1].start, 13500);
+  }
+
+  #[test]
+  fn stretch_anchors_at_nonzero() {
+    let mut file = SubtitleFile::Srt(vec![Subtitle::new(3000, 4000, "a")]);
+    // anchor 2000: 3000 → 2000 + 1000×2 = 4000; 4000 → 2000 + 2000×2 = 6000
+    file.stretch_timeline(2.0, 2000);
+    let subs = file.subtitles();
+    assert_eq!(subs[0].start, 4000);
+    assert_eq!(subs[0].end, 6000);
+  }
+
+  #[test]
+  fn snap_moves_boundaries_within_tolerance_only() {
+    let mut file = SubtitleFile::Srt(vec![
+      Subtitle::new(4800, 5150, "near"),
+      Subtitle::new(7000, 9000, "far"),
+    ]);
+    file.snap_to_shot_changes(&[5000], 400);
+    let subs = file.subtitles();
+    // Both boundaries of "near" are within 400ms of the cut at 5000.
+    // The start snap keeps the cue positive-duration.
+    assert_eq!(subs[0].end, 5000);
+    assert!(subs[0].start < subs[0].end, "duration must stay positive");
+    assert_eq!(subs[1].start, 7000, "out of tolerance: untouched");
+    assert_eq!(subs[1].end, 9000);
+  }
+
+  #[test]
+  fn split_overlong_distributes_text_without_loss() {
+    let mut file = SubtitleFile::Srt(vec![Subtitle::new(
+      1000,
+      11000,
+      "one two three four five six seven",
+    )]);
+    file.split_overlong(4000);
+    let subs = file.subtitles();
+    assert!(subs.len() >= 3);
+    let joined: String = subs
+      .iter()
+      .map(|s| s.text.as_str())
+      .collect::<Vec<_>>()
+      .join(" ");
+    assert_eq!(joined, "one two three four five six seven");
+    // Contiguous, non-overlapping, within bounds.
+    for w in subs.windows(2) {
+      assert_eq!(w[0].end, w[1].start);
+    }
+    assert_eq!(subs[0].start, 1000);
+    assert_eq!(subs.last().unwrap().end, 11000);
+    for s in subs {
+      assert!(
+        s.duration_ms() <= 4000,
+        "piece {} too long",
+        s.duration_ms()
+      );
     }
   }
 }

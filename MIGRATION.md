@@ -1,5 +1,25 @@
 # Migration Guide
 
+## 2.11 → 2.12
+
+### Breaking (struct additions)
+
+- **`TextPart` gains `karaoke: Option<KaraokeSpan>`** (ASS `\k`-family
+  timing). Exhaustive struct literals/matches need the new field;
+  `TextPart::new`/`TextPart::plain` set it to `None`, and serde
+  defaults keep old documents loading.
+- **`PipelineOp` gains four variants**: `AutoSync`, `Stretch`,
+  `SnapToShotChanges`, `SplitOverlong` — exhaustive matches need arms
+  (or a wildcard).
+
+### Additions (non-breaking)
+
+- `sync` module (`SyncOptions`/`SyncSegment`/`SyncReport`/
+  `auto_sync_file`), `SubtitleFormat::auto_sync`, the
+  `subtitler sync` CLI, `SubtitleFormat::stretch_timeline`/
+  `snap_to_shot_changes`/`split_overlong`, and enhanced word-level LRC
+  output for karaoke cues.
+
 ## 2.10 → 2.11
 
 ### Behavior change (minor)
