@@ -107,6 +107,13 @@ opt-level = "z"
 panic = "abort"
 strip = true
 
+[dist]
+# macos-14 runners are being retired (brownout Nov 2026); macos-15 hosts
+# both arm64 natives and x86_64 cross-builds via the Xcode toolchain.
+[dist.github-custom-runners]
+aarch64-apple-darwin = "macos-15"
+x86_64-apple-darwin = "macos-15"
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"
