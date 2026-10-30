@@ -10,6 +10,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — next batch items live on feature branches until merged.
 
+## [2.11.1] - 2026-10-31
+
+### Fixed (packaging)
+
+- **The v2.11.0 GitHub Release was never created**: the release run was
+  cancelled when its `aarch64-apple-darwin` build job was refused by the
+  macos-14 runner image brownout (retiring 2026-11-02). `dist` config
+  now lives in `dist-workspace.toml` (the file dist 0.31 reads) with the
+  arm64 macOS runner pinned to `macos-15`; crates.io was unaffected
+  (2.11.0 is live there), and this release restores the binary artifacts.
+
 ## [2.11.0] - 2026-10-31
 
 > Theme: debt & foundations (v2.11 of the [2026-10-31 roadmap](docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md)).

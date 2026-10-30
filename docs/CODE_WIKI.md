@@ -1,6 +1,6 @@
 # Subtitler Code Wiki
 
-> 版本: v2.11.0 · Rust Edition 2024 · MSRV 1.85
+> 版本: v2.11.1 · Rust Edition 2024 · MSRV 1.85
 > 17 字幕格式 · 501 tests · WASM-tested · fuzz targets · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则 · 嵌入字体/样式/位置发射
 
 ---
