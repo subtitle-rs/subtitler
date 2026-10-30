@@ -1,4 +1,6 @@
 /target
 test.srt
 test.vtt
-test_demo_files/
+test_demo_files/fuzz/artifacts
+fuzz/coverage
+fuzz/Cargo.lock

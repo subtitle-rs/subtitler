@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.w3.org/ns/ttml" xmlns:tt="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" xml:lang="en-US" ttp:timeBase="smpte" ttp:frameRate="25" ttp:frameRateMultiplier="1 1" ttp:dropMode="nonDrop">
+	<head>
+		<metadata xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+			<ttm:title></ttm:title>
+			<ttm:desc>SMPTE Timed Text</ttm:desc>
+			<ttm:copyright>converted by EditingTools.io</ttm:copyright>
+		</metadata>
+		<styling>
+			<style xml:id="normal" tts:fontFamily="sansSerif" tts:fontWeight="normal" tts:fontStyle="normal" tts:color="white" tts:fontSize="0%"/>
+			<style xml:id="bold" tts:fontFamily="sansSerif" tts:fontWeight="bold" tts:fontStyle="normal" tts:color="white" tts:fontSize="0%"/>
+			<style xml:id="italic" tts:fontFamily="sansSerif" tts:fontWeight="normal" tts:fontStyle="italic" tts:color="white" tts:fontSize="0%"/>
+		</styling>
+		<layout>
+			<region xml:id="top" tts:displayAlign="before" tts:origin="0% 0%" tts:extent="100% 15%" tts:textAlign="center"></region>
+			<region xml:id="bottom" tts:displayAlign="after" tts:origin="0% 85%" tts:extent="100% 15%" tts:textAlign="center"></region>
+		</layout>
+	</head>
+	<body style="normal" region="bottom">
+		<div begin="00:00:00:00">
+			<p begin="00:00:13:07" end="00:00:17:23" >The past isn't dead.</p>
+			<p begin="00:00:20:18" end="00:00:25:21" >James. Fate draws us back together.</p>
+			<p begin="00:00:26:00" end="00:00:31:10" >Now your enemy is my enemy.</p>
+			<p begin="00:00:32:00" end="00:00:36:01" >-His name is Safin.<br/>-And what does he want?</p>
+			<p begin="00:00:36:16" end="00:00:37:21" >Revenge. Me.</p>
+			<p begin="00:00:38:12" end="00:00:41:03" >When our secret finds its way out,</p>
+			<p begin="00:00:42:00" end="00:00:44:00" >it'll be the death of you.</p>
+			<p begin="00:00:44:13" end="00:00:48:09" >You can imagine why<br/>I've come back to play.</p>
+			<p begin="00:00:48:12" end="00:00:51:00" >There's a young lady in Santiago<br/>I want you to meet.</p>
+			<p begin="00:00:51:10" end="00:00:54:24" >-You're late.<br/>-When you're ready.</p>
+			<p begin="00:00:56:21" end="00:01:00:08" >Salute!</p>
+			<p begin="00:01:01:00" end="00:01:03:15" >I met your new Double O.<br/>She's a disarming young woman.</p>
+			<p begin="00:01:04:00" end="00:01:06:12" >I get why you shot him.</p>
+			<p begin="00:01:08:00" end="00:01:13:13" >Yeah well, everyone tries at least once.</p>
+			<p begin="00:01:14:00" end="00:01:16:14" >James Bond.</p>
+		</div>
+	</body>
+</tt>

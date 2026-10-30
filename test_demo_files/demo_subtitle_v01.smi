@@ -1,0 +1,16 @@
+<SAMI>
+<HEAD>
+<TITLE>Test Subtitles</TITLE>
+<STYLE TYPE="text/css">
+<!--
+P { margin-left: 8pt; margin-right: 8pt; margin-bottom: 2pt; margin-top: 2pt; text-align: center; font-size: 18pt; font-family: arial; font-weight: normal; color: #ffffff; }
+.ENCC { name: English; lang: en; SAMIType: CC; }
+-->
+</STYLE>
+</HEAD>
+<BODY>
+<SYNC Start=1000><P CLASS=ENCC>Hello, this is a test subtitle.</P></SYNC>
+<SYNC Start=5000><P CLASS=ENCC>This is the second subtitle.</P></SYNC>
+<SYNC Start=10000><P CLASS=ENCC>Third subtitle here.</P></SYNC>
+</BODY>
+</SAMI>
