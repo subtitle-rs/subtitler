@@ -58,6 +58,17 @@ pub enum ValidationIssue {
     lines: usize,
     max_lines: usize,
   },
+  /// IMSC profile check: a required construct is missing (e.g. xml:lang
+  /// on the <tt> root).
+  ImscMissingAttribute {
+    element: String,
+    attribute: String,
+  },
+  /// IMSC profile check: an attribute/element is prohibited by the
+  /// profile or carries a disallowed value.
+  ImscProhibited {
+    detail: String,
+  },
 }
 
 impl std::fmt::Display for ValidationIssue {
@@ -143,6 +154,12 @@ impl ValidationIssue {
         max_lines,
       } => {
         format!("subtitle {index} has {lines} lines (maximum recommended: {max_lines})")
+      }
+      ValidationIssue::ImscMissingAttribute { element, attribute } => {
+        format!("IMSC: missing required attribute '{attribute}' on <{element}>")
+      }
+      ValidationIssue::ImscProhibited { detail } => {
+        format!("IMSC: {detail}")
       }
     }
   }

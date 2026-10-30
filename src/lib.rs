@@ -8,6 +8,7 @@ pub mod ebu_stl;
 pub mod encoding;
 pub mod error;
 pub mod guidelines;
+pub mod imsc;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
 #[cfg(feature = "itt")]

@@ -440,6 +440,11 @@ pub struct ValidateArgs {
   #[arg(long, value_enum)]
   pub guideline: Option<GuidelinePreset>,
 
+  /// Validate against the W3C IMSC 1.1 text-profile constraints
+  /// (TTML/DFXP/iTT documents; replaces the timing/text checks)
+  #[arg(long)]
+  pub imsc: bool,
+
   /// Only show basic timing validation (no text checks)
   #[arg(long)]
   pub basic: bool,
