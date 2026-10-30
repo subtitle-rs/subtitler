@@ -10,6 +10,38 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - TBD — next batch items live on feature branches until merged.
 
+## [2.12.0] - 2026-10-31
+
+> Theme: intelligent timing (v2.12 of the [2026-10-31 roadmap](docs/superpowers/specs/2026-10-31-v3-ambition-roadmap-design.md) — the release that separates subtitler from every other subtitle crate).
+
+### Added
+
+- **`subtitler sync` — anchor-based automatic synchronization** (alass
+  approach, text + time only, no audio decoding): matches cues 1:1 by
+  normalized text similarity within a time window, then fits
+  **piecewise-affine offsets** over the anchors with an L2 dynamic
+  program — constant shifts, framerate drift and multi-part offset
+  jumps all fall out of one algorithm. `SyncOptions`/`SyncSegment`/
+  `SyncReport` (serde) expose the knobs and the result; the report
+  prints human-readable or `--json`.
+  *Acceptance vs alass-cli 2.0.0* on a 4%-drift 40-cue fixture: worst
+  cue error **1 ms** (alass: 272 ms — piecewise-constant residuals);
+  divergence 273 ms, within the ±1-cue bar.
+- **Karaoke**: ASS `\k`/`\kf`/`\ko` tags parse into
+  `TextPart.karaoke` (`KaraokeSpan`: kind + centiseconds); LRC output
+  emits **enhanced word-level lines** (`[mm:ss.xx]syllable…`) when a
+  cue's segments all carry karaoke timing. ASS→ASS keeps `\k` tags
+  byte-exact via the raw text field.
+- **Timeline operators**: `stretch_timeline(scale, anchor)` (anchor-
+  based affine transform for framerate-mismatch repair),
+  `snap_to_shot_changes(cuts, tolerance)` (move boundaries within
+  tolerance of an EDL shot cut exactly onto it, duration stays
+  positive), and `split_overlong(max_ms)` (equal pieces, text at word
+  boundaries — unlike `enforce_max_duration`, nothing is lost). All
+  three are PipelineOps and `subtitler edit` flags.
+- **`PipelineOp::AutoSync`** (reference file on disk; no-op on wasm32)
+  with a builder method.
+
 ## [2.11.1] - 2026-10-31
 
 ### Fixed (packaging)

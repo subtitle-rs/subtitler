@@ -1,7 +1,7 @@
 # Subtitler Code Wiki
 
-> 版本: v2.11.1 · Rust Edition 2024 · MSRV 1.85
-> 17 字幕格式 · 501 tests · WASM-tested · fuzz targets · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则 · 嵌入字体/样式/位置发射
+> 版本: v2.12.0 · Rust Edition 2024 · MSRV 1.85
+> 17 字幕格式 · 519 tests · 锚点自动对轴 · 卡拉OK · WASM-tested · fuzz targets · Pipeline DSL · API-unified · CI-hardened · Guideline QC 预设 · Shot-change 规则 · 嵌入字体/样式/位置发射
 
 ---
 
@@ -954,7 +954,7 @@ console.log(result.subtitle_count, result.format, result.output);
 
 ## 14. 测试体系
 
-### 14.1 测试分布（v2.11.0 快照）
+### 14.1 测试分布（v2.12.0 快照）
 
 - **单元测试**: 各 `src/*.rs` 的 `#[cfg(test)] mod tests`（共 320 个）。
 - **集成测试**: [tests/](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests) 目录（共 177 个）:
@@ -970,7 +970,7 @@ console.log(result.subtitle_count, result.format, result.output);
   - [proptest.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/proptest.rs) — 属性测试（6 tests）
   - [ssa_round_trip.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/ssa_round_trip.rs) — SSA v4.00 golden（4 tests，v2.11+）
   - [cli_binary_format.rs](file:///Users/mankong/volumes/code/subtitle-rs/subtitler/tests/cli_binary_format.rs) — CLI 二进制处理（2 tests）
-- **总测试数**: **501**（v2.2 时 293 → v2.4 时 340 → v2.7 时 408 → v2.9 时 488 → v2.10 时 492 → v2.11 时 501；integration.rs 运行时更多，含参数化）。
+- **总测试数**: **519**（v2.2 时 293 → v2.9 时 488 → v2.10 时 492 → v2.11 时 501 → v2.12 时 519；integration.rs 运行时更多，含参数化）。
 
 ### 14.2 运行
 
@@ -1139,6 +1139,8 @@ SRT/VTT/ASS 解析时会:
 - **`[Fonts]` 段内 section 切换用已知头白名单**：libass 的 `process_line` 只在 `[Script Info]` / `[V4 Styles]` / `[V4+ Styles]` / `[Events]` / `[Fonts]`（大小写不敏感）时离开字体状态，其余任何行（含形如 `[...]` 的数据行——uuencode 字母表含 `[` `]`）都算字体数据。通用 `starts_with('[')` 判定会提前截断字体块。
 
 - **SSA/ASS 解析由每段 `Format:` 行驱动（v2.11+）**：`[V4 Styles]` 的 18 字段序与 `[Events]` 的 Marked-first 布局按字段名映射（`TertiaryColour` → outline 槽位；SSA 的 0/1 bold 视为真；Text 允许含逗号——尾部定长字段从分割末尾取）。无 `Format:` 行时回退到 V4+ 固定正则。detect：`V4+ Styles` → Ass，纯 `V4 Styles` → Ssa（无 ssa feature 时为 Ass，与 parse 产物一致）。
+
+- **锚点对轴是分段仿射、非分段常数（v2.12+）**：帧率漂移下常数偏移只能修准锚点起点、端点残差随距离增长；每段最小二乘 `offset(t) = a·t + b`（前缀和 O(1) SSE）让起点与端点同时收敛（验收：40-cue 4% 漂移 ±1ms vs alass 272ms）。`SyncSegment.slope` 以 ms/s 表达，`from_ms` 处 offset = a·from + b。
 
 ### 17.11 TTML 发射一致性（v2.9+）
 
