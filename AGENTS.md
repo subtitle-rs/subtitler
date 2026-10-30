@@ -194,6 +194,16 @@ cargo build --no-default-features --features spruce
 
 **规则**：依赖更新（`cargo update` / dependabot 响应）后，跑 `cargo +1.85 build`（§6.2 已纳入）。声明 MSRV 不可信——未声明或谎报的 crate 只能用真 1.85 编译器抓。定位方法：`cargo +1.85 build` 的 E0599/E0432 指向 registry 里某个 crate → `cargo update -p <crate> --precise <旧版>` 回钉。
 
+### 3.18 最小 feature 组合下，tests/examples/lib-tests 三面都要过（v2.11 还债实录）
+
+**经历 v2.11 H1**：主仓库长期只有 `srt` 组合能编译；`dfxp,ttml` 等组合下 tests/examples/lib-tests 三面共 ~100 个错误（`Format::Srt` 等未 gate）。逐面修掉后还挖出两个真 bug：`detect_format` 无条件返回 ssa 门控的 `Format::Ssa`（`ass` 不带 `ssa` 从未编译过）；`ssa` feature 单独启用从未编译过（dispatch 引用 ass 模块但未声明依赖）。
+
+**规则**：
+- 任何新增/修改 feature 后，§3.16 的组合之外再加 `cargo clippy --no-default-features --features <组合> --all-targets -- -D warnings`——**测试/示例的编译错误只有 --all-targets 能抓**（v2.11 起 CI 矩阵已全 --all-targets）。
+- 给测试打 cfg gate 用**传递依赖分析**：helper 的格式依赖会传播给调用者；`async fn` 记得进正则；无依赖但被 gate 调用者孤立的 helper 补 `#[allow(dead_code)]`。
+- 格式枚举的 match 里给"兜底臂"配 `cfg` 极易方向搞反：单变体组合下 `_` 臂不可达（`unreachable_patterns`）、多变体下缺 `_` 非穷尽。解法：`_` 臂加 `#[allow(unreachable_patterns)]`，两侧组合都干净。
+- 警告三连的根源常是**格式化字符串里的 `{}`** 干扰大括号配对统计——解析函数体边界用缩进匹配（rustfmt 保证 `}` 与 `fn` 同缩进），不要数大括号。
+
 ---
 
 ## 4. Feature Flags
