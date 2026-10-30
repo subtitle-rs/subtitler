@@ -1,12 +1,12 @@
+#![allow(unused_imports)]
 //! Error type regression tests — verify that structured errors are used
 #![cfg(not(target_arch = "wasm32"))]
 //! everywhere and contain the expected variant data.
 
 use subtitler::error::SubtitleError;
 use subtitler::model::Format;
-
+#[cfg(feature = "srt")]
 // ── Error construction ──
-
 #[test]
 fn error_invalid_timestamp_contains_format_and_value() {
   let e = SubtitleError::InvalidTimestamp {
@@ -17,7 +17,7 @@ fn error_invalid_timestamp_contains_format_and_value() {
   assert!(msg.contains("Srt"));
   assert!(msg.contains("bad_time"));
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn error_unexpected_line_contains_context() {
   let e = SubtitleError::UnexpectedLine {
@@ -31,7 +31,7 @@ fn error_unexpected_line_contains_context() {
   assert!(msg.contains("timestamp"));
   assert!(msg.contains("hello"));
 }
-
+#[cfg(feature = "sbv")]
 #[test]
 fn error_invalid_line_contains_format_and_line() {
   let e = SubtitleError::InvalidLine {
@@ -42,7 +42,7 @@ fn error_invalid_line_contains_format_and_line() {
   assert!(msg.contains("Sbv"));
   assert!(msg.contains("corrupted line"));
 }
-
+#[cfg(feature = "ebu_stl")]
 #[test]
 fn error_invalid_format_stores_reason() {
   let e = SubtitleError::InvalidFormat {
@@ -79,9 +79,8 @@ fn error_from_io_error_conversion() {
   assert!(matches!(e, SubtitleError::Io(_)));
   assert!(e.to_string().contains("file missing"));
 }
-
+#[cfg(feature = "srt")]
 // ── Error produced from actual parsing ──
-
 #[test]
 fn srt_bad_timestamp_returns_invalid_timestamp_error() {
   let err = subtitler::srt::parse_content("1\nnot a time\n").unwrap_err();
@@ -89,28 +88,27 @@ fn srt_bad_timestamp_returns_invalid_timestamp_error() {
   // Either directly contains "expected timestamp" or "Invalid SRT"
   assert!(msg.contains("expected timestamp") || msg.contains("Invalid SRT"));
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_bad_timestamp_returns_error() {
   let err = subtitler::vtt::parse_content("WEBVTT\n\n1\nnot a time\n").unwrap_err();
   let msg = format!("{}", err);
   assert!(msg.contains("expected timestamp") || msg.contains("Invalid"));
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn srt_empty_is_ok() {
   let result = subtitler::srt::parse_content("");
   assert!(result.is_ok());
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_empty_webvtt_is_ok() {
   let result = subtitler::vtt::parse_content("WEBVTT\n\n");
   assert!(result.is_ok());
 }
-
+#[cfg(all(feature = "ebu_stl", feature = "sbv", feature = "srt"))]
 // ── Error display format ──
-
 #[test]
 fn all_error_variants_implement_display() {
   let errors: [SubtitleError; 8] = [

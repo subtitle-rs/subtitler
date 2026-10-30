@@ -280,7 +280,7 @@ pub fn parse_content_as_words(
 mod tests {
   use super::*;
   use crate::model::SubtitleFormat;
-
+  #[cfg(feature = "whisper")]
   #[test]
   fn test_detect_whisper() {
     let data = br#"{"text": "Hello world", "segments": [{"start": 0.0, "end": 2.0, "text": "Hello world"}]}"#;
@@ -317,7 +317,7 @@ mod tests {
     assert_eq!(reparsed.subtitles().len(), 1);
     assert_eq!(reparsed.subtitles()[0].text, "Hello world");
   }
-
+  #[allow(dead_code)]
   fn word(w: &str, start: u64, end: u64) -> WhisperWord {
     WhisperWord {
       word: w.to_string(),

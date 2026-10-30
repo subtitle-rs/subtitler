@@ -1,6 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![allow(unused_imports)]
 use subtitler::model::{Subtitle, SubtitleFile, SubtitleFormat, ValidationIssue};
-
+#[cfg(feature = "srt")]
 #[test]
 fn validate_detects_overlap_in_unsorted_input() {
   // Subtitle B (index 1) ends at 4000, but subtitle A (index 0) starts at 2000
@@ -19,7 +20,7 @@ fn validate_detects_overlap_in_unsorted_input() {
     issues
   );
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn validate_sorted_clean_input_has_no_overlap() {
   let file = SubtitleFile::Srt(vec![
@@ -29,7 +30,7 @@ fn validate_sorted_clean_input_has_no_overlap() {
   let overlaps: Vec<_> = overlap_issues(&file);
   assert!(overlaps.is_empty());
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn validate_sorted_overlapping_input_detected() {
   let file = SubtitleFile::Srt(vec![
@@ -38,7 +39,7 @@ fn validate_sorted_overlapping_input_detected() {
   ]);
   assert!(!overlap_issues(&file).is_empty());
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn validate_detects_overlap_skipped_after_break() {
   // Old code breaks at i=0,j=1 (subs[1].start=5000 >= subs[0].end=2000) and
@@ -66,6 +67,7 @@ fn validate_detects_overlap_skipped_after_break() {
   );
 }
 
+#[allow(dead_code)]
 fn overlap_issues(file: &SubtitleFile) -> Vec<ValidationIssue> {
   file
     .validate()
@@ -74,7 +76,7 @@ fn overlap_issues(file: &SubtitleFile) -> Vec<ValidationIssue> {
     .cloned()
     .collect()
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn srt_output_uses_positional_indices() {
   // Stored indices are deliberately non-sequential; output must be 1, 2.
@@ -92,7 +94,7 @@ fn srt_output_uses_positional_indices() {
     "expected positional index 2 second, got:\n{out}"
   );
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_output_uses_positional_indices() {
   let mut a = Subtitle::new(1000, 2000, "first");

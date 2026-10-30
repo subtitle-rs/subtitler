@@ -1,3 +1,17 @@
+#![cfg(all(
+  feature = "ass",
+  feature = "ebu_stl",
+  feature = "lrc",
+  feature = "microdvd",
+  feature = "mpl2",
+  feature = "sami",
+  feature = "sbv",
+  feature = "scc",
+  feature = "srt",
+  feature = "subviewer",
+  feature = "ttml",
+  feature = "vtt"
+))]
 //! Compile-time API surface verification for all formats.
 #![cfg(not(target_arch = "wasm32"))]
 //!
@@ -28,9 +42,18 @@ fn api_vtt() {
   let _ = subtitler::vtt::to_string;
   let _ = subtitler::vtt::detect_format;
 }
-
+#[cfg(all(
+  feature = "lrc",
+  feature = "microdvd",
+  feature = "mpl2",
+  feature = "sami",
+  feature = "sbv",
+  feature = "scc",
+  feature = "srt",
+  feature = "subviewer",
+  feature = "vtt"
+))]
 // ── Streaming formats: parse_stream factory ──
-
 #[test]
 fn api_parse_stream_for_all_streaming_formats() {
   #[cfg(feature = "srt")]
@@ -52,9 +75,21 @@ fn api_parse_stream_for_all_streaming_formats() {
   #[cfg(feature = "scc")]
   let _ = subtitler::scc::parse_stream;
 }
-
+#[cfg(all(
+  feature = "ass",
+  feature = "ebu_stl",
+  feature = "lrc",
+  feature = "microdvd",
+  feature = "mpl2",
+  feature = "sami",
+  feature = "sbv",
+  feature = "scc",
+  feature = "srt",
+  feature = "subviewer",
+  feature = "ttml",
+  feature = "vtt"
+))]
 // ── detect_format ──
-
 #[test]
 fn api_detect_format_for_all_formats() {
   #[cfg(feature = "srt")]
@@ -82,9 +117,18 @@ fn api_detect_format_for_all_formats() {
   #[cfg(feature = "ebu_stl")]
   let _ = subtitler::ebu_stl::detect_format;
 }
-
+#[cfg(all(
+  feature = "ass",
+  feature = "lrc",
+  feature = "microdvd",
+  feature = "mpl2",
+  feature = "sami",
+  feature = "sbv",
+  feature = "scc",
+  feature = "subviewer",
+  feature = "ttml"
+))]
 // ── parse_content ──
-
 #[test]
 fn api_parse_content_for_all_formats() {
   #[cfg(feature = "ass")]

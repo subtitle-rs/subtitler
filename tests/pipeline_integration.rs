@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 //! Pipeline and Builder integration tests — verify the chaining API works
 #![cfg(not(target_arch = "wasm32"))]
 //! correctly across multiple operations and edge cases.
@@ -5,10 +6,12 @@
 use subtitler::model::{Subtitle, SubtitleFile, SubtitleFormat};
 use subtitler::pipeline::{Pipeline, SubtitleBuilder};
 
+#[allow(dead_code)]
 fn make_sub(start: u64, end: u64, text: &str) -> Subtitle {
   Subtitle::new(start, end, text)
 }
-
+#[cfg(feature = "srt")]
+#[allow(dead_code)]
 fn test_file_sorted() -> SubtitleFile {
   SubtitleFile::Srt(vec![
     make_sub(1000, 3000, "first"),
@@ -16,7 +19,8 @@ fn test_file_sorted() -> SubtitleFile {
     make_sub(7000, 9000, "third"),
   ])
 }
-
+#[cfg(feature = "srt")]
+#[allow(dead_code)]
 fn test_file_unsorted() -> SubtitleFile {
   SubtitleFile::Srt(vec![
     make_sub(7000, 9000, "third"),
@@ -24,9 +28,8 @@ fn test_file_unsorted() -> SubtitleFile {
     make_sub(4000, 6000, "second"),
   ])
 }
-
+#[cfg(feature = "srt")]
 // ── Builder tests ──
-
 #[test]
 fn builder_sort_unsorted_file() {
   let file = SubtitleBuilder::from(test_file_unsorted()).sort().build();
@@ -35,7 +38,7 @@ fn builder_sort_unsorted_file() {
   assert_eq!(subs[1].start, 4000);
   assert_eq!(subs[2].start, 7000);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn builder_chain_multiple_operations() {
   let file = SubtitleBuilder::from(test_file_unsorted())
@@ -54,7 +57,7 @@ fn builder_chain_multiple_operations() {
     assert!(sub.duration_ms() >= 2000);
   }
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn builder_shift_negative_clamps_to_zero() {
   let file = SubtitleBuilder::from(test_file_sorted())
@@ -64,7 +67,7 @@ fn builder_shift_negative_clamps_to_zero() {
   assert_eq!(subs[0].start, 0);
   assert_eq!(subs[0].end, 1500); // 3000 - 1500
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn builder_merge_long_gap_noop() {
   let file = SubtitleFile::Srt(vec![
@@ -74,7 +77,7 @@ fn builder_merge_long_gap_noop() {
   let file = SubtitleBuilder::from(file).merge_adjacent(500).build();
   assert_eq!(file.subtitles().len(), 2);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn builder_merge_small_gap_joins() {
   let file = SubtitleFile::Srt(vec![
@@ -87,7 +90,7 @@ fn builder_merge_small_gap_joins() {
   assert_eq!(file.subtitles()[0].start, 1000);
   assert_eq!(file.subtitles()[0].end, 4000);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn builder_split_long_preserves_order() {
   let mut file = SubtitleFile::Srt(vec![make_sub(
@@ -103,7 +106,7 @@ fn builder_split_long_preserves_order() {
     assert!(w[0].start <= w[1].start);
   }
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn builder_filter_removes_empty() {
   let file = SubtitleFile::Srt(vec![
@@ -118,7 +121,7 @@ fn builder_filter_removes_empty() {
   assert_eq!(file.subtitles()[0].text, "keep");
   assert_eq!(file.subtitles()[1].text, "also keep");
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn builder_map_uppercase() {
   let file = SubtitleBuilder::from(test_file_sorted())
@@ -129,7 +132,7 @@ fn builder_map_uppercase() {
   assert_eq!(file.subtitles()[0].text, "FIRST");
   assert_eq!(file.subtitles()[1].text, "SECOND");
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn builder_overlaps_fix() {
   let file = SubtitleFile::Srt(vec![
@@ -140,7 +143,7 @@ fn builder_overlaps_fix() {
   let subs = file.subtitles();
   assert_eq!(subs[0].end, subs[1].start);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn builder_extend_for_cps_short_duration() {
   let file = SubtitleFile::Srt(vec![make_sub(
@@ -154,9 +157,8 @@ fn builder_extend_for_cps_short_duration() {
     "should extend duration for readability"
   );
 }
-
+#[cfg(feature = "srt")]
 // ── Pipeline tests ──
-
 #[test]
 fn pipeline_applies_all_ops() {
   let pipeline = Pipeline::new()
@@ -170,14 +172,14 @@ fn pipeline_applies_all_ops() {
   assert!(!subs.is_empty());
   assert_eq!(subs[0].start, 1500); // 1000 + 500
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn pipeline_idempotent_with_no_ops() {
   let pipeline = Pipeline::new();
   let result = pipeline.apply(test_file_sorted());
   assert_eq!(result.subtitles().len(), 3);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn pipeline_filter_empty_removes_blanks() {
   let file = SubtitleFile::Srt(vec![
@@ -188,7 +190,7 @@ fn pipeline_filter_empty_removes_blanks() {
   let result = pipeline.apply(file);
   assert_eq!(result.subtitles().len(), 1);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn pipeline_serialize_deserialize_round_trip() {
   let pipeline = Pipeline::new().sort().shift(500).split_long(42);
@@ -202,7 +204,7 @@ fn pipeline_serialize_deserialize_round_trip() {
   let subs = result.subtitles();
   assert_eq!(subs[0].start, 1500); // 1000 + 500
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn pipeline_operations_are_ordered() {
   let pipeline = Pipeline::new().shift(1000).sort().shift(500);
@@ -218,7 +220,7 @@ fn pipeline_operations_are_ordered() {
   assert_eq!(subs[0].start, 2500);
   assert_eq!(subs[1].start, 6500);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn pipeline_enforce_duration_chain() {
   let file = SubtitleFile::Srt(vec![

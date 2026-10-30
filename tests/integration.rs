@@ -1,21 +1,25 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![allow(unused_imports)]
 use smallvec::SmallVec;
 use std::path::PathBuf;
+#[cfg(feature = "ass")]
 use subtitler::ass;
 use subtitler::model::{
   Subtitle, SubtitleFile, SubtitleFormat, ValidationIssue, frames_to_ms, ms_to_frames,
 };
+#[cfg(feature = "srt")]
 use subtitler::srt;
+#[cfg(feature = "vtt")]
 use subtitler::vtt;
 
+#[allow(dead_code)]
 fn fixture_dir() -> PathBuf {
   let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
   d.push("examples");
   d
 }
-
+#[cfg(feature = "srt")]
 // --- SRT Tests ---
-
 #[tokio::test]
 async fn test_srt_parse_example_file() {
   let mut path = fixture_dir();
@@ -34,7 +38,7 @@ async fn test_srt_parse_example_file() {
       .all(|s| s.start > 0 && s.end > s.start)
   );
 }
-
+#[cfg(feature = "srt")]
 #[tokio::test]
 async fn test_srt_round_trip_full() {
   let mut path = fixture_dir();
@@ -59,20 +63,20 @@ async fn test_srt_round_trip_full() {
     assert_eq!(a.text, b.text);
   }
 }
-
+#[cfg(feature = "srt")]
 #[tokio::test]
 async fn test_srt_parse_content_empty() {
   let result = srt::parse_content("").unwrap();
   assert!(result.subtitles().is_empty());
 }
-
+#[cfg(feature = "srt")]
 #[tokio::test]
 async fn test_srt_parse_content_only_header_like() {
   let content = "1\n00:00:01,000 --> 00:00:03,000\nx\n\n2\n00:00:04,000 --> 00:00:06,000\ny\n\n";
   let result = srt::parse_content(content).unwrap();
   assert_eq!(result.subtitles().len(), 2);
 }
-
+#[cfg(feature = "srt")]
 #[tokio::test]
 async fn test_srt_consecutive_blank_lines() {
   let content =
@@ -80,7 +84,7 @@ async fn test_srt_consecutive_blank_lines() {
   let result = srt::parse_content(content).unwrap();
   assert_eq!(result.subtitles().len(), 2);
 }
-
+#[cfg(feature = "srt")]
 #[tokio::test]
 async fn test_srt_empty_text() {
   let content = "1\n00:00:01,000 --> 00:00:03,500\n\n\n";
@@ -88,21 +92,21 @@ async fn test_srt_empty_text() {
   assert_eq!(result.subtitles().len(), 1);
   assert_eq!(result.subtitles()[0].text, "");
 }
-
+#[cfg(feature = "srt")]
 #[tokio::test]
 async fn test_srt_leading_newline() {
   let content = "\n1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
   let result = srt::parse_content(content).unwrap();
   assert_eq!(result.subtitles()[0].text, "Hello");
 }
-
+#[cfg(feature = "srt")]
 #[tokio::test]
 async fn test_srt_missing_index() {
   let content = "00:00:01,000 --> 00:00:03,500\nNo index here\n\n";
   let result = srt::parse_content(content).unwrap();
   assert_eq!(result.subtitles()[0].index, None);
 }
-
+#[cfg(feature = "srt")]
 #[tokio::test]
 async fn test_srt_generate_empty() {
   let path = fixture_dir().join("_test_empty.srt");
@@ -111,16 +115,15 @@ async fn test_srt_generate_empty() {
   std::fs::remove_file(&path).ok();
   assert_eq!(content, "");
 }
-
+#[cfg(feature = "srt")]
 #[tokio::test]
 async fn test_srt_timestamp_error_message() {
   let err = srt::parse_content("1\nnot a time\n").unwrap_err();
   let msg = format!("{}", err);
   assert!(msg.contains("expected timestamp") || msg.contains("Invalid SRT"));
 }
-
+#[cfg(feature = "vtt")]
 // --- VTT Tests ---
-
 #[tokio::test]
 async fn test_vtt_parse_example_file() {
   let mut path = fixture_dir();
@@ -135,7 +138,7 @@ async fn test_vtt_parse_example_file() {
   );
   assert!(subtitles.subtitles().iter().all(|s| s.end >= s.start));
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_round_trip_full() {
   let mut path = fixture_dir();
@@ -160,34 +163,34 @@ async fn test_vtt_round_trip_full() {
     assert_eq!(a.text, b.text);
   }
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_parse_content_empty() {
   let result = vtt::parse_content("WEBVTT\n\n").unwrap();
   assert!(result.subtitles().is_empty());
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_consecutive_blank_lines() {
   let content = "WEBVTT\n\n\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n\n\n2\n00:00:04.000 --> 00:00:06.500\nWorld\n\n";
   let result = vtt::parse_content(content).unwrap();
   assert_eq!(result.subtitles().len(), 2);
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_leading_newline() {
   let content = "\nWEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
   let result = vtt::parse_content(content).unwrap();
   assert_eq!(result.subtitles()[0].text, "Hello");
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_cue_id_is_string() {
   let content = "WEBVTT\n\nchapter1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
   let result = vtt::parse_content(content).unwrap();
   assert_eq!(result.subtitles()[0].index, None);
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_generate_empty() {
   let path = fixture_dir().join("_test_empty.vtt");
@@ -196,14 +199,14 @@ async fn test_vtt_generate_empty() {
   std::fs::remove_file(&path).ok();
   assert_eq!(content, "WEBVTT\n\n");
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_timestamp_error_message() {
   let err = vtt::parse_content("WEBVTT\n\n1\nnot a time\n").unwrap_err();
   let msg = format!("{}", err);
   assert!(msg.contains("expected timestamp") || msg.contains("Invalid"));
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_parse_with_bom() {
   let content = "\u{FEFF}WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
@@ -211,7 +214,7 @@ async fn test_vtt_parse_with_bom() {
   assert_eq!(result.subtitles().len(), 1);
   assert_eq!(result.subtitles()[0].text, "Hello");
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_parse_with_note() {
   let content = "WEBVTT\n\nNOTE This is a comment\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
@@ -219,7 +222,7 @@ async fn test_vtt_parse_with_note() {
   assert_eq!(result.subtitles().len(), 1);
   assert_eq!(result.subtitles()[0].text, "Hello");
 }
-
+#[cfg(feature = "vtt")]
 #[tokio::test]
 async fn test_vtt_parse_header_preserved() {
   let content =
@@ -229,9 +232,8 @@ async fn test_vtt_parse_header_preserved() {
   assert!(header.is_some());
   assert!(header.unwrap().contains("Kind: captions"));
 }
-
+#[cfg(feature = "ass")]
 // --- ASS Tests ---
-
 #[test]
 fn test_ass_parse_content() {
   let content = "[Script Info]\nTitle: Test\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,Hello!\nDialogue: 0,0:00:04.00,0:00:06.50,Default,,0,0,0,,World!\n";
@@ -243,14 +245,14 @@ fn test_ass_parse_content() {
   assert_eq!(subs[0].text, "Hello!");
   assert_eq!(subs[0].style.as_deref(), Some("Default"));
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_ass_parse_empty_events() {
   let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: ...\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
   let file = ass::parse_content(content).unwrap();
   assert!(file.subtitles().is_empty());
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_ass_to_string_round_trip() {
   let content = "[Script Info]\nTitle: RT\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,Hello\nDialogue: 0,0:00:04.00,0:00:06.50,Default,,0,0,0,,World\n";
@@ -263,7 +265,7 @@ fn test_ass_to_string_round_trip() {
   assert_eq!(reparsed.subtitles()[1].start, 4000);
   assert_eq!(reparsed.subtitles()[1].text, "World");
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_ass_detect_format() {
   let data = b"[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nStyle: Default,...\n";
@@ -272,22 +274,21 @@ fn test_ass_detect_format() {
     Some(subtitler::model::Format::Ass)
   );
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_ass_detect_format_negative() {
   let data = b"WEBVTT\n\n";
   assert_eq!(ass::detect_format(data), None);
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_ass_ssa_format() {
   let content = "[Script Info]\nScriptType: v4.00\n\n[V4 Styles]\nFormat: ...\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,Hello\n";
   let file = ass::parse_content(content).unwrap();
   assert_eq!(file.subtitles().len(), 1);
 }
-
+#[cfg(feature = "srt")]
 // --- SRT Stringify Tests ---
-
 #[tokio::test]
 async fn test_srt_to_string() {
   let mut sub1 = Subtitle::new(1000, 3500, "Hello");
@@ -301,9 +302,8 @@ async fn test_srt_to_string() {
   assert!(output.contains("Hello\n\n2\n"));
   assert!(output.contains("World\n"));
 }
-
+#[cfg(feature = "vtt")]
 // --- VTT Stringify Tests ---
-
 #[tokio::test]
 async fn test_vtt_to_string() {
   let subtitles = vec![
@@ -315,9 +315,8 @@ async fn test_vtt_to_string() {
   assert!(output.contains("00:00:01.000 --> 00:00:03.500"));
   assert!(output.contains("00:00:04.000 --> 00:00:06.500"));
 }
-
+#[cfg(feature = "srt")]
 // --- Utility Method Tests ---
-
 #[test]
 fn test_subtitle_file_sort() {
   let mut file = SubtitleFile::Srt(vec![
@@ -330,7 +329,7 @@ fn test_subtitle_file_sort() {
   assert_eq!(file.subtitles()[1].start, 3000);
   assert_eq!(file.subtitles()[2].start, 5000);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_validate_clean() {
   let file = SubtitleFile::Srt(vec![
@@ -339,7 +338,7 @@ fn test_subtitle_file_validate_clean() {
   ]);
   assert!(file.validate().is_empty());
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_validate_overlap() {
   let file = SubtitleFile::Srt(vec![
@@ -350,7 +349,7 @@ fn test_subtitle_file_validate_overlap() {
   assert_eq!(issues.len(), 1);
   assert!(matches!(issues[0], ValidationIssue::Overlap { .. }));
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_validate_negative_duration() {
   let file = SubtitleFile::Srt(vec![Subtitle::new(3000, 1000, "bad")]);
@@ -361,7 +360,7 @@ fn test_subtitle_file_validate_negative_duration() {
     ValidationIssue::NegativeDuration { .. }
   ));
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_validate_zero_duration() {
   let file = SubtitleFile::Srt(vec![Subtitle::new(1000, 1000, "bad")]);
@@ -369,7 +368,7 @@ fn test_subtitle_file_validate_zero_duration() {
   assert_eq!(issues.len(), 1);
   assert!(matches!(issues[0], ValidationIssue::ZeroDuration { .. }));
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_merge_adjacent() {
   let mut file = SubtitleFile::Srt(vec![
@@ -383,7 +382,7 @@ fn test_subtitle_file_merge_adjacent() {
   assert_eq!(subs[0].text, "first\nsecond");
   assert_eq!(subs[0].end, 5000);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_merge_noop() {
   let mut file = SubtitleFile::Srt(vec![
@@ -393,7 +392,7 @@ fn test_subtitle_file_merge_noop() {
   file.merge_adjacent(100);
   assert_eq!(file.subtitles().len(), 2);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_split_long() {
   let mut file = SubtitleFile::Srt(vec![Subtitle::new(
@@ -407,14 +406,14 @@ fn test_subtitle_file_split_long() {
     assert!(sub.text.chars().count() <= 20 || sub.text.len() <= 20);
   }
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_split_long_noop() {
   let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "short")]);
   file.split_long(20);
   assert_eq!(file.subtitles().len(), 1);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_transform_framerate() {
   let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "test")]);
@@ -422,7 +421,7 @@ fn test_subtitle_file_transform_framerate() {
   let sub = &file.subtitles()[0];
   assert!(sub.start >= 1040 && sub.start <= 1045);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_shift_all() {
   let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "test")]);
@@ -430,7 +429,7 @@ fn test_subtitle_file_shift_all() {
   assert_eq!(file.subtitles()[0].start, 1500);
   assert_eq!(file.subtitles()[0].end, 3500);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_shift_all_negative_clamp() {
   let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "test")]);
@@ -438,7 +437,7 @@ fn test_subtitle_file_shift_all_negative_clamp() {
   assert_eq!(file.subtitles()[0].start, 0);
   assert_eq!(file.subtitles()[0].end, 1000);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_map() {
   let file = SubtitleFile::Srt(vec![
@@ -451,7 +450,7 @@ fn test_subtitle_file_map() {
   assert_eq!(file.subtitles()[0].text, "HELLO");
   assert_eq!(file.subtitles()[1].text, "WORLD");
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_filter() {
   let file = SubtitleFile::Srt(vec![
@@ -462,7 +461,7 @@ fn test_subtitle_file_filter() {
   assert_eq!(file.subtitles().len(), 1);
   assert_eq!(file.subtitles()[0].text, "keep");
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_subtitle_file_to_string() {
   let file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3500, "Hello")]);
@@ -536,9 +535,8 @@ fn test_subtitle_serde_round_trip() {
   let parsed2: Subtitle = serde_json::from_str(&json2).unwrap();
   assert_eq!(sub_with_style, parsed2);
 }
-
+#[cfg(feature = "srt")]
 // --- Format Detection Tests ---
-
 #[test]
 fn test_detect_format_srt() {
   assert_eq!(
@@ -546,7 +544,7 @@ fn test_detect_format_srt() {
     Some(subtitler::model::Format::Srt)
   );
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn test_detect_format_vtt() {
   assert_eq!(
@@ -554,7 +552,7 @@ fn test_detect_format_vtt() {
     Some(subtitler::model::Format::Vtt)
   );
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_detect_format_ass() {
   assert_eq!(
@@ -568,9 +566,8 @@ fn test_detect_format_unknown() {
   assert_eq!(subtitler::detect_format(b"not a subtitle"), None);
   assert_eq!(subtitler::detect_format(b""), None);
 }
-
+#[cfg(feature = "srt")]
 // ── Duration enforcement tests ──
-
 #[test]
 fn test_enforce_min_duration() {
   let mut file = SubtitleFile::Srt(vec![
@@ -581,7 +578,7 @@ fn test_enforce_min_duration() {
   assert_eq!(file.subtitles()[0].end, 2000);
   assert_eq!(file.subtitles()[1].end, 5000);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_enforce_max_duration() {
   let mut file = SubtitleFile::Srt(vec![
@@ -592,7 +589,7 @@ fn test_enforce_max_duration() {
   assert_eq!(file.subtitles()[0].end, 4000);
   assert_eq!(file.subtitles()[1].end, 10000);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_auto_extend_for_cps() {
   let mut file = SubtitleFile::Srt(vec![Subtitle::new(
@@ -604,9 +601,8 @@ fn test_auto_extend_for_cps() {
   // 54 chars / 20 cps = 2.7s = 2700ms
   assert!(file.subtitles()[0].end >= 2700);
 }
-
+#[cfg(feature = "srt")]
 // ── Batch operation tests ──
-
 #[test]
 fn test_extract_range() {
   let file = SubtitleFile::Srt(vec![
@@ -620,7 +616,7 @@ fn test_extract_range() {
   assert_eq!(extracted[0].start, 2000); // clamped
   assert_eq!(extracted[1].text, "second");
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn test_concatenate() {
   let mut file1 = SubtitleFile::Srt(vec![
@@ -659,9 +655,8 @@ fn test_color_round_trip() {
     assert_eq!((r, g, b, a), (r2, g2, b2, a2));
   }
 }
-
+#[cfg(feature = "ass")]
 // ── ASS tag parsing tests ──
-
 #[test]
 fn test_ass_to_plaintext() {
   assert_eq!(
@@ -673,7 +668,7 @@ fn test_ass_to_plaintext() {
     "Line 1\nLine 2"
   );
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_parse_ass_tags_bold() {
   let parts = subtitler::ass::parse_ass_tags("{\\b1}Bold text{\\b0}");
@@ -681,14 +676,14 @@ fn test_parse_ass_tags_bold() {
   assert!(parts[0].bold());
   assert_eq!(parts[0].text, "Bold text");
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_parse_ass_tags_italic() {
   let parts = subtitler::ass::parse_ass_tags("{\\i1}Italic{\\i0}");
   assert_eq!(parts.len(), 1);
   assert!(parts[0].italic());
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_parse_ass_tags_primary_color() {
   // \1c (and legacy \c) set the primary color; ASS &HBBGGRR → #RRGGBB.
@@ -697,7 +692,7 @@ fn test_parse_ass_tags_primary_color() {
   assert_eq!(parts[0].color.as_deref(), Some("#0000FF"));
   assert_eq!(parts[1].color.as_deref(), Some("#00FF00"));
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_parse_ass_tags_reset() {
   let parts = subtitler::ass::parse_ass_tags("{\\b1\\1c&HFF0000&}styled {\\r}plain");
@@ -706,7 +701,7 @@ fn test_parse_ass_tags_reset() {
   assert!(!parts[1].bold());
   assert_eq!(parts[1].color, None);
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_parse_ass_tags_transform_skipped() {
   // Tags inside \t(...) are animated and must not become permanent state;
@@ -718,7 +713,7 @@ fn test_parse_ass_tags_transform_skipped() {
   assert!(!parts[0].bold());
   assert_eq!(parts[0].color, None);
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_parse_ass_tags_typesetting_stripped() {
   let parts = subtitler::ass::parse_ass_tags(
@@ -728,7 +723,7 @@ fn test_parse_ass_tags_typesetting_stripped() {
   assert_eq!(parts[0].text, "C");
   assert_eq!(parts[0].color.as_deref(), Some("#FFFFFF"));
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_parse_ass_tags_drawing_mode() {
   // \p1 turns the cue text into vector drawing commands: no visible text.
@@ -738,7 +733,7 @@ fn test_parse_ass_tags_drawing_mode() {
   assert_eq!(parts.len(), 1);
   assert_eq!(parts[0].text, "");
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_parse_ass_tags_tags_only_cue() {
   // A cue whose text is only override blocks (common for whitespace glyphs
@@ -748,7 +743,7 @@ fn test_parse_ass_tags_tags_only_cue() {
   assert_eq!(parts.len(), 1);
   assert_eq!(parts[0].text, "");
 }
-
+#[cfg(feature = "ass")]
 #[test]
 fn test_parse_dialogue_populates_text_parts() {
   let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: ...\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,{\\an5\\pos(100,200)\\fad(0,500)}Hello {\\b1}World\n";

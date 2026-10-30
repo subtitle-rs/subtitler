@@ -187,7 +187,7 @@ pub fn format_timestamp(timestamp: u64, options: &str) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_parse_timestamp_srt() {
     assert_eq!(parse_timestamp("00:00:01,000", Format::Srt).unwrap(), 1000);
@@ -199,14 +199,14 @@ mod tests {
     );
     assert_eq!(parse_timestamp("00:00:00,000", Format::Srt).unwrap(), 0);
   }
-
+  #[cfg(feature = "vtt")]
   #[test]
   #[cfg(feature = "vtt")]
   fn test_parse_timestamp_vtt() {
     assert_eq!(parse_timestamp("00:00:01.000", Format::Vtt).unwrap(), 1000);
     assert_eq!(parse_timestamp("00:00:03.500", Format::Vtt).unwrap(), 3500);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_parse_timestamps() {
     let ts = parse_timestamps("00:00:01,000 --> 00:00:03,500", Format::Srt).unwrap();
@@ -214,7 +214,7 @@ mod tests {
     assert_eq!(ts.end, 3500);
     assert_eq!(ts.settings, None);
   }
-
+  #[cfg(feature = "vtt")]
   #[test]
   #[cfg(feature = "vtt")]
   fn test_parse_timestamps_with_settings() {
@@ -256,7 +256,7 @@ mod tests {
     assert_eq!(pad_left(1, 3), "001");
     assert_eq!(pad_left(0, 2), "00");
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_parse_invalid_timestamp() {
     assert!(parse_timestamp("not a time", Format::Srt).is_err());

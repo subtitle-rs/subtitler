@@ -172,7 +172,7 @@ mod tests {
   use crate::model::SubtitleFormat;
 
   const SAMPLE: &str = "$FontName = Arial\n$TapeOffset = FALSE\n\n// subtitle text\n00:00:01:00,00:00:03:12, Hello World\n00:00:04:00,00:00:06:00, Second | line here\n";
-
+  #[cfg(feature = "spruce")]
   #[test]
   fn test_detect_spruce() {
     assert_eq!(detect_format(SAMPLE.as_bytes()), Some(Format::Spruce));
@@ -186,7 +186,7 @@ mod tests {
     );
     assert_eq!(detect_format(b"just some text, nothing else\n"), None);
   }
-
+  #[cfg(feature = "spruce")]
   #[test]
   fn test_parse_default_fps_25() {
     let file = parse_content(SAMPLE, None).unwrap();

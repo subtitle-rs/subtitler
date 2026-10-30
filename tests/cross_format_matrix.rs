@@ -1,3 +1,17 @@
+#![cfg(all(
+  feature = "srt",
+  feature = "vtt",
+  feature = "ass",
+  feature = "ttml",
+  feature = "scc",
+  feature = "sbv",
+  feature = "sami",
+  feature = "mpl2",
+  feature = "subviewer",
+  feature = "microdvd",
+  feature = "lrc",
+  feature = "ebu_stl"
+))]
 //! Cross-format conversion matrix — sparse (~25 pairs, v2.3).
 #![cfg(not(target_arch = "wasm32"))]
 //!
@@ -11,13 +25,13 @@ use subtitler::model::{Format, SubtitleFormat};
 fn srt_fixture() -> &'static str {
   "1\n00:00:01,000 --> 00:00:03,500\nHello World\n\n"
 }
-
+#[cfg(feature = "srt")]
 // ── Identity round-trips ──
-
 #[test]
 fn srt_identity() {
   check_round_trip(srt_fixture(), Format::Srt);
 }
+#[cfg(feature = "vtt")]
 #[test]
 fn vtt_identity() {
   check_round_trip(
@@ -25,6 +39,7 @@ fn vtt_identity() {
     Format::Vtt,
   );
 }
+#[cfg(feature = "ass")]
 #[test]
 fn ass_identity() {
   check_round_trip(
@@ -32,56 +47,64 @@ fn ass_identity() {
     Format::Ass,
   );
 }
+#[cfg(all(feature = "ebu_stl", feature = "srt"))]
 #[test]
 fn srt_to_self() {
   check_convert(srt_fixture(), Format::Srt, Format::Srt);
 }
-
+#[cfg(all(feature = "ebu_stl", feature = "srt", feature = "vtt"))]
 // ── SRT → * (10 targets) ──
-
 #[test]
 fn srt_to_vtt() {
   check_convert(srt_fixture(), Format::Srt, Format::Vtt);
 }
+#[cfg(all(feature = "ass", feature = "ebu_stl", feature = "srt"))]
 #[test]
 fn srt_to_ass() {
   check_convert(srt_fixture(), Format::Srt, Format::Ass);
 }
+#[cfg(all(feature = "ebu_stl", feature = "srt", feature = "ttml"))]
 #[test]
 fn srt_to_ttml() {
   check_convert(srt_fixture(), Format::Srt, Format::Ttml);
 }
+#[cfg(all(feature = "ebu_stl", feature = "sbv", feature = "srt"))]
 #[test]
 fn srt_to_sbv() {
   check_convert(srt_fixture(), Format::Srt, Format::Sbv);
 }
+#[cfg(all(feature = "ebu_stl", feature = "lrc", feature = "srt"))]
 #[test]
 fn srt_to_lrc() {
   check_convert(srt_fixture(), Format::Srt, Format::Lrc);
 }
+#[cfg(all(feature = "ebu_stl", feature = "sami", feature = "srt"))]
 #[test]
 fn srt_to_sami() {
   check_convert(srt_fixture(), Format::Srt, Format::Sami);
 }
+#[cfg(all(feature = "ebu_stl", feature = "mpl2", feature = "srt"))]
 #[test]
 fn srt_to_mpl2() {
   check_convert(srt_fixture(), Format::Srt, Format::Mpl2);
 }
+#[cfg(all(feature = "ebu_stl", feature = "scc", feature = "srt"))]
 #[test]
 fn srt_to_scc() {
   check_convert(srt_fixture(), Format::Srt, Format::Scc);
 }
+#[cfg(all(feature = "ebu_stl", feature = "microdvd", feature = "srt"))]
 #[test]
 fn srt_to_microdvd() {
   check_convert(srt_fixture(), Format::Srt, Format::MicroDvd);
 }
+#[cfg(all(feature = "ebu_stl", feature = "srt", feature = "subviewer"))]
 #[test]
 fn srt_to_subviewer() {
   check_convert(srt_fixture(), Format::Srt, Format::SubViewer);
 }
-
+#[cfg(all(feature = "ebu_stl", feature = "srt", feature = "vtt"))]
 // ── VTT → * → SRT ──
-
 #[test]
 fn vtt_to_srt() {
   check_convert(
@@ -90,6 +113,7 @@ fn vtt_to_srt() {
     Format::Srt,
   );
 }
+#[cfg(all(feature = "ass", feature = "ebu_stl", feature = "vtt"))]
 #[test]
 fn vtt_to_ass() {
   check_convert(
@@ -98,9 +122,8 @@ fn vtt_to_ass() {
     Format::Ass,
   );
 }
-
+#[cfg(all(feature = "ass", feature = "ebu_stl", feature = "srt"))]
 // ── ASS → * -> SRT ──
-
 #[test]
 fn ass_to_srt() {
   check_convert(
@@ -109,9 +132,8 @@ fn ass_to_srt() {
     Format::Srt,
   );
 }
-
+#[cfg(all(feature = "ebu_stl", feature = "srt", feature = "ttml"))]
 // ── TTML → * → SRT ──
-
 #[test]
 fn ttml_to_srt() {
   check_convert(
@@ -120,6 +142,7 @@ fn ttml_to_srt() {
     Format::Srt,
   );
 }
+#[cfg(all(feature = "ebu_stl", feature = "ttml", feature = "vtt"))]
 #[test]
 fn ttml_to_vtt() {
   check_convert(
@@ -128,16 +151,14 @@ fn ttml_to_vtt() {
     Format::Vtt,
   );
 }
-
+#[cfg(all(feature = "ebu_stl", feature = "sbv", feature = "srt"))]
 // ── SBV → * → SRT ──
-
 #[test]
 fn sbv_to_srt() {
   check_convert("0:00:01.000,0:00:03.500\nHello\n", Format::Sbv, Format::Srt);
 }
-
+#[cfg(all(feature = "ebu_stl", feature = "sami", feature = "srt"))]
 // ── SAMI → * → SRT ──
-
 #[test]
 fn sami_to_srt() {
   check_convert(
@@ -146,16 +167,14 @@ fn sami_to_srt() {
     Format::Srt,
   );
 }
-
+#[cfg(all(feature = "ebu_stl", feature = "mpl2", feature = "srt"))]
 // ── MPL2 → * → SRT ──
-
 #[test]
 fn mpl2_to_srt() {
   check_convert("[24][84]Hello\n", Format::Mpl2, Format::Srt);
 }
-
+#[cfg(all(feature = "ebu_stl", feature = "scc", feature = "srt"))]
 // ── SCC → * → SRT ──
-
 #[test]
 fn scc_to_srt() {
   check_convert(
@@ -164,9 +183,9 @@ fn scc_to_srt() {
     Format::Srt,
   );
 }
-
+#[cfg(feature = "ebu_stl")]
+#[allow(dead_code)]
 // ── Convert helper ──
-
 fn check_convert(fixture: &str, from: Format, to: Format) {
   let file = subtitler::parse_bytes_as(fixture.as_bytes(), from)
     .unwrap_or_else(|e| panic!("parse_as {from:?} failed: {e}"));

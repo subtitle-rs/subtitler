@@ -157,7 +157,17 @@ pub fn detect_format(data: &[u8]) -> Option<crate::model::Format> {
       if text.contains("V4+ Styles") || text.contains("V4 Styles") {
         return Some(crate::model::Format::Ass);
       }
-      return Some(crate::model::Format::Ssa);
+      // `Format::Ssa` only exists with the ssa feature; without it SSA
+      // content parses through the ass module as Format::Ass, matching
+      // what parse_content constructs.
+      #[cfg(feature = "ssa")]
+      {
+        return Some(crate::model::Format::Ssa);
+      }
+      #[cfg(not(feature = "ssa"))]
+      {
+        return Some(crate::model::Format::Ass);
+      }
     }
   }
   None
@@ -938,6 +948,7 @@ pub async fn write_stream<W: tokio::io::AsyncWrite + Unpin>(
 
 #[cfg(test)]
 mod tests {
+  #![allow(irrefutable_let_patterns)]
   use super::*;
   use crate::model::SubtitleFormat;
 
@@ -977,13 +988,13 @@ mod tests {
     assert_eq!(reparsed.subtitles()[1].start, 4000);
     assert_eq!(reparsed.subtitles()[1].text, "World");
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_detect_format_ass() {
     let data = b"[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\n";
     assert_eq!(detect_format(data), Some(crate::model::Format::Ass));
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_style_float_outline_shadow() {
     let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: OP,FOT-Rowdy Std EB,66,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3.9,0,8,30,30,69,1\nStyle: Default,LTFinnegan Medium,72,&H00FFFFFF,&H00FFFFFF,&H00000000,&HA0000000,0,0,0,0,100,100,0.5,0.5,1,3.6,1.5,2,200,200,60,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.50,OP,,0,0,0,,Hello\n";
@@ -1041,7 +1052,7 @@ mod tests {
     // Text must be "Visible text" even though "Comment" appears in the Effect column
     assert_eq!(parsed.subtitles()[0].text, "Visible text");
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_section() {
     let content = "[Script Info]\nScriptType: v4.00+\n\n[Fonts]\nfontname: tiny.ttf\n!\"#\nABC\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hi\n";
@@ -1053,7 +1064,7 @@ mod tests {
     assert_eq!(data.fonts[0].data, vec![0, 16, 160, 134]);
     assert_eq!(data.subtitles.len(), 1);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_multiple_and_odd_byte_tail() {
     // Second font exercises the 2-char group encoding a single byte (0xAB).
@@ -1067,7 +1078,7 @@ mod tests {
     assert_eq!(data.fonts[1].name, "b.ttf");
     assert_eq!(data.fonts[1].data, vec![0xAB]);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_bracket_shaped_payload_line_is_data() {
     // Regression: the uuencode alphabet includes `[` (91) and `]` (93),
@@ -1084,7 +1095,7 @@ mod tests {
     // The following section still parses normally.
     assert_eq!(data.subtitles.len(), 1);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_round_trip_through_own_encoder() {
     // Any payload the writer emits (including bracket-shaped lines) must
@@ -1099,7 +1110,7 @@ mod tests {
     };
     assert_eq!(parsed.fonts[0].data, data);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fonts_skips_malformed_payload() {
     let content =
@@ -1109,7 +1120,7 @@ mod tests {
     };
     assert!(data.fonts.is_empty());
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_fonts_round_trip_via_to_string() {
     // Odd length on purpose: crosses the 80-char wrap and ends on a 2-char group.
@@ -1126,7 +1137,7 @@ mod tests {
     assert_eq!(parsed.fonts.len(), 1);
     assert_eq!(parsed.fonts[0].data, data);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_parse_fills_style_props() {
     let content = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Custom,Arial,36,&H00463827,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Custom,,0,0,0,,Styled\nDialogue: 0,0:00:03.00,0:00:04.00,Missing,,0,0,0,,No such style\n";
@@ -1152,7 +1163,8 @@ mod tests {
     assert!(out.contains("tts:fontFamily=\"Arial\""), "got: {}", out);
     assert!(out.contains("style=\"Custom\""), "got: {}", out);
   }
-
+  #[cfg(feature = "ass")]
+  #[allow(dead_code)]
   fn parse_positioned(content: &str) -> Vec<Subtitle> {
     let SubtitleFile::Ass(data) = parse_content(content).unwrap() else {
       panic!("expected ASS");
@@ -1161,7 +1173,7 @@ mod tests {
   }
 
   const ASS_HEADER: &str = "[Script Info]\nScriptType: v4.00+\nPlayResX: 384\nPlayResY: 288\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\nStyle: TopRight,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,9,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_from_style_alignment() {
     // Style alignment 2 (bottom-center): band position, no coordinates.
@@ -1174,7 +1186,7 @@ mod tests {
     assert_eq!(pos.h_align, HorizontalAlign::Center);
     assert_eq!(pos.v_align, VerticalAlign::Bottom);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_style_alignment_9() {
     // Alignment 9 → top-right.
@@ -1185,7 +1197,7 @@ mod tests {
     assert_eq!(pos.h_align, HorizontalAlign::Right);
     assert_eq!(pos.v_align, VerticalAlign::Top);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_an_overrides_style() {
     let subs = parse_positioned(&format!(
@@ -1195,7 +1207,7 @@ mod tests {
     assert_eq!(pos.h_align, HorizontalAlign::Center);
     assert_eq!(pos.v_align, VerticalAlign::Top);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_pos_converts_via_playres() {
     // \pos(192,144) on PlayRes 384x288 → 50%, 50% (verified with python3).
@@ -1206,7 +1218,7 @@ mod tests {
     assert_eq!(pos.x, Some(50.0));
     assert_eq!(pos.y, Some(50.0));
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_move_uses_start_point() {
     // \move(96,48,…) start point → 25%, 16.67 (rounded 2dp; verified with python3).
@@ -1219,7 +1231,7 @@ mod tests {
     assert_eq!(pos.h_align, HorizontalAlign::Left);
     assert_eq!(pos.v_align, VerticalAlign::Top);
   }
-
+  #[cfg(feature = "ass")]
   #[test]
   fn test_position_default_playres_when_missing() {
     // No PlayRes in [Script Info] → spec default 384x288.

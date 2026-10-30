@@ -340,7 +340,7 @@ impl<'a> crate::model::StreamingParser for SamiStream<'a> {}
 #[cfg(test)]
 mod tests {
   use super::*;
-
+  #[cfg(feature = "sami")]
   #[test]
   fn test_parse_basic() {
     let content = r#"<SAMI>
@@ -361,7 +361,7 @@ mod tests {
       panic!("Expected Sami variant");
     }
   }
-
+  #[cfg(feature = "sami")]
   #[test]
   fn test_round_trip() {
     let content = r#"<SAMI>
@@ -384,7 +384,7 @@ mod tests {
     assert!(detect_format(b"<SAMI><Body></Body></SAMI>").is_some());
     assert!(detect_format(b"WEBVTT").is_none());
   }
-
+  #[cfg(feature = "sami")]
   #[test]
   fn test_end_time_uses_next_sync() {
     // end_ms 应取下一个 Sync 的 start，而非硬编码 start + 3000
@@ -408,7 +408,7 @@ mod tests {
       panic!("Expected Sami variant");
     }
   }
-
+  #[cfg(feature = "sami")]
   #[test]
   fn test_parse_case_insensitive_tags() {
     // 真实 SAMI 文件常见大写/混合大小写标签

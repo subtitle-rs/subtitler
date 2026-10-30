@@ -1,3 +1,4 @@
+#![cfg(feature = "ebu_stl")]
 //! Regression test for EBU STL binary input handling.
 #![cfg(not(target_arch = "wasm32"))]
 //!
@@ -30,7 +31,7 @@ fn build_minimal_stl() -> Vec<u8> {
   data[3..1024].fill(0xFF);
   data
 }
-
+#[cfg(feature = "ebu_stl")]
 #[test]
 fn test_ebu_stl_parse_content_accepts_binary_without_decoding() {
   // Contract: ebu_stl::parse_content accepts raw bytes directly.
@@ -43,7 +44,7 @@ fn test_ebu_stl_parse_content_accepts_binary_without_decoding() {
   // Sanity: the format detection agrees this is EbuStl.
   assert_eq!(file.format(), subtitler::model::Format::EbuStl);
 }
-
+#[cfg(feature = "ebu_stl")]
 #[test]
 fn test_ebu_stl_detect_format_matches_binary_signature() {
   // Contract: detect_format identifies the binary signature without

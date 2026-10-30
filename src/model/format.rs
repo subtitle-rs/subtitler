@@ -260,8 +260,11 @@ impl SubtitleFormat for SubtitleFile {
       }
       #[cfg(feature = "spruce")]
       Format::Spruce => {
+        // Under spruce-only builds Spruce is the only compiled variant,
+        // making the `_` arm unreachable — hence the allow.
         let fps = match self {
           SubtitleFile::Spruce { fps, .. } => Some(*fps),
+          #[allow(unreachable_patterns)]
           _ => None,
         };
         crate::spruce::to_string(subs, fps)

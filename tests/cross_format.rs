@@ -1,8 +1,15 @@
+#![cfg(all(
+  feature = "srt",
+  feature = "vtt",
+  feature = "ass",
+  feature = "microdvd"
+))]
 //! Cross-format conversion tests — verify data survives SRT→VTT→ASS→SRT etc.
 #![cfg(not(target_arch = "wasm32"))]
 
 use subtitler::model::{Format, Subtitle, SubtitleFile, SubtitleFormat};
-
+#[cfg(feature = "srt")]
+#[allow(dead_code)]
 fn sample_srt_file() -> SubtitleFile {
   SubtitleFile::Srt(vec![
     Subtitle::new(1000, 3000, "Hello World"),
@@ -10,7 +17,7 @@ fn sample_srt_file() -> SubtitleFile {
     Subtitle::new(7000, 9000, "Third"),
   ])
 }
-
+#[cfg(all(feature = "srt", feature = "vtt"))]
 #[test]
 fn srt_to_vtt_round_trip() {
   let original = sample_srt_file();
@@ -22,7 +29,7 @@ fn srt_to_vtt_round_trip() {
   assert_eq!(reparsed.subtitles()[0].start, 1000);
   assert_eq!(reparsed.subtitles()[0].text, "Hello World");
 }
-
+#[cfg(all(feature = "ass", feature = "srt"))]
 #[test]
 fn srt_to_ass_round_trip() {
   let original = sample_srt_file();
@@ -32,7 +39,7 @@ fn srt_to_ass_round_trip() {
   assert_eq!(reparsed.subtitles().len(), 3);
   assert_eq!(reparsed.subtitles()[0].start, 1000);
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn srt_to_srt_idempotent() {
   let original = sample_srt_file();
@@ -48,7 +55,7 @@ fn srt_to_srt_idempotent() {
     assert_eq!(a.text, b.text);
   }
 }
-
+#[cfg(all(feature = "srt", feature = "vtt"))]
 #[test]
 fn vtt_to_srt_preserves_text() {
   let vtt = SubtitleFile::Vtt {
@@ -64,7 +71,7 @@ fn vtt_to_srt_preserves_text() {
   // SRT uses comma separator
   assert!(srt_str.contains(','));
 }
-
+#[cfg(all(feature = "microdvd", feature = "srt"))]
 #[test]
 fn srt_to_microdvd_round_trip() {
   let original = sample_srt_file();
@@ -72,7 +79,13 @@ fn srt_to_microdvd_round_trip() {
   let reparsed = subtitler::parse_bytes(md_str.as_bytes()).unwrap();
   assert_eq!(reparsed.subtitles().len(), 3);
 }
-
+#[cfg(all(
+  feature = "ass",
+  feature = "microdvd",
+  feature = "srt",
+  feature = "subviewer",
+  feature = "vtt"
+))]
 #[test]
 fn all_formats_produce_valid_output() {
   let original = sample_srt_file();

@@ -78,7 +78,7 @@ cli = ["dep:clap", "dep:tracing-subscriber"]
 srt = []
 vtt = []
 ass = []
-ssa = []
+ssa = ["ass"]
 microdvd = []
 subviewer = []
 ttml = ["quick-xml"]
@@ -116,52 +116,62 @@ lto = "thin"
 name = "parse-srt-file"
 path = "examples/parse-srt-file.rs"
 
+required-features = ["srt", "cli"]
 [[example]]
 name = "parse-srt-http"
 path = "examples/parse-srt-http.rs"
-required-features = ["http"]
+required-features = ["http", "srt", "cli"]
 
 [[example]]
 name = "create-srt-file"
 path = "examples/create-srt-file.rs"
 
+required-features = ["srt", "cli"]
 [[example]]
 name = "parse-srt-content"
 path = "examples/parse-srt-content.rs"
 
+required-features = ["srt", "cli"]
 [[example]]
 name = "parse-vtt-file"
 path = "examples/parse-vtt-file.rs"
 
+required-features = ["vtt", "cli"]
 [[example]]
 name = "parse-vtt-http"
 path = "examples/parse-vtt-http.rs"
-required-features = ["http"]
+required-features = ["http", "vtt", "cli"]
 
 [[example]]
 name = "parse-vtt-content"
 path = "examples/parse-vtt-content.rs"
 
+required-features = ["vtt", "cli"]
 [[example]]
 name = "create-vtt-file"
 path = "examples/create-vtt-file.rs"
 
+required-features = ["vtt", "cli"]
 [[example]]
 name = "parse-ass-content"
 path = "examples/parse-ass-content.rs"
 
+required-features = ["ass", "cli"]
 [[example]]
 name = "format-convert"
 path = "examples/format-convert.rs"
 
+required-features = ["ass", "srt", "vtt", "cli"]
 [[example]]
 name = "frame-conversion"
 path = "examples/frame-conversion.rs"
 
+required-features = ["cli"]
 [[example]]
 name = "stream-parse"
 path = "examples/stream-parse.rs"
 
+required-features = ["srt"]
 [[example]]
 name = "quality-report"
 path = "examples/quality-report.rs"
@@ -174,14 +184,17 @@ path = "examples/normalize-text.rs"
 name = "convert-all-formats"
 path = "examples/format-convert-all.rs"
 
+required-features = ["ass", "microdvd", "srt", "subviewer", "vtt"]
 [[example]]
 name = "edit-operations"
 path = "examples/edit-operations.rs"
 
+required-features = ["srt"]
 [[example]]
 name = "parse-ttml-lrc"
 path = "examples/ttml-lyrics-tutorial.rs"
 
+required-features = ["lrc", "sbv", "srt", "ttml"]
 [[example]]
 name = "detect-and-validate"
 path = "examples/validate-subtitle.rs"
@@ -190,22 +203,27 @@ path = "examples/validate-subtitle.rs"
 name = "batch-process"
 path = "examples/translate-subtitle.rs"
 
+required-features = ["vtt"]
 [[example]]
 name = "parse-sami-content"
 path = "examples/parse-sami-content.rs"
 
+required-features = ["sami"]
 [[example]]
 name = "parse-mpl2-content"
 path = "examples/parse-mpl2-content.rs"
 
+required-features = ["mpl2"]
 [[example]]
 name = "create-sami-file"
 path = "examples/create-sami-file.rs"
 
+required-features = ["sami"]
 [[example]]
 name = "create-mpl2-file"
 path = "examples/create-mpl2-file.rs"
 
+required-features = ["mpl2"]
 [[bench]]
 name = "subtitler_benchmark"
 harness = false

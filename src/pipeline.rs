@@ -380,13 +380,15 @@ impl Pipeline {
 
 #[cfg(test)]
 mod tests {
+  #[allow(unused_imports)]
   use super::*;
+  #[allow(unused_imports)]
   use crate::model::{Subtitle, SubtitleFile};
-
+  #[allow(dead_code)]
   fn make_sub(start: u64, end: u64, text: &str) -> Subtitle {
     Subtitle::new(start, end, text)
   }
-
+  #[cfg(feature = "srt")]
   fn test_file() -> SubtitleFile {
     SubtitleFile::Srt(vec![
       make_sub(5000, 7000, "third"),
@@ -394,7 +396,7 @@ mod tests {
       make_sub(3000, 5000, "second"),
     ])
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_builder_sort() {
     let file = SubtitleBuilder::from(test_file()).sort().build();
@@ -403,7 +405,7 @@ mod tests {
     assert_eq!(subs[1].start, 3000);
     assert_eq!(subs[2].start, 5000);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_builder_shift() {
     let file = SubtitleBuilder::from(test_file()).sort().shift(500).build();
@@ -412,7 +414,7 @@ mod tests {
     assert_eq!(subs[1].start, 3500);
     assert_eq!(subs[2].start, 5500);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_builder_chain() {
     let file = SubtitleBuilder::from(test_file())
@@ -426,7 +428,7 @@ mod tests {
     assert!(subs[0].text.contains("second"));
     assert!(subs[0].text.contains("third"));
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_builder_filter() {
     let file = SubtitleFile::Srt(vec![
@@ -439,7 +441,7 @@ mod tests {
       .build();
     assert_eq!(file.subtitles().len(), 2);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_pipeline_sort_shift() {
     let pipeline = Pipeline::new().sort().shift(500);
@@ -450,7 +452,7 @@ mod tests {
     assert_eq!(subs[1].start, 3500);
     assert_eq!(subs[1].text, "second");
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_pipeline_serialize() {
     let pipeline = Pipeline::new()
@@ -471,7 +473,7 @@ mod tests {
     let subs = result.subtitles();
     assert_eq!(subs[0].start, 1500);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_pipeline_filter_empty() {
     let file = SubtitleFile::Srt(vec![
@@ -483,14 +485,14 @@ mod tests {
     let result = pipeline.apply(file);
     assert_eq!(result.subtitles().len(), 2);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_pipeline_apply_idempotent() {
     let pipeline = Pipeline::new();
     let result = pipeline.apply(test_file());
     assert_eq!(result.subtitles().len(), 3);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_remove_duplicates_consecutive() {
     let file = SubtitleFile::Srt(vec![
@@ -506,7 +508,7 @@ mod tests {
     assert_eq!(subs[1].text, "world");
     assert_eq!(subs[2].text, "hello"); // non-consecutive dup preserved
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_remove_duplicates_via_pipeline() {
     let pipeline = Pipeline::new().remove_duplicates();
@@ -527,7 +529,7 @@ mod tests {
     let parsed: Pipeline = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.operations.len(), 1);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_enforce_min_gap_pulls_back_previous_end() {
     // 20 ms gap between the cues; enforce 83 ms (2 frames @ 24 fps).
@@ -545,7 +547,7 @@ mod tests {
     assert_eq!(subs[0].end, 1937);
     assert_eq!(subs[1].end, 3000);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_enforce_min_gap_skips_impossible_pairs() {
     // The cues overlap: creating a 200 ms gap would need "first" to end at
@@ -559,7 +561,7 @@ mod tests {
     let subs = result.subtitles();
     assert_eq!(subs[0].end, 2100);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_enforce_min_gap_idempotent() {
     let file = SubtitleFile::Srt(vec![
@@ -575,7 +577,7 @@ mod tests {
       .build();
     assert_eq!(once.subtitles(), twice.subtitles());
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_enforce_min_gap_pipeline_round_trip() {
     let pipeline = Pipeline::new().enforce_min_gap(83);
@@ -589,9 +591,10 @@ mod tests {
     let result = parsed.apply(file);
     assert_eq!(result.subtitles()[0].end, 927); // 1010 - 83
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_enforce_min_gap_then_validate_clean() {
+    #[allow(unused_imports)]
     use crate::guidelines::{Guideline, GuidelinePreset};
     let file = SubtitleFile::Srt(vec![
       make_sub(1000, 4000, "long enough first"),
@@ -608,7 +611,7 @@ mod tests {
       issues
     );
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_remove_repeating_lines_collapses_rollup_run() {
     // SCC-style roll-up: the same line repeated as it grows.
@@ -624,7 +627,7 @@ mod tests {
     assert_eq!(subs[0].end, 3000, "kept cue spans the whole run");
     assert_eq!(subs[0].text, "hello");
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_remove_repeating_lines_keeps_non_adjacent_repeats() {
     let file = SubtitleFile::Srt(vec![
@@ -635,7 +638,7 @@ mod tests {
     let result = SubtitleBuilder::from(file).remove_repeating_lines().build();
     assert_eq!(result.subtitles().len(), 3);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_merge_identical_overlapping_duplicates() {
     // Conversion artifact: the same cue exported twice, times offset.
@@ -649,7 +652,7 @@ mod tests {
     assert_eq!(subs[0].start, 0);
     assert_eq!(subs[0].end, 3000);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_merge_identical_respects_gap_threshold() {
     // 500 ms apart, threshold 500 → merged; threshold 499 → kept apart.
@@ -666,7 +669,7 @@ mod tests {
     let kept = SubtitleBuilder::from(mk()).merge_identical(499).build();
     assert_eq!(kept.subtitles().len(), 2);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_merge_identical_keeps_distant_chorus() {
     let file = SubtitleFile::Srt(vec![
@@ -688,7 +691,7 @@ mod tests {
     let parsed: Pipeline = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.operations.len(), 2);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_snap_to_frames() {
     // 25 fps = 40 ms per frame; off-boundary times snap to nearest frame.
@@ -703,7 +706,7 @@ mod tests {
     assert_eq!(subs[1].start, 3_040, "already on a frame boundary stays");
     assert_eq!(subs[1].end, 4_000);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_reinterpret_framerate_repairs_misread_df() {
     // A 29.97 DF file misread as NDF lands at 600601 ms for the display
@@ -718,7 +721,7 @@ mod tests {
     assert_eq!(sub.start, 600_000);
     assert_eq!(sub.end, 602_002);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_reinterpret_framerate_ndf_identity_on_clean_file() {
     // 25 fps NDF has no drops: same-timebase reinterpretation is a no-op
@@ -729,7 +732,7 @@ mod tests {
       .build();
     assert_eq!(result.subtitles(), file.subtitles());
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_convert_rollup_unrolls_accumulated_lines() {
     // SCC-style roll-up: every cue repeats the accumulated text.
@@ -748,7 +751,7 @@ mod tests {
     assert_eq!(subs[1].start, 1_000);
     assert_eq!(subs[1].end, 2_000);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_convert_rollup_leaves_non_accumulating_cues() {
     let file = SubtitleFile::Srt(vec![
@@ -772,11 +775,10 @@ mod tests {
     let parsed: Pipeline = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.operations.len(), 3);
   }
-
+  #[cfg(feature = "srt")]
   // ── Shot changes ──
   // 25 fps, before=2 frames (80 ms), after=12 frames (480 ms).
   // Cut at 5000 → guard zone [4920, 5480].
-
   #[test]
   fn test_shot_change_spanning_keeps_larger_side() {
     let mk = || SubtitleFile::Srt(vec![make_sub(4_000, 6_000, "spans")]);
@@ -794,7 +796,7 @@ mod tests {
     assert_eq!(b.subtitles()[0].start, 5_480);
     assert_eq!(b.subtitles()[0].end, 6_000);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_shot_change_trims_guard_zone_edges() {
     let file = SubtitleFile::Srt(vec![
@@ -810,7 +812,7 @@ mod tests {
     // Text untouched — only timings move.
     assert_eq!(subs[0].text, "ends too close");
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_shot_change_leaves_compliant_cues() {
     let file = SubtitleFile::Srt(vec![
@@ -823,7 +825,7 @@ mod tests {
       .build();
     assert_eq!(result.subtitles(), before.subtitles());
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_shot_change_sequential_cuts() {
     let file = SubtitleFile::Srt(vec![make_sub(1_500, 8_500, "spans two cuts")]);
@@ -835,7 +837,7 @@ mod tests {
     assert_eq!(sub.start, 2_480);
     assert_eq!(sub.end, 7_920);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_shot_changes_pipeline_serde_round_trip() {
     let pipeline = Pipeline::new().apply_shot_changes(vec![1_160, 5_000], 2, 12, 25.0);

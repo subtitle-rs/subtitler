@@ -1,10 +1,26 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(all(
+  feature = "srt",
+  feature = "vtt",
+  feature = "ass",
+  feature = "ssa",
+  feature = "microdvd",
+  feature = "subviewer"
+))]
 use subtitler::model::{AssData, Format, Subtitle, SubtitleFile, SubtitleFormat};
 
 fn sub(start: u64, end: u64, text: &str) -> Subtitle {
   Subtitle::new(start, end, text)
 }
-
+#[cfg(all(
+  feature = "ass",
+  feature = "microdvd",
+  feature = "srt",
+  feature = "ssa",
+  feature = "subviewer",
+  feature = "vtt"
+))]
+#[allow(dead_code)]
 fn sample_of_each_variant() -> Vec<SubtitleFile> {
   vec![
     SubtitleFile::Srt(vec![sub(0, 2000, "a"), sub(3000, 5000, "b")]),
@@ -34,7 +50,14 @@ fn sample_of_each_variant() -> Vec<SubtitleFile> {
     },
   ]
 }
-
+#[cfg(all(
+  feature = "ass",
+  feature = "microdvd",
+  feature = "srt",
+  feature = "ssa",
+  feature = "subviewer",
+  feature = "vtt"
+))]
 #[test]
 fn shift_all_works_for_every_variant() {
   for (i, mut file) in sample_of_each_variant().into_iter().enumerate() {
@@ -43,7 +66,14 @@ fn shift_all_works_for_every_variant() {
     assert_eq!(first_start, 1000, "variant {i} shift_all failed");
   }
 }
-
+#[cfg(all(
+  feature = "ass",
+  feature = "microdvd",
+  feature = "srt",
+  feature = "ssa",
+  feature = "subviewer",
+  feature = "vtt"
+))]
 #[test]
 fn format_reports_correctly_for_every_variant() {
   let expected = [
@@ -58,7 +88,14 @@ fn format_reports_correctly_for_every_variant() {
     assert_eq!(file.format(), expected[i], "variant {i} format wrong");
   }
 }
-
+#[cfg(all(
+  feature = "ass",
+  feature = "microdvd",
+  feature = "srt",
+  feature = "ssa",
+  feature = "subviewer",
+  feature = "vtt"
+))]
 #[test]
 fn validate_clean_for_every_variant() {
   for (i, file) in sample_of_each_variant().into_iter().enumerate() {
@@ -66,7 +103,7 @@ fn validate_clean_for_every_variant() {
     assert!(issues.is_empty(), "variant {i} reported {issues:?}");
   }
 }
-
+#[cfg(feature = "microdvd")]
 #[test]
 fn microdvd_roundtrips_fps() {
   // {1}{1}30.000 declares fps=30; frames {30}{60} at 30fps = 1000-2000ms.
@@ -79,7 +116,7 @@ fn microdvd_roundtrips_fps() {
     "fps header lost in round-trip; got:\n{out}"
   );
 }
-
+#[cfg(feature = "microdvd")]
 #[test]
 fn microdvd_variant_preserves_fps_field() {
   let content = "{1}{1}30.000\n{30}{60}Hello\n";
@@ -89,7 +126,7 @@ fn microdvd_variant_preserves_fps_field() {
     other => panic!("expected MicroDvd variant, got {other:?}"),
   }
 }
-
+#[cfg(feature = "subviewer")]
 #[test]
 fn subviewer_variant_preserves_header() {
   let content = "[INFORMATION]\n[TITLE]My Film\n[AUTHOR]Me\n[END INFORMATION]\n[SUBTITLE]\n[COLF]&HFFFFFF,[STYLE]bd,[SIZE]18,[FONT]Arial\n\n00:00:01.00,00:00:03.50\nHello\n";
@@ -106,14 +143,14 @@ fn subviewer_variant_preserves_header() {
     _ => panic!("expected SubViewer variant"),
   }
 }
-
+#[cfg(feature = "srt")]
 #[test]
 fn unified_parse_bytes_detects_srt() {
   let data = b"1\n00:00:01,000 --> 00:00:03,500\nHello\n\n";
   let file = subtitler::parse_bytes(data).unwrap();
   assert!(matches!(file, SubtitleFile::Srt(_)));
 }
-
+#[cfg(feature = "vtt")]
 #[test]
 fn unified_parse_bytes_detects_vtt() {
   let data = b"WEBVTT\n\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
@@ -129,7 +166,7 @@ fn unified_parse_bytes_unknown_format_errors() {
     Err(subtitler::error::ParseError::UnknownFormat)
   ));
 }
-
+#[cfg(feature = "sbv")]
 #[test]
 fn sbv_multiline_text() {
   let content = "0:00:01.000,0:00:03.500,Line one|Line two\n0:00:04.000,0:00:06.500,Single\n";
@@ -138,7 +175,7 @@ fn sbv_multiline_text() {
   assert_eq!(subs.len(), 2);
   assert_eq!(subs[0].text, "Line one|Line two");
 }
-
+#[cfg(feature = "lrc")]
 #[test]
 fn lrc_multi_timestamp_round_trip() {
   let content = "[00:10.00][00:30.00]Repeated line\n";
@@ -161,7 +198,7 @@ fn lrc_multi_timestamp_round_trip() {
   assert!(output.contains("[00:10.00]"));
   assert!(output.contains("[00:30.00]"));
 }
-
+#[cfg(feature = "microdvd")]
 #[test]
 fn microdvd_fps_round_trip_precision() {
   // {1}{1}30.000 declares fps=30; {30}{60} at 30fps = 1000-2000ms.

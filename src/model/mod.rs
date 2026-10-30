@@ -24,7 +24,7 @@ pub use validation::ValidationIssue;
 #[cfg(test)]
 mod tests {
   use super::*;
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_sort() {
     let mut file = SubtitleFile::Srt(vec![
@@ -38,7 +38,7 @@ mod tests {
     assert_eq!(subs[1].start, 3000);
     assert_eq!(subs[2].start, 5000);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_validate_overlap() {
     let file = SubtitleFile::Srt(vec![
@@ -49,7 +49,7 @@ mod tests {
     assert_eq!(issues.len(), 1);
     assert!(matches!(issues[0], ValidationIssue::Overlap { .. }));
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_validate_negative_duration() {
     let file = SubtitleFile::Srt(vec![Subtitle::new(3000, 1000, "bad")]);
@@ -60,7 +60,7 @@ mod tests {
       ValidationIssue::NegativeDuration { .. }
     ));
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_validate_zero_duration() {
     let file = SubtitleFile::Srt(vec![Subtitle::new(1000, 1000, "instant")]);
@@ -68,7 +68,7 @@ mod tests {
     assert_eq!(issues.len(), 1);
     assert!(matches!(issues[0], ValidationIssue::ZeroDuration { .. }));
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_validate_decreasing_start() {
     let file = SubtitleFile::Srt(vec![
@@ -83,7 +83,7 @@ mod tests {
         .any(|i| matches!(i, ValidationIssue::DecreasingStartTime { .. }))
     );
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_validate_clean() {
     let file = SubtitleFile::Srt(vec![
@@ -92,7 +92,7 @@ mod tests {
     ]);
     assert!(file.validate().is_empty());
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_validate_extended() {
     let file = SubtitleFile::Srt(vec![
@@ -106,7 +106,7 @@ mod tests {
         .any(|i| matches!(i, ValidationIssue::TooLongGap { .. }))
     );
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_merge_adjacent() {
     let mut file = SubtitleFile::Srt(vec![
@@ -121,7 +121,7 @@ mod tests {
     assert_eq!(subs[0].end, 5000);
     assert_eq!(subs[1].text, "third");
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_merge_adjacent_noop() {
     let mut file = SubtitleFile::Srt(vec![
@@ -131,7 +131,7 @@ mod tests {
     file.merge_adjacent(100);
     assert_eq!(file.subtitles().len(), 2);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_split_long() {
     let mut file = SubtitleFile::Srt(vec![Subtitle::new(
@@ -144,14 +144,14 @@ mod tests {
     assert!(subs.len() > 1);
     assert!(subs[0].text.len() <= 20 || subs[0].text.chars().count() <= 20);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_split_long_short() {
     let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "short")]);
     file.split_long(20);
     assert_eq!(file.subtitles().len(), 1);
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_split_long_no_zero_duration() {
     // 8 single-char words split at max_chars=1 → 8 chunks.
@@ -187,7 +187,7 @@ mod tests {
       issues
     );
   }
-
+  #[cfg(feature = "srt")]
   #[test]
   fn test_transform_framerate() {
     let mut file = SubtitleFile::Srt(vec![Subtitle::new(1000, 3000, "test")]);

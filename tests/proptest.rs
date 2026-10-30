@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 //! Property-based tests for subtitle round-trips and invariants.
 //!
 //! Run: PROPTEST_CASES=100 cargo test --test proptest
@@ -12,6 +13,7 @@ use subtitler::model::Subtitle;
 use subtitler::model::SubtitleFile;
 use subtitler::model::SubtitleFormat;
 
+#[cfg(any(feature = "srt", feature = "vtt", feature = "ass"))]
 fn arb_subtitle() -> impl Strategy<Value = Subtitle> {
   (
     0u64..3_600_000u64,
@@ -32,12 +34,14 @@ fn arb_subtitle() -> impl Strategy<Value = Subtitle> {
       Subtitle::new(s, e, &text)
     })
 }
-
+#[cfg(feature = "srt")]
+#[allow(dead_code)]
 fn arb_subtitle_file(n: usize) -> impl Strategy<Value = SubtitleFile> {
   proptest::collection::vec(arb_subtitle(), n..=n).prop_map(SubtitleFile::Srt)
 }
 
 proptest! {
+  #[cfg(feature = "srt")]
   #[test]
   fn srt_round_trip_preserves_text_and_times(sub in arb_subtitle()) {
     let s = subtitler::srt::to_string(std::slice::from_ref(&sub));
@@ -48,6 +52,7 @@ proptest! {
     prop_assert_eq!(parsed.subtitles()[0].text.trim(), sub.text.trim());
   }
 
+  #[cfg(feature = "vtt")]
   #[test]
   fn vtt_round_trip_preserves_text_and_times(sub in arb_subtitle()) {
     let s = subtitler::vtt::to_string(std::slice::from_ref(&sub), None);
@@ -58,6 +63,7 @@ proptest! {
     prop_assert_eq!(parsed.subtitles()[0].text.trim(), sub.text.trim());
   }
 
+  #[cfg(feature = "ass")]
   #[test]
   fn ass_round_trip_preserves_count(sub in arb_subtitle()) {
     let s = subtitler::ass::to_string(
@@ -72,6 +78,7 @@ proptest! {
 
   // ── Idempotency properties ──
 
+  #[cfg(feature = "srt")]
   #[test]
   fn sort_is_idempotent(file in arb_subtitle_file(10)) {
     let mut a = file.clone();
@@ -85,6 +92,7 @@ proptest! {
     }
   }
 
+  #[cfg(any(feature = "srt", feature = "vtt", feature = "ass"))]
   #[test]
   fn shift_all_is_reversible(sub in arb_subtitle()) {
     let mut a = sub.clone();
@@ -94,6 +102,7 @@ proptest! {
     prop_assert_eq!(a.end, sub.end);
   }
 
+  #[cfg(feature = "srt")]
   #[test]
   fn merge_adjacent_never_increases_count(file in arb_subtitle_file(8)) {
     let mut m = file.clone();

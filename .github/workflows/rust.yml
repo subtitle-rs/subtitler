@@ -32,11 +32,14 @@ jobs:
         features:
           - ""
           - "--no-default-features --features srt"
+          - "--no-default-features --features dfxp,ttml"
         include:
           - features: ""
-            test-args: ""
+            test-args: "--all-targets"
           - features: "--no-default-features --features srt"
-            test-args: "--lib"
+            test-args: "--all-targets"
+          - features: "--no-default-features --features dfxp,ttml"
+            test-args: "--all-targets"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,11 +77,12 @@ jobs:
           # Full feature set: check all targets (lib, tests, examples, benches)
           - features: ""
             targets: "--all-targets"
-          # Minimal builds: only check lib (examples/tests reference multi-format modules)
+          # Minimal builds: all targets now compile under feature gates
+          # (tests/examples/benches carry per-format cfgs since v2.11)
           - features: "--no-default-features --features srt"
-            targets: "--lib"
+            targets: "--all-targets"
           - features: "--no-default-features --features dfxp,ttml"
-            targets: "--lib"
+            targets: "--all-targets"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

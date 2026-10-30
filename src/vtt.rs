@@ -476,7 +476,7 @@ impl<'a> crate::model::StreamingParser for VttStream<'a> {}
 mod tests {
   use super::*;
   use crate::model::{Subtitle, SubtitleFormat};
-
+  #[allow(dead_code)]
   fn make_subtitle(index: Option<usize>, start: u64, end: u64, text: &str) -> Subtitle {
     Subtitle {
       index,
@@ -595,7 +595,7 @@ mod tests {
     assert_eq!(result.subtitles().len(), 1);
     assert_eq!(result.subtitles()[0].text, "Hello");
   }
-
+  #[cfg(feature = "vtt")]
   #[test]
   fn test_detect_format() {
     let data = b"WEBVTT\n\n1\n00:00:01.000 --> 00:00:03.500\nHello\n\n";
