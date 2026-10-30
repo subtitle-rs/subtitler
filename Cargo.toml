@@ -209,3 +209,6 @@ path = "examples/create-mpl2-file.rs"
 [[bench]]
 name = "subtitler_benchmark"
 harness = false
+# The bench exercises the SRT/VTT/ASS parsers and their Format variants;
+# without this gate it fails to compile under minimal feature sets.
+required-features = ["srt", "vtt", "ass"]
