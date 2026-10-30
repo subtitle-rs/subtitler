@@ -164,16 +164,35 @@ pub async fn generate(
 
 /// Serialize subtitles to LRC format (using a default 5s duration display).
 pub fn to_string(subtitles: &[Subtitle]) -> String {
+  let stamp = |t: u64| -> String {
+    let total_seconds = t / 1000;
+    format!(
+      "[{:02}:{:02}.{:02}]",
+      total_seconds / 60,
+      total_seconds % 60,
+      (t % 1000) / 10
+    )
+  };
   let mut buf = String::new();
   for sub in subtitles {
-    let total_seconds = sub.start / 1000;
-    let minutes = total_seconds / 60;
-    let seconds = total_seconds % 60;
-    let cs = (sub.start % 1000) / 10;
-    buf.push_str(&format!(
-      "[{:02}:{:02}.{:02}]{}\n",
-      minutes, seconds, cs, sub.text
-    ));
+    // Enhanced (word-level) LRC: when every segment carries ASS karaoke
+    // timing, stamp each syllable at cue start + cumulative duration.
+    let parts: Vec<&crate::model::TextPart> = sub.text_parts.iter().collect();
+    if parts.len() >= 2 && parts.iter().all(|p| p.karaoke.is_some()) {
+      let mut acc_cs = 0u64;
+      let mut line = String::new();
+      for part in &parts {
+        line.push_str(&stamp(sub.start + acc_cs * 10));
+        line.push_str(&part.text.replace('\n', " "));
+        acc_cs += part.karaoke.unwrap().duration_cs as u64;
+      }
+      buf.push_str(&line);
+      buf.push('\n');
+      continue;
+    }
+    buf.push_str(&stamp(sub.start));
+    buf.push_str(&sub.text);
+    buf.push('\n');
   }
   buf
 }
@@ -316,5 +335,42 @@ mod tests {
   fn test_detect() {
     assert!(detect_format(b"[00:01.50]test").is_some());
     assert!(detect_format(b"WEBVTT").is_none());
+  }
+}
+
+#[cfg(test)]
+mod karaoke_tests {
+  use crate::model::{KaraokeKind, KaraokeSpan, Subtitle, TextPart};
+  use smallvec::smallvec;
+
+  #[test]
+  fn karaoke_cues_emit_enhanced_word_level_lines() {
+    let part = |text: &str, cs: u32| -> TextPart {
+      let mut p = TextPart::plain(text);
+      p.karaoke = Some(KaraokeSpan {
+        kind: KaraokeKind::K,
+        duration_cs: cs,
+      });
+      p
+    };
+    // 60s cue; syllables at 60.00 / 60.30 / 61.00.
+    let sub = Subtitle::new(60_000, 63_000, "Hel lo wor");
+    let mut sub = sub;
+    sub.text_parts = smallvec![part("Hel", 30), part("lo ", 70), part("wor", 100)];
+    let out = crate::lrc::to_string(&[sub]);
+    assert_eq!(out, "[01:00.00]Hel[01:00.30]lo [01:01.00]wor\n");
+  }
+
+  #[test]
+  fn cues_without_full_karaoke_stay_plain() {
+    let mut sub = Subtitle::new(60_000, 63_000, "plain text");
+    let mut p = TextPart::plain("plain text");
+    p.karaoke = Some(KaraokeSpan {
+      kind: KaraokeKind::K,
+      duration_cs: 100,
+    });
+    sub.text_parts = smallvec![p];
+    let out = crate::lrc::to_string(&[sub]);
+    assert_eq!(out, "[01:00.00]plain text\n");
   }
 }

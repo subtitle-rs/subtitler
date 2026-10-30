@@ -863,6 +863,8 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
   // Inside \t(...): inner tags are animated, don't apply them as state.
   let mut in_transform = false;
   let mut saw_drawing = false;
+  // Pending \k/\kf/\ko timing: applies to the next text segment.
+  let mut pending_karaoke: Option<crate::model::KaraokeSpan> = None;
   let mut current = String::new();
 
   let effective_color = |color: &Option<String>,
@@ -900,6 +902,7 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
       let mut part =
         crate::model::TextPart::new(std::mem::take(&mut current), bold, italic, underline);
       part.color = effective_color(&color, alpha, &shadow_color, shadow_alpha);
+      part.karaoke = pending_karaoke.take();
       parts.push(part);
     }
 
@@ -944,6 +947,24 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
         t if t.starts_with('b') => parse_toggle(&t[1..], &mut bold),
         t if t.starts_with('i') => parse_toggle(&t[1..], &mut italic),
         t if t.starts_with('u') => parse_toggle(&t[1..], &mut underline),
+        // \k<cs> / \kf<cs> / \ko<cs>: karaoke timing for the next
+        // syllable (centiseconds).
+        t if t.starts_with('k') => {
+          let rest = &t[1..];
+          let (kind, num) = if let Some(d) = rest.strip_prefix('f') {
+            (crate::model::KaraokeKind::Kf, d)
+          } else if let Some(d) = rest.strip_prefix('o') {
+            (crate::model::KaraokeKind::Ko, d)
+          } else {
+            (crate::model::KaraokeKind::K, rest)
+          };
+          if let Ok(cs) = num.trim_end_matches('&').parse::<u32>() {
+            pending_karaoke = Some(crate::model::KaraokeSpan {
+              kind,
+              duration_cs: cs,
+            });
+          }
+        }
         // \c&HBBGGRR& / \1c&HBBGGRR& → primary text color.
         t if t.starts_with("c&") || t.starts_with("1c&") => {
           let c = t.strip_prefix("1c&").unwrap_or(&t[2..]);
@@ -982,6 +1003,7 @@ pub fn parse_ass_tags(text: &str) -> Vec<crate::model::TextPart> {
   if !current.is_empty() {
     let mut part = crate::model::TextPart::new(current, bold, italic, underline);
     part.color = effective_color(&color, alpha, &shadow_color, shadow_alpha);
+    part.karaoke = pending_karaoke.take();
     parts.push(part);
   }
 
@@ -1456,5 +1478,57 @@ mod tests {
     assert!(out.contains("tts:extent=\"50% 50%\""), "got: {out}");
     assert!(out.contains("tts:displayAlign=\"before\""), "got: {out}");
     assert!(out.contains("tts:textAlign=\"right\""), "got: {out}");
+  }
+}
+
+#[cfg(test)]
+mod karaoke_tests {
+  use super::*;
+  use crate::model::{KaraokeKind, KaraokeSpan};
+
+  #[test]
+  fn karaoke_tags_become_part_timing() {
+    let text = "{\\k20}Hel{\\kf30}lo {\\ko10}wor{\\k15}ld";
+    let parts = parse_ass_tags(text);
+    let kinds: Vec<_> = parts.iter().map(|p| (p.text.as_str(), p.karaoke)).collect();
+    assert_eq!(
+      kinds,
+      vec![
+        (
+          "Hel",
+          Some(KaraokeSpan {
+            kind: KaraokeKind::K,
+            duration_cs: 20
+          })
+        ),
+        (
+          "lo ",
+          Some(KaraokeSpan {
+            kind: KaraokeKind::Kf,
+            duration_cs: 30
+          })
+        ),
+        (
+          "wor",
+          Some(KaraokeSpan {
+            kind: KaraokeKind::Ko,
+            duration_cs: 10
+          })
+        ),
+        (
+          "ld",
+          Some(KaraokeSpan {
+            kind: KaraokeKind::K,
+            duration_cs: 15
+          })
+        ),
+      ]
+    );
+  }
+
+  #[test]
+  fn non_karaoke_parts_have_no_timing() {
+    let parts = parse_ass_tags("{\\b1}bold text");
+    assert!(parts[0].karaoke.is_none());
   }
 }
